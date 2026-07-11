@@ -1,0 +1,9 @@
+# Build outputs de proyectos ESP-IDF (se regeneran con "idf.py build")
+**/build/
+
+# Componentes manejados descargados por el component manager (se
+# re-descargan solos a partir de idf_component.yml / dependencies.lock)
+**/managed_components/
+
+# Backup automatico que genera ESP-IDF al regenerar sdkconfig
+**/sdkconfig.old

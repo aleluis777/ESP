@@ -1,0 +1,68 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f2f2f2;
+  color: #222;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: #1976d2;
+  color: white;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.badge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.badge-on { background: #2e7d32; }
+.badge-off { background: #b71c1c; }
+
+main {
+  padding: 24px;
+}
+
+.corrida-activa {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.tarjeta {
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.tarjeta h2 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: #666;
+  font-weight: normal;
+}
+
+.tarjeta p {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: bold;
+}

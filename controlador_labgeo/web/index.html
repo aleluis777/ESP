@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LabGeo - Monitor</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>LabGeo</h1>
+    <span id="estado-conexion" class="badge badge-off">Desconectado</span>
+  </header>
+
+  <main>
+    <p class="corrida-activa">Corrida activa: <strong id="corrida">-</strong></p>
+
+    <div class="grid">
+      <div class="tarjeta">
+        <h2>Dial 1</h2>
+        <p><span id="dial1">0.000</span> mm</p>
+      </div>
+      <div class="tarjeta">
+        <h2>Dial 2</h2>
+        <p><span id="dial2">0.000</span> mm</p>
+      </div>
+      <div class="tarjeta">
+        <h2>Peso / Carga</h2>
+        <p><span id="peso">0.0</span> N</p>
+      </div>
+      <div class="tarjeta">
+        <h2>Tiempo Transcurrido</h2>
+        <p><span id="tiempo">00:00:00</span></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/script.js"></script>
+</body>
+</html>

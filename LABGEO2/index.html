@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel="stylesheet" href="style.css">
+		<title>Interfaz SAG-V6</title>
+	</head>
+<body class="backcolor">
+
+	
+
+
+<div class="content">
+	<div  class="content-container"> 
+		<header>
+			<img class="logo" src="logo.png">
+		</header>
+		<div class="tab-group">	
+			<div class="tab">
+				<input type="radio" id="tab-0" name="tab-group-1" checked>
+				<label onclick="Label(0)" for="tab-0">Monitoreo</label>
+				<div class="tab-content bg-all">
+					<p class="nombre">Equipo de ensayo numero #2</p>
+					<p class="linea">Monitoreo de equipos</p>
+					<div class="terms2">
+						<p class="titulo1"> Dial 1:</p><p id="w1d1">--</p><p>mm</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Dial 2:</p><p id="w1d2">--</p><p>mm</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Celda de carga:</p><p id="w1d3">--</p><p>Kg</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Tiempo de corrida:</p><p id="w1d6">--</p><p></p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Tiempoo de actividad:</p><p id="w1d13">--</p><p></p>
+					</div>
+
+					<p class="linea">Control de equipos</p>	
+					<div class="terms2">
+						<p class="titulo1">Corrida 1:</p>
+						<div class="switch" onclick='SDt("9","w1d4")'><span id="w1d4C"class="slider round"></span></div>
+						<p id="w1d4"></p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1">Corrida 1:</p>
+						<div class="switch" onclick='SDt("10","w1d5")'><span id="w1d5C"class="slider round"></span></div>
+						<p id="w1d5"></p>
+					</div>
+					
+				</div>
+			</div>
+			<div class="tab">
+				
+				<i class="fas fa-band-aid"></i>
+				<div class="tab-content bg-all">
+						<p class="linea"><b> Set de parametros</b></p>
+						<div class="terms">
+							<p class="titulo1"> T. Maxima:</p>
+								<input class="inputs" type="text" id="w2d1">
+								<button onclick='SDt2("1","w2d1")' class="inputbuton"> Guardar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> T. Minima:</p>
+								<input class="inputs" type="text" id="w2d2">
+								<button onclick='SDt2("2","w2d2")' class="inputbuton"> Guardar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> T. Bypass:</p>
+								<input class="inputs" type="text" id="w2d3">
+								<button onclick='SDt2("3","w2d3")' class="inputbuton"> Guardar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> T. Alta:</p>
+								<input class="inputs" type="text" id="w2d4">
+								<button onclick='SDt2("4","w2d4")' class="inputbuton"> Guardar</button>
+						</div>
+
+						
+
+						<p class="linea"><b> Set de adicionales</b></p>
+						<div class="terms">
+							<p class="titulo1"> Cantidad de AAs:</p>
+								<input class="inputs" type="text" id="w2d5">
+								<button onclick='SDt2("9","w2d5")' class="inputbuton"> Guardar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> Hora:</p>
+								<input class="inputs" type="datetime-local"  id="fecha" name="name">
+								<button onclick='Fecha()' class="inputbuton"> Guardar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> Reinicio de Secuenciador:</p>
+							<button onclick='SDt2("10",null)' class="inputbuton"> Reiniciar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> Limpiar fallas de Secuenciador:</p>
+							<button onclick='SDt2("11",null)' class="inputbuton"> Limpiar</button>
+						</div>
+				</div>
+			</div>
+			<div class="tab">
+				<input type="radio" id="tab-2" name="tab-group-1">
+				<label onclick="Label(2)" for="tab-2">Calibracion</label>
+				<i class="fas fa-band-aid"></i>
+				<div class="tab-content bg-all">
+						<p class="linea">Calibracion de sensores</p>
+						<div class="terms">
+							<p class="titulo1"> T. Sensor PT1:</p>
+								<input class="inputs" type="number" id="w5d1">
+								<button  onclick='SDt3("1","w5d1")' class="inputbuton"> Actualizar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> T. Sensor PT2:</p>
+								<input class="inputs" type="number" id="w5d2">
+								<button  onclick='SDt3("2","w5d2")' class="inputbuton"> Actualizar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> T. Sensor PT3:</p>
+								<input class="inputs" type="number" id="w5d3">
+								<button  onclick='SDt3("3","w5d3")' class="inputbuton"> Actualizar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> T. Sensor PT4:</p>
+								<input class="inputs" type="number" id="w5d4">
+								<button  onclick='SDt3("4","w5d4")' class="inputbuton"> Actualizar</button>
+						</div>
+
+						
+				</div>
+			</div>
+			
+			<div class="tab">
+				<input type="radio" id="tab-3" name="tab-group-1">
+				<label onclick="Label(3)" for="tab-3">Red Interfaz</label>
+				<i class="fas fa-band-aid"></i>
+				<div class="tab-content bg-all">
+						<p class="linea">Configuraciones de parametros de red</p>
+						<div class="terms">
+							<p class="titulo1">IP Secuenciador :</p>
+								<input class="inputs" type="text" id="w3d1">
+								<button onclick='SDt2("5","w3d1")' class="inputbuton" > Actualizar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1">Gateway :</p>
+								<input class="inputs" type="text" id="w3d2">
+								<button onclick='SDt2("6","w3d2")' class="inputbuton" > Actualizar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1">IP servidor :</p>
+								<input class="inputs" type="text" id="w3d3">
+								<button onclick='SDt2("7","w3d3")' class="inputbuton" > Actualizar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1">Subnet :</p>
+								<input class="inputs" type="text" id="w3d4">
+								<button onclick='SDt2("8","w3d4")' class="inputbuton" > Actualizar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> Reinicio de Secuenciador:</p>
+							<button onclick='SDt2("10",null)' class="inputbuton"> Reiniciar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> Limpiar datos:</p>
+							<button onclick='SDt2("11",null)' class="inputbuton"> Limpiar</button>
+						</div>
+						<div class="terms">
+							<p class="titulo1"> Descargar data:</p>
+							<button onclick="window.location.href = 'history.csv';" class="inputbuton"> Descargar</button>
+						</div>
+				</div>
+			</div>
+			
+			
+			<div class="tab">
+				
+				<i class="fas fa-band-aid"></i>
+				<div class="tab-content bg-all">
+					<p class="linea">Parametros de energia</p>
+					<div class="terms2">
+						<p class="titulo1"> Tension RS:</p><p id="w4d1">--</p><p>V</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Tension ST:</p><p id="w4d2">--</p><p>V</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Tension RT:</p><p id="w4d3">--</p><p>V</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Corriente R:</p><p id="w4d4">--</p><p>A</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Corriente S:</p><p id="w4d5">--</p><p>A</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Corriente T:</p><p id="w4d6">--</p><p>A</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Potencia:</p><p id="w4d7">--</p><p>kW</p>
+					</div>
+					<div class="terms2">
+						<p class="titulo1"> Energia:</p><p id="w4d8">--</p><p>kWh</p>
+					</div>
+					<p class="linea">Alarmas</p>
+						<div class="terms2">
+							<p class="titulo1">Alarma 1:</p><p id="w4d9">--</p>
+						</div>
+						<div class="terms2">
+							<p class="titulo1">Alarma 2:</p><p id="w4d10">--</p>
+						</div>
+						<div class="terms2">
+							<p class="titulo1">Alarma 3:</p><p id="w4d11">--</p>
+						</div>
+						<div class="terms2">
+							<p class="titulo1">Alarma 4:</p><p id="w4d12">--</p>
+						</div>
+
+						<div class="terms2">
+							<p class="titulo1">Alarma 5:</p><p id="w4d13">--</p>
+						</div>
+						<div class="terms2">
+							<p class="titulo1">Alarma 6:</p><p id="w4d14">--</p>
+						</div>
+				</div>
+			</div>
+
+			<div class="tab">
+				
+				<div class="tab-content bg-all">
+					<p class="linea">Leer y Escribir Parametros MODBUS</p>
+					<div class="terms">
+						<p class="titulo1">Esclavo :</p>
+							<input class="inputs" type="number" id="w6d1">
+					</div>
+					<div class="terms">
+						<p class="titulo1">Registro :</p>
+							<input class="inputs" type="number" id="w6d2">
+					</div>
+					
+					<p class="linea">Opciones </p>
+
+					<div class="terms">
+						<p class="titulo1">Leer dato de Esclavo:</p>
+						<p class="inputs" id="w4d6">--</p>
+						<button onclick='SDt4(0,"w6d1","w6d2","w6d3")' class="inputbuton"> Leer</button>
+					</div>
+
+					<div class="terms">
+						<p class="titulo1">Escribir dato en Esclavo:</p>
+							<input class="inputs" type="number" id="w6d3">
+							<button onclick='SDt4(1,"w6d1","w6d2","w6d3")' class="inputbuton"> Escribir</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+	
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

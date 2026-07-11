@@ -1,0 +1,29 @@
+# Target: ESP32 comun (no S3). Si "idf.py set-target esp32" no lo dejo asi,
+# correlo a mano antes del primer build.
+CONFIG_IDF_TARGET="esp32"
+
+# Particiones propias: agrega una particion SPIFFS ("storage") para guardar
+# el historial de las corridas, ver partitions.csv. La tabla ocupa ~2.07MB,
+# por eso hace falta declarar flash de 4MB (default de la mayoria de los
+# modulos ESP32 WROOM-32; si el tuyo es de 2MB, avisame y la reduzco).
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# WebSocket en esp_http_server (lo usa servidor_web.c para /ws).
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# Ethernet: modulo W5500 por SPI, pines confirmados contra labgeo2025.ino /
+# LinaresETH.cpp. Apagamos el EMAC interno (viene prendido por defecto y
+# rompe el init si no hay un PHY RMII real conectado) y prendemos el modulo
+# SPI con el W5500 explicitamente.
+CONFIG_ETHERNET_INTERNAL_SUPPORT=n
+CONFIG_ETHERNET_SPI_SUPPORT=y
+CONFIG_ETHERNET_SPI_DEV0_W5500=y
+CONFIG_ETHERNET_SPI_HOST=2
+CONFIG_ETHERNET_SPI_SCLK_GPIO=18
+CONFIG_ETHERNET_SPI_MOSI_GPIO=23
+CONFIG_ETHERNET_SPI_MISO_GPIO=19
+CONFIG_ETHERNET_SPI_CS0_GPIO=17
+CONFIG_ETHERNET_SPI_INT0_GPIO=-1
+CONFIG_ETHERNET_SPI_PHY_RST0_GPIO=5

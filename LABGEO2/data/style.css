@@ -1,0 +1,219 @@
+*
+{
+	
+	font-family: Verdana, sans-serif;
+}
+.content{
+	width:1000px; margin:0 auto;
+  }
+.tab-group
+{
+	position: relative;
+	width: 700px;
+	height: 500px;
+	margin-right: 20vh auto;
+	
+}
+.content-container {
+	height: 776px;
+	width: 1000px;
+  }
+  .logo {
+	margin-top: 40px;
+	height: 40px;
+  }
+label
+{
+	position: relative;
+	display: block;
+	
+	height: 30px;
+	width: 185px;
+	padding: 8px;
+	margin: 10px 0;
+	background: rgb(255, 255, 255);
+	border-end-start-radius: 10px;
+	color: black;
+	text-align: center;
+	line-height: 1.5;
+}
+
+label:hover,
+[type=radio]:checked + label
+{
+	background: #ffcb00;
+	box-shadow: 2px 2px 2px darkgray;
+	text-shadow: 1px 1px 1px darkgray;
+}
+.backcolor{
+
+	background-color: #2379bd;
+  }
+label:active
+{
+	opacity: .8;
+	box-shadow: none;
+}
+
+[type=radio]
+{
+	display: none;
+}
+
+[type=radio]:checked ~ .tab-content
+{
+	z-index: 1;
+}
+
+.tab-content
+{
+	position: absolute;
+	left: 215px;
+	width: 700px;
+	height: 1200px;
+	top: 0;
+	padding: 40px;
+	background: rgb(125, 110, 108);
+	border-radius: 1px;
+}
+
+
+.bg-all
+{
+	background: rgb(255, 255, 255);
+	border-radius: 1px;
+}
+
+.linea {
+	border-bottom: 1px solid #ccc;
+	width: 100%;
+	padding-bottom: 5px;
+	margin: 10px auto 0 auto;
+	font-size: 16px;
+  }
+
+  .titulo {
+	font-size: 16px;
+	font-family: Verdana, Geneva, Tahoma, sans-serif;
+  }
+  .nombre {
+	align-items: center;
+	margin-top: -15px;
+	font-weight: bold;
+	font-size: 20px;
+	font-family: Verdana, Geneva, Tahoma, sans-serif;
+  }
+
+  .titulo1 {
+	width:250px;
+	font-size: 14px;
+	font-family: Verdana, Geneva, Tahoma, sans-serif;
+  }
+
+  .titulo2 {
+	width:100px;
+	font-size: 14px;
+	font-family: Verdana, Geneva, Tahoma, sans-serif;
+  }
+  .inputs{
+	margin-right: 40px;
+	width: 150px;
+	height: 30px;
+	padding: 3px;
+	border-color: #ccc;
+	border-radius: 6px;
+	box-sizing: border-box;
+  }
+  
+  .terms {
+	margin-top: 5px;
+	display: flex;
+  }
+
+  .terms2 {
+	margin-top: -5px;
+	display: flex;
+  }
+  .inputbuton:hover {
+	background-color:#055f68;
+	transition: 0.7s;
+}
+.inputbuton{
+	width: 170px;
+	height: 30px;
+	background-color: #2379bd;
+	border: none;
+	color: white;
+	text-decoration: none;
+	cursor: pointer;
+	border-radius: 7px;
+
+  }
+  .inputbuton:active {
+	transform: translateY(4px);
+	transition-duration: 10ms;
+  }
+
+
+
+  .switch {
+	margin-top:10px;
+	margin-right:10px;
+	position: relative;
+	display: inline-block;
+	width: 50px;
+	height: 28px;
+  }
+  
+  .switch input { 
+	opacity: 0;
+	width: 0;
+	height: 0;
+  }
+  
+  .slider {
+	position: absolute;
+	cursor: pointer;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: #ccc;
+	-webkit-transition: .4s;
+	transition: .4s;
+  }
+  
+  .slider:before {
+	position: absolute;
+	content: "";
+	height: 20px;
+	width: 20px;
+	left: 4px;
+	bottom: 4px;
+	background-color: white;
+	-webkit-transition: .4s;
+	transition: .4s;
+  }
+  
+  input:checked + .slider {
+	background-color: #2196F3;
+  }
+  
+  input:focus + .slider {
+	box-shadow: 0 0 1px #2196F3;
+  }
+  
+  input:checked + .slider:before {
+	-webkit-transform: translateX(26px);
+	-ms-transform: translateX(26px);
+	transform: translateX(26px);
+  }
+  
+  /* Rounded sliders */
+  .slider.round {
+	border-radius: 34px;
+  }
+  
+  .slider.round:before {
+	border-radius: 50%;
+  }
