@@ -26,13 +26,13 @@ static const char *TAG = "APP";
 #define PIN_HX711_DOUT  GPIO_NUM_22
 #define PIN_HX711_SCK   GPIO_NUM_21
 
-#define PIN_DIAL1_REQ   GPIO_NUM_15
-#define PIN_DIAL1_CLK   GPIO_NUM_34
-#define PIN_DIAL1_DATA  GPIO_NUM_39
+#define PIN_DIAL1_REQ   GPIO_NUM_12  // AA1
+#define PIN_DIAL1_CLK   GPIO_NUM_25  // P2
+#define PIN_DIAL1_DATA  GPIO_NUM_27  // HUM
 
-#define PIN_DIAL2_REQ   GPIO_NUM_25
-#define PIN_DIAL2_CLK   GPIO_NUM_14
-#define PIN_DIAL2_DATA  GPIO_NUM_13
+#define PIN_DIAL2_REQ   GPIO_NUM_2   // AA2
+#define PIN_DIAL2_CLK   GPIO_NUM_26  // P6
+#define PIN_DIAL2_DATA  GPIO_NUM_15  // P7
 
 // Handles de cada sensor y estado global. Son 'static' a nivel de archivo
 // (no locales a una funcion) porque tanto app_main() como tarea_sensores()

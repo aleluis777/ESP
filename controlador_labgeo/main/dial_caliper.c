@@ -1,24 +1,24 @@
-// Driver bit-bang del protocolo de calibre/dial digital (REQ + CLK + DATA).
-// A diferencia del HX711 (protocolo documentado y estandar), este es el
-// protocolo generico que usan los calibres digitales baratos, reconstruido
-// de memoria -- NO esta validado contra el hardware real todavia. Ver el
-// comentario grande en dial_caliper.h antes de confiar en los valores que
-// devuelve.
+// Port directo de la funcion dial() de labgeo2025.ino/LABGEO2.ino (Arduino),
+// que ya funcionaba en produccion -- ver dial_caliper.h para el detalle del
+// protocolo (13 digitos BCD, dato leido tras el flanco de bajada de CLK).
 //
-// Idea general: REQ es una salida nuestra que "despierta" al calibre (via
-// un transistor en la placa). Una vez despierto, el calibre mismo genera
-// los pulsos de CLK (nosotros solo escuchamos, no los generamos) y va
-// poniendo cada bit en DATA; nosotros leemos DATA en cada flanco de CLK.
+// IMPORTANTE sobre los tiempos: el CLK lo genera el calibre, no el ESP32 --
+// nosotros solo lo sondeamos (polling). Por eso la espera entre cada lectura
+// de gpio_get_level() no es un detalle cosmetico: hay que sondear al mismo
+// ritmo que el codigo original ya probado (10us entre polls, timeout de
+// 100000 intentos por cada semiflanco, ~2000 ciclos vacios de asentamiento
+// antes de leer DATA) en vez de un timeout generico por wall-clock. Sondear
+// mas rapido o mas lento que eso puede hacer perder flancos o leer DATA
+// antes de que se estabilice.
 
 #include "dial_caliper.h"
 #include "esp_rom_sys.h"
-#include "esp_timer.h"
 
-// ---------- Parametros a ajustar contra el hardware real (ver dial_caliper.h) ----------
-#define DIAL_REQ_ACTIVO_ALTO       1     // 1: REQ en alto activa el transistor. 0: REQ en bajo lo activa.
-#define DIAL_BIT_ORDEN_LSB_PRIMERO 1     // 1: primer bit clockeado = LSB. 0: primer bit = MSB.
-#define DIAL_ESPERA_DESPERTAR_US   20000 // tiempo entre activar REQ y empezar a esperar el primer flanco
-#define DIAL_ASENTAMIENTO_US       5     // pausa tras el flanco de CLK antes de leer DATA
+#define DIAL_REQ_ACTIVO_ALTO 1 // el original hace digitalWrite(REQ, 1) para pedir lectura
+
+#define DIAL_TIMEOUT_ITERACIONES 100000 // igual que el .ino probado (timeout=100000)
+#define DIAL_POLL_DELAY_US       10     // igual que el .ino probado (delayMicroseconds(10))
+#define DIAL_SETTLE_ITERACIONES  2000   // igual que el .ino probado (timeout=2000; while((timeout--)!=0);)
 
 static inline void req_activar(dial_caliper_t *d)
 {
@@ -47,65 +47,86 @@ void dial_caliper_init(dial_caliper_t *d, gpio_num_t pin_req, gpio_num_t pin_clk
     gpio_set_direction(pin_data, GPIO_MODE_INPUT);
 }
 
-bool dial_caliper_leer_crudo(dial_caliper_t *d, uint32_t *dato_crudo, uint32_t timeout_ms)
+bool dial_caliper_leer_digitos(dial_caliper_t *d, char digitos[13], uint32_t timeout_ms)
 {
-    // "Despierta" al calibre y le da tiempo a arrancar antes de esperar el
-    // primer pulso de reloj (los calibres suelen tardar en salir del modo
-    // ahorro de energia).
+    // El timeout real ahora es por semiflanco (DIAL_TIMEOUT_ITERACIONES x
+    // DIAL_POLL_DELAY_US ~ 1s por semiflanco), igual que el .ino probado --
+    // timeout_ms queda sin usar a proposito, se mantiene en la firma para no
+    // romper a quien ya llama a esta funcion.
+    (void)timeout_ms;
+
     req_activar(d);
-    esp_rom_delay_us(DIAL_ESPERA_DESPERTAR_US);
 
-    int64_t inicio = esp_timer_get_time();
-    int64_t timeout_us = (int64_t)timeout_ms * 1000;
-    uint32_t dato = 0;
-    bool ok = true;
+    for (int i = 0; i < 13; i++) {
+        int k = 0;
 
-    // El calibre es quien genera los 24 pulsos de reloj (no nosotros, a
-    // diferencia del HX711): en cada vuelta esperamos un flanco de subida,
-    // leemos el bit, y esperamos a que baje de nuevo antes de ir por el
-    // siguiente.
-    for (int i = 0; i < 24 && ok; i++) {
-        // Espera flanco de subida (CLK en reposo bajo).
-        while (gpio_get_level(d->pin_clk) == 0) {
-            if (esp_timer_get_time() - inicio > timeout_us) { ok = false; break; }
+        for (int j = 0; j < 4; j++) {
+            uint32_t timeout = DIAL_TIMEOUT_ITERACIONES;
+
+            // Espera a que CLK suba (estaba en reposo bajo). El sondeo cada
+            // DIAL_POLL_DELAY_US es igual de importante que el timeout: es
+            // el ritmo con el que ya se probo que el calibre responde bien.
+            while (gpio_get_level(d->pin_clk) == 0) {
+                esp_rom_delay_us(DIAL_POLL_DELAY_US);
+                if ((timeout--) == 0) {
+                    req_liberar(d);
+                    return false;
+                }
+            }
+
+            timeout = DIAL_TIMEOUT_ITERACIONES;
+
+            // Espera a que CLK vuelva a bajar -- el dato se lee DESPUES de
+            // este flanco de bajada (asi lo hacia el codigo original).
+            while (gpio_get_level(d->pin_clk) == 1) {
+                esp_rom_delay_us(DIAL_POLL_DELAY_US);
+                if ((timeout--) == 0) {
+                    req_liberar(d);
+                    return false;
+                }
+            }
+
+            // Espera de asentamiento antes de leer DATA -- mismo bucle vacio
+            // de ~2000 iteraciones que el original (no un delay fijo en us),
+            // marcado volatile para que el compilador no lo elimine.
+            volatile uint32_t espera = DIAL_SETTLE_ITERACIONES;
+            while ((espera--) != 0) {
+                ;
+            }
+
+            int bit = gpio_get_level(d->pin_data);
+            if (bit) {
+                switch (j) {
+                case 0: k = 1; break;
+                case 1: k = 2 + k; break;
+                case 2: k = 4 + k; break;
+                case 3: k = 8 + k; break;
+                }
+            }
+            if (k == 15) {
+                k = 0; // mismo caso especial que el codigo original (digito "en blanco")
+            }
         }
-        if (!ok) break;
 
-        esp_rom_delay_us(DIAL_ASENTAMIENTO_US);
-        uint32_t bit = gpio_get_level(d->pin_data) ? 1u : 0u;
-#if DIAL_BIT_ORDEN_LSB_PRIMERO
-        dato |= (bit << i);
-#else
-        dato = (dato << 1) | bit;
-#endif
-
-        // Espera a que el reloj vuelva a bajo antes del proximo flanco.
-        while (gpio_get_level(d->pin_clk) == 1) {
-            if (esp_timer_get_time() - inicio > timeout_us) { ok = false; break; }
-        }
+        digitos[i] = (char)(k + '0');
     }
 
     req_liberar(d);
-
-    if (!ok) {
-        return false;
-    }
-    *dato_crudo = dato;
     return true;
 }
 
-bool dial_caliper_leer(dial_caliper_t *d, int32_t *valor_centesimas_mm, uint32_t timeout_ms)
+bool dial_caliper_leer(dial_caliper_t *d, int32_t *valor_um, uint32_t timeout_ms)
 {
-    uint32_t dato;
-    if (!dial_caliper_leer_crudo(d, &dato, timeout_ms)) {
+    char digitos[13];
+    if (!dial_caliper_leer_digitos(d, digitos, timeout_ms)) {
         return false;
     }
 
-    // Layout asumido: bit 20 = signo, bits 0-19 = magnitud en centesimas de
-    // mm. Ver el comentario grande en dial_caliper.h antes de confiar en
-    // esto sin validarlo contra el calibre real.
-    int32_t magnitud = (int32_t)(dato & 0xFFFFFu);
-    bool negativo = (dato & 0x100000u) != 0;
-    *valor_centesimas_mm = negativo ? -magnitud : magnitud;
+    // Los digitos 6..10 forman "DD.DDD" (mm con 3 decimales) -> ya es
+    // resolucion de micrometros, sin reescalar.
+    int32_t entero = (digitos[6] - '0') * 10 + (digitos[7] - '0');
+    int32_t decimales = (digitos[8] - '0') * 100 + (digitos[9] - '0') * 10 + (digitos[10] - '0');
+
+    *valor_um = entero * 1000 + decimales;
     return true;
 }

@@ -25,5 +25,10 @@ CONFIG_ETHERNET_SPI_SCLK_GPIO=18
 CONFIG_ETHERNET_SPI_MOSI_GPIO=23
 CONFIG_ETHERNET_SPI_MISO_GPIO=19
 CONFIG_ETHERNET_SPI_CS0_GPIO=17
-CONFIG_ETHERNET_SPI_INT0_GPIO=-1
+# INT cableado a GPIO16/AA3 (cable de 6cm, separado del cableado de los
+# diales; se movio de GPIO26 a GPIO16 porque GPIO26 quedo asignado a CLK2).
+# Con INT >= 0 el driver W5500 (esp_eth_mac_w5500.c) pasa a modo interrupcion
+# solo y activa el pull-up interno del pin + GPIO_INTR_NEGEDGE el mismo, no
+# hace falta nada mas de nuestro lado. Antes estaba en -1 (modo polling).
+CONFIG_ETHERNET_SPI_INT0_GPIO=16
 CONFIG_ETHERNET_SPI_PHY_RST0_GPIO=5

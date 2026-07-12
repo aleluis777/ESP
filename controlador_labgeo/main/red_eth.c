@@ -116,6 +116,16 @@ esp_err_t red_eth_init(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+    // El driver del W5500 usa el pin de INT (GPIO26, ver sdkconfig.defaults)
+    // via gpio_isr_handler_add(), que requiere que el servicio de ISR de GPIO
+    // ya este instalado -- si no, esa llamada falla callada (no chequea el
+    // retorno) y la interrupcion nunca queda enganchada. ESP_ERR_INVALID_STATE
+    // significa que ya estaba instalado por otra parte, no es un error real.
+    esp_err_t isr_err = gpio_install_isr_service(0);
+    if (isr_err != ESP_OK && isr_err != ESP_ERR_INVALID_STATE) {
+        ESP_ERROR_CHECK(isr_err);
+    }
+
     diag_pulso_reset_w5500();
 
     // ethernet_init_all() lee la config de Kconfig (sdkconfig.defaults,
