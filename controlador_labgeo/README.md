@@ -117,7 +117,8 @@ nada del formato de las tramas, eso es responsabilidad de `uart_link.c`.
 | `almacenamiento.c/.h` | Guarda/lee el historial de cada corrida en SPIFFS. Un archivo por corrida, 12 bytes por punto (mismo layout que la trama `RUN_CHUNK`, para no tener que reempacar al mandarlo). |
 | `programador_corrida.c/.h` | El cronograma de cada corrida: tiempos fijos (Corrida 1) o umbrales de desplazamiento (Corrida 2). Decide *cuándo* se guarda un punto. |
 | `red_eth.c/.h` | Levanta el W5500 (Ethernet) usando el componente `espressif/ethernet_init`. IP estática. |
-| `servidor_web.c/.h` | Servidor HTTP + endpoint WebSocket `/ws`. `servidor_web_enviar_ws()` le manda un string a todos los clientes conectados. |
+| `servidor_web.c/.h` | Servidor HTTP + endpoint WebSocket `/ws`. `servidor_web_enviar_ws()` le manda un string a todos los clientes conectados. Loguea (INFO) cada peticion HTTP que entra: metodo, URI e IP del cliente. |
+| `ping_monitor.c/.h` | Observador de pings ICMP: loguea cada echo request que le llega al controlador (IP de origen, id, seq). No contesta nada -- lwIP ya responde el ping por su cuenta, esto solo mira via un socket RAW aparte. |
 
 ## Cosas que todavía no están (a propósito, no por olvido)
 

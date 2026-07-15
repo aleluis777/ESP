@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LabGeo - Archivos en flash</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 16px; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #eee; font-size: 0.85rem; color: #666; }
+  td.bytes { text-align: right; font-variant-numeric: tabular-nums; }
+  .resumen { margin-bottom: 16px; color: #444; }
+  .error { color: #b71c1c; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>LabGeo</h1>
+    <span>Archivos en /www</span>
+  </header>
+
+  <main>
+    <p class="resumen" id="resumen">Cargando...</p>
+    <table>
+      <thead><tr><th>Nombre</th><th>Bytes</th></tr></thead>
+      <tbody id="filas"></tbody>
+    </table>
+  </main>
+
+  <script>
+    // Pide el JSON crudo a /files (la API que ya sirve servidor_web.c) y
+    // arma esta tabla -- toda la logica de listar SPIFFS vive en el
+    // firmware, esta pagina solo pinta lo que ese endpoint devuelve.
+    fetch('/files')
+      .then((r) => r.json())
+      .then((d) => {
+        const resumen = document.getElementById('resumen');
+        const libres = d.total_bytes - d.usados_bytes;
+        resumen.textContent =
+          `Particion 'www': ${d.usados_bytes} de ${d.total_bytes} bytes usados (${libres} libres)`;
+
+        const filas = document.getElementById('filas');
+        d.archivos.forEach((a) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${a.nombre}</td><td class="bytes">${a.bytes}</td>`;
+          filas.appendChild(tr);
+        });
+      })
+      .catch((e) => {
+        document.getElementById('resumen').innerHTML =
+          `<span class="error">No se pudo leer /files: ${e}</span>`;
+      });
+  </script>
+</body>
+</html>

@@ -142,6 +142,21 @@ esp_err_t red_eth_init(void)
     }
     ESP_LOGI(TAG, "ethernet_init_all() OK, %u modulo(s) detectado(s)", (unsigned)eth_port_cnt);
 
+    // La MAC no la asigna el chip solo -- se la mandamos explicitamente para
+    // que sea siempre la misma que usaba labgeo2025.ino (util si el router
+    // tiene una reserva de IP fija por MAC). OJO: esto tiene que pasar ANTES
+    // de esp_netif_attach() de abajo -- ese attach dispara internamente
+    // esp_eth_post_attach() (ver esp_eth_netif_glue.c del propio ESP-IDF),
+    // que LEE el MAC que tenga el chip en ese instante (ETH_CMD_G_MAC_ADDR) y
+    // lo copia a esp_netif via esp_netif_set_mac(), una sola vez. Si el
+    // ioctl de abajo se hiciera despues del attach (como estaba antes),
+    // esp_netif se queda para siempre con el MAC auto-generado
+    // (CONFIG_ETHERNET_SPI_AUTOCONFIG_MAC_ADDR0), mientras el chip ya
+    // transmite tramas con el MAC fijo -- esa desincronizacion hace que lwIP
+    // arme las respuestas ARP con un MAC que no es el que realmente sale en
+    // la trama, y el ping deja de funcionar aunque el link y la IP esten OK.
+    ESP_ERROR_CHECK(esp_eth_ioctl(eth_handles[0], ETH_CMD_S_MAC_ADDR, s_mac));
+
     // "Pega" el driver Ethernet (eth_handles[0]) a una interfaz de red
     // generica (esp_netif) -- recien con esto el resto de ESP-IDF (DHCP,
     // sockets, el servidor HTTP) puede usarlo como si fuera cualquier red.
@@ -149,11 +164,6 @@ esp_err_t red_eth_init(void)
     esp_netif_t *eth_netif = esp_netif_new(&netif_cfg);
     esp_eth_netif_glue_handle_t glue = esp_eth_new_netif_glue(eth_handles[0]);
     ESP_ERROR_CHECK(esp_netif_attach(eth_netif, glue));
-
-    // La MAC no la asigna el chip solo -- se la mandamos explicitamente
-    // para que sea siempre la misma que usaba labgeo2025.ino (util si el
-    // router tiene una reserva de IP fija por MAC).
-    ESP_ERROR_CHECK(esp_eth_ioctl(eth_handles[0], ETH_CMD_S_MAC_ADDR, s_mac));
 
     // IP estatica (misma que labgeo2025.ino): 192.168.18.91 / 255.255.255.0 / gw 192.168.18.1
     // Hay que apagar el cliente DHCP antes de poder fijar la IP a mano.
