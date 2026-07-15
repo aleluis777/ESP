@@ -17,6 +17,7 @@
 #include "esp_log.h"
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
+#include "cJSON.h"
 
 static const char *TAG = "SERVIDOR_WEB";
 // LWIP_MAX_SOCKETS (default de este proyecto) solo da margen para 7 sockets
@@ -26,17 +27,25 @@ static const char *TAG = "SERVIDOR_WEB";
 #define WS_MAX_CLIENTES 4
 
 static httpd_handle_t s_servidor = NULL;
+static servidor_web_callbacks_t s_callbacks;
 
 // Monta la particion SPIFFS "www" (la que arma spiffs_create_partition_image
-// a partir de ../web) en /www. format_if_mount_failed=false a proposito: si
-// el mount falla, preferimos ver el error en el log antes que formatear y
+// a partir de ../web) en /www. Idempotente: config_labgeo_init() ya la monta
+// antes (necesita el config.json ahi para calibrar los sensores, que no
+// dependen de la red) -- si para cuando arranca el servidor web ya esta
+// montada, no hace nada. format_if_mount_failed=false a proposito: si el
+// mount falla, preferimos ver el error en el log antes que formatear y
 // perder el sitio que se grabo al compilar.
 static esp_err_t montar_www(void)
 {
+    if (esp_spiffs_mounted("www")) {
+        return ESP_OK;
+    }
+
     esp_vfs_spiffs_conf_t conf = {
         .base_path = "/www",
         .partition_label = "www",
-        .max_files = 4,
+        .max_files = 5,
         .format_if_mount_failed = false,
     };
     esp_err_t err = esp_vfs_spiffs_register(&conf);
@@ -44,6 +53,15 @@ static esp_err_t montar_www(void)
         ESP_LOGE(TAG, "No se pudo montar la particion 'www' (%s)", esp_err_to_name(err));
     }
     return err;
+}
+
+// Se llama antes de servidor_web_init() para que app_main.c decida que
+// hacer cuando llega un POST de calibracion -- este archivo no sabe nada de
+// HX711 ni de como se calcula pendiente/offset, solo avisa que llego el
+// pedido (mismo patron que uart_link_set_callbacks()).
+void servidor_web_set_callbacks(servidor_web_callbacks_t callbacks)
+{
+    s_callbacks = callbacks;
 }
 
 // Loguea cada peticion HTTP que entra (metodo, URI, IP del cliente) --
@@ -116,6 +134,12 @@ static const archivo_estatico_t s_archivo_index      = { "/www/index.html", "tex
 static const archivo_estatico_t s_archivo_style      = { "/www/style.css", "text/css" };
 static const archivo_estatico_t s_archivo_script     = { "/www/script.js", "application/javascript" };
 static const archivo_estatico_t s_archivo_files_html = { "/www/files.html", "text/html" };
+static const archivo_estatico_t s_archivo_equipo_png = { "/www/equipo.png", "image/png" };
+// Sirven calibracion.json/sistema.json tal cual estan en SPIFFS -- dan 404
+// hasta el primer guardado de cada uno (config_labgeo_guardar()/
+// config_labgeo_guardar_red() recien los crean ahi), es esperado.
+static const archivo_estatico_t s_archivo_calibracion_json = { "/www/calibracion.json", "application/json" };
+static const archivo_estatico_t s_archivo_sistema_json     = { "/www/sistema.json", "application/json" };
 
 // "/" y "/index.html" apuntan al mismo archivo -- asi entrar directo a la
 // IP del controlador ya muestra la pagina, sin tener que escribir la ruta.
@@ -140,6 +164,18 @@ static const httpd_uri_t s_uri_script = {
 static const httpd_uri_t s_uri_files_html = {
     .uri = "/files.html", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_files_html,
+};
+static const httpd_uri_t s_uri_equipo_png = {
+    .uri = "/equipo.png", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_equipo_png,
+};
+static const httpd_uri_t s_uri_calibracion_json = {
+    .uri = "/calibracion.json", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_calibracion_json,
+};
+static const httpd_uri_t s_uri_sistema_json = {
+    .uri = "/sistema.json", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_sistema_json,
 };
 
 // Lista lo que realmente hay grabado en la particion SPIFFS "www" -- util
@@ -196,6 +232,110 @@ static const httpd_uri_t s_uri_listado = {
     .handler = listado_www_handler,
 };
 
+// POST /calibrar_cero -- sin body. Le avisa a app_main.c que ahora mismo la
+// celda esta sin peso (tara): el callback lee el crudo actual y lo guarda
+// como offset. Tiene que llamarse ANTES que /calibrar_maximo (la pendiente
+// se calcula a partir de este offset).
+static esp_err_t calibrar_cero_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    if (!s_callbacks.on_calibrar_cero) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    s_callbacks.on_calibrar_cero();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+// POST /calibrar_maximo -- body JSON {"peso_n": 123.4} con el peso de
+// referencia ya puesto sobre la celda (en Newtons, misma unidad que
+// "peso_N" en el resto del firmware). El callback lee el crudo actual,
+// calcula la pendiente contra el offset ya guardado por /calibrar_cero, y
+// persiste todo en config.json.
+static esp_err_t calibrar_maximo_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char body[128];
+    int len = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+        return ESP_FAIL;
+    }
+    body[len] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    const cJSON *peso_item = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "peso_n") : NULL;
+    if (!cJSON_IsNumber(peso_item)) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta \"peso_n\" numerico en el body");
+        return ESP_FAIL;
+    }
+    float peso_n = (float)peso_item->valuedouble;
+    cJSON_Delete(raiz);
+
+    if (!s_callbacks.on_calibrar_maximo) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    s_callbacks.on_calibrar_maximo(peso_n);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_calibrar_cero = {
+    .uri = "/calibrar_cero", .method = HTTP_POST, .handler = calibrar_cero_handler,
+};
+static const httpd_uri_t s_uri_calibrar_maximo = {
+    .uri = "/calibrar_maximo", .method = HTTP_POST, .handler = calibrar_maximo_handler,
+};
+
+// POST /configurar_red -- body JSON {"ip":"...","gateway":"...","mascara":"..."}.
+// Por ahora solo guarda en config.json (via el callback de app_main.c);
+// aplicarlo de verdad al W5500 es un paso pendiente, todavia no implementado.
+static esp_err_t configurar_red_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char body[160];
+    int len = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+        return ESP_FAIL;
+    }
+    body[len] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    const cJSON *ip_item   = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "ip") : NULL;
+    const cJSON *gw_item   = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "gateway") : NULL;
+    const cJSON *mask_item = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "mascara") : NULL;
+
+    if (!cJSON_IsString(ip_item) || !cJSON_IsString(gw_item) || !cJSON_IsString(mask_item)) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "faltan \"ip\"/\"gateway\"/\"mascara\" (strings) en el body");
+        return ESP_FAIL;
+    }
+
+    if (s_callbacks.on_configurar_red) {
+        s_callbacks.on_configurar_red(ip_item->valuestring, gw_item->valuestring, mask_item->valuestring);
+    }
+    cJSON_Delete(raiz);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_configurar_red = {
+    .uri = "/configurar_red", .method = HTTP_POST, .handler = configurar_red_handler,
+};
+
 // Handshake / frames entrantes del WebSocket. No esperamos nada del cliente
 // por ahora (el canal es solo controlador -> navegador), asi que alcanza con
 // aceptar el handshake y descartar cualquier frame que llegue.
@@ -236,7 +376,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 2; // + margen para pedidos HTTP normales
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 8; // default (8) alcanza para las 7 rutas, queda explicito por claridad
+    config.max_uri_handlers = 14; // 13 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -249,7 +389,13 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_style);
     httpd_register_uri_handler(s_servidor, &s_uri_script);
     httpd_register_uri_handler(s_servidor, &s_uri_files_html);
+    httpd_register_uri_handler(s_servidor, &s_uri_equipo_png);
+    httpd_register_uri_handler(s_servidor, &s_uri_calibracion_json);
+    httpd_register_uri_handler(s_servidor, &s_uri_sistema_json);
     httpd_register_uri_handler(s_servidor, &s_uri_listado);
+    httpd_register_uri_handler(s_servidor, &s_uri_calibrar_cero);
+    httpd_register_uri_handler(s_servidor, &s_uri_calibrar_maximo);
+    httpd_register_uri_handler(s_servidor, &s_uri_configurar_red);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
 
     ESP_LOGI(TAG, "Servidor HTTP + WS listo (puerto %d)", config.server_port);

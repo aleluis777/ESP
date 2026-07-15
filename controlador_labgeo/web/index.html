@@ -7,33 +7,118 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header>
-    <h1>LabGeo</h1>
-    <span id="estado-conexion" class="badge badge-off">Desconectado</span>
-  </header>
+  <div class="panel">
+    <header class="panel-header">
+      <h1>LabGeo</h1>
+      <div class="header-acciones">
+        <button id="btn-abrir-calibracion" class="btn-icono" title="Calibrar celda de carga">⚖️</button>
+        <button id="btn-abrir-red" class="btn-icono" title="Configuración de red">⚙️</button>
+        <button id="btn-ver-grafica" class="btn-primario" title="Todavía no implementado">📈 Ver Gráfica</button>
+        <span id="estado-conexion" class="badge badge-off">Desconectado</span>
+      </div>
+    </header>
 
-  <main>
     <p class="corrida-activa">Corrida activa: <strong id="corrida">-</strong></p>
 
-    <div class="grid">
-      <div class="tarjeta">
-        <h2>Dial 1</h2>
-        <p><span id="dial1">0.000</span> mm</p>
+    <div class="contenido">
+      <div class="columna-sensores">
+        <div class="grid">
+          <div class="tarjeta">
+            <h2>Dial 1 - Deformación</h2>
+            <p><span id="dial1">0.0000</span> <small>mm</small></p>
+          </div>
+          <div class="tarjeta">
+            <h2>Dial 2 - Deformación</h2>
+            <p><span id="dial2">0.0000</span> <small>mm</small></p>
+          </div>
+          <div class="tarjeta">
+            <h2>Peso / Carga</h2>
+            <p><span id="peso">0.0</span> <small>N</small></p>
+          </div>
+          <div class="tarjeta">
+            <h2>Tiempo Transcurrido</h2>
+            <p><span id="tiempo">00:00:00</span></p>
+          </div>
+        </div>
+
+        <div class="fila-acciones-corrida">
+          <button id="btn-iniciar-corrida" class="btn-primario btn-ancho" disabled
+                  title="Todavía no implementado desde la web -- la corrida se controla desde la pantalla física">
+            Iniciar Corrida
+          </button>
+          <button id="btn-siguiente-corrida" class="btn-secundario btn-ancho" disabled
+                  title="Todavía no implementado desde la web">
+            Siguiente ›
+          </button>
+        </div>
       </div>
-      <div class="tarjeta">
-        <h2>Dial 2</h2>
-        <p><span id="dial2">0.000</span> mm</p>
-      </div>
-      <div class="tarjeta">
-        <h2>Peso / Carga</h2>
-        <p><span id="peso">0.0</span> N</p>
-      </div>
-      <div class="tarjeta">
-        <h2>Tiempo Transcurrido</h2>
-        <p><span id="tiempo">00:00:00</span></p>
+
+      <div class="columna-equipo">
+        <h3>Equipo de Ensayo</h3>
+        <img src="/equipo.png" alt="Equipo de ensayo LabGeo" class="imagen-equipo">
       </div>
     </div>
-  </main>
+  </div>
+
+  <div id="modal-calibracion" class="modal-overlay oculto">
+    <div class="modal-caja">
+      <button id="btn-cerrar-calibracion" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+      <h2>Calibrar celda de carga</h2>
+
+      <ol class="instrucciones">
+        <li>Sacá todo peso de la celda y presioná <strong>"1. Calibrar cero"</strong>.</li>
+        <li>Poné un peso de referencia conocido sobre la celda, escribí su valor en Newtons, y presioná <strong>"2. Calibrar con este peso"</strong>.</li>
+      </ol>
+
+      <p class="seteo-actual">
+        Guardado ahora: offset = <strong id="cal-offset">-</strong>,
+        pendiente = <strong id="cal-pendiente">-</strong>
+      </p>
+
+      <div class="fila-calibracion">
+        <button id="btn-calibrar-cero">1. Calibrar cero</button>
+      </div>
+
+      <div class="fila-calibracion">
+        <input type="number" id="input-peso-n" step="0.01" placeholder="Peso de referencia (N)">
+        <button id="btn-calibrar-peso">2. Calibrar con este peso</button>
+      </div>
+
+      <p id="cal-mensaje"></p>
+    </div>
+  </div>
+
+  <div id="modal-red" class="modal-overlay oculto">
+    <div class="modal-caja">
+      <button id="btn-cerrar-red" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+      <h2>Configuración de red</h2>
+
+      <p class="instrucciones">
+        Estos valores se guardan en el equipo, pero <strong>todavía no se aplican</strong>
+        automáticamente (hace falta un paso pendiente del firmware) -- por ahora
+        solo quedan guardados para cuando esa parte esté lista.
+      </p>
+
+      <div class="fila-calibracion">
+        <label for="input-red-ip">IP</label>
+        <input type="text" id="input-red-ip" placeholder="192.168.18.91">
+      </div>
+      <div class="fila-calibracion">
+        <label for="input-red-gateway">Gateway</label>
+        <input type="text" id="input-red-gateway" placeholder="192.168.18.1">
+      </div>
+      <div class="fila-calibracion">
+        <label for="input-red-mascara">Máscara</label>
+        <input type="text" id="input-red-mascara" placeholder="255.255.255.0">
+      </div>
+
+      <div class="fila-calibracion">
+        <button id="btn-guardar-red">Guardar configuración de red</button>
+      </div>
+
+      <p id="red-mensaje"></p>
+    </div>
+  </div>
 
   <script src="/script.js"></script>
 </body>

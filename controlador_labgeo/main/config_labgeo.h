@@ -1,11 +1,13 @@
 #pragma once
 
-// Constantes de calibracion (pendiente/offset de cada sensor), guardadas en
-// NVS. Reemplaza el uso de EEPROM del codigo Arduino anterior.
+// Constantes de calibracion (pendiente/offset de cada sensor) y de sistema
+// (red, etc.), guardadas como dos archivos separados en SPIFFS "www":
+// /www/calibracion.json y /www/sistema.json -- pensado para que el usuario
+// pueda descargarlos desde el navegador como "el seteo del equipo" (ver
+// servidor_web.c, /files.html). Reemplaza el mecanismo anterior por NVS.
 //
 // dial_mm = dial_crudo * pendiente + offset
-// peso_N  = (celda_cruda - offset) / pendiente   (misma formula que usaba el
-//           codigo anterior: celda = (raw - CARGAA2) / (1000*CARGAB2))
+// peso_N  = (celda_cruda - offset) / pendiente
 
 #include <stdint.h>
 #include "esp_err.h"
@@ -23,15 +25,39 @@ typedef struct {
     float celda_offset;
 } config_calibracion_t;
 
-// Inicializa NVS (nvs_flash_init, con el manejo estandar de "borrar y
-// reintentar" si la particion esta corrupta o cambio de version).
+// Configuracion de red (IP/gateway/mascara) pedida por el usuario para
+// configurar sin reflashear. Por ahora solo se guarda en config.json --
+// aplicarla de verdad al W5500 (reemplazar los valores fijos de red_eth.c)
+// es un paso pendiente, todavia no implementado.
+typedef struct {
+    char ip[16];       // "255.255.255.255" + '\0' = 16 bytes, alcanza siempre
+    char gateway[16];
+    char mascara[16];
+} config_red_t;
+
+// Monta la particion SPIFFS "www" (donde vive config.json, junto con el
+// sitio estatico). Idempotente: si servidor_web_init() (u otra llamada
+// previa) ya la monto, no hace nada y devuelve ESP_OK -- por eso es seguro
+// llamarla primero, antes de saber si va a haber red o no.
 esp_err_t config_labgeo_init(void);
 
-// Carga la calibracion guardada. Si no hay nada guardado todavia, devuelve
-// valores por defecto neutros (pendiente=1, offset=0) sin marcar error.
+// Lee config.json y carga los parametros de calibracion en 'cfg'. Si el
+// archivo no existe, esta corrupto, o le falta algun campo puntual, ESE
+// campo se completa con el valor por defecto (config_labgeo_defaults.h) --
+// un campo faltante no descarta el resto del archivo.
 void config_labgeo_cargar(config_calibracion_t *cfg);
 
+// Guarda 'cfg' en config.json, bajo la clave "celda"/"dial1"/"dial2" --
+// preserva cualquier otra seccion del archivo que ya hubiera (por ejemplo
+// "red"), no lo pisa entero. Escritura atomica (escribe a un .tmp y hace
+// rename() al final) para no dejar un JSON a medio escribir si se corta la
+// luz a mitad de la escritura -- SPIFFS no es transaccional como era NVS.
 esp_err_t config_labgeo_guardar(const config_calibracion_t *cfg);
+
+// Mismo criterio que config_labgeo_cargar()/config_labgeo_guardar(), pero
+// para la seccion "red" del archivo (IP/gateway/mascara).
+void config_labgeo_cargar_red(config_red_t *cfg);
+esp_err_t config_labgeo_guardar_red(const config_red_t *cfg);
 
 #ifdef __cplusplus
 }
