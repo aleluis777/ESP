@@ -140,6 +140,9 @@ static const archivo_estatico_t s_archivo_equipo_png = { "/www/equipo.png", "ima
 // config_labgeo_guardar_red() recien los crean ahi), es esperado.
 static const archivo_estatico_t s_archivo_calibracion_json = { "/www/calibracion.json", "application/json" };
 static const archivo_estatico_t s_archivo_sistema_json     = { "/www/sistema.json", "application/json" };
+// Historial de TODAS las corridas (almacenamiento.c), append-only -- 404
+// hasta que se inicie la primera corrida.
+static const archivo_estatico_t s_archivo_corridas_csv = { "/www/corridas.csv", "text/csv" };
 
 // "/" y "/index.html" apuntan al mismo archivo -- asi entrar directo a la
 // IP del controlador ya muestra la pagina, sin tener que escribir la ruta.
@@ -176,6 +179,10 @@ static const httpd_uri_t s_uri_calibracion_json = {
 static const httpd_uri_t s_uri_sistema_json = {
     .uri = "/sistema.json", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_sistema_json,
+};
+static const httpd_uri_t s_uri_corridas_csv = {
+    .uri = "/corridas.csv", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_corridas_csv,
 };
 
 // Lista lo que realmente hay grabado en la particion SPIFFS "www" -- util
@@ -336,6 +343,29 @@ static const httpd_uri_t s_uri_configurar_red = {
     .uri = "/configurar_red", .method = HTTP_POST, .handler = configurar_red_handler,
 };
 
+// POST /avanzar_ensayo -- sin body. Un solo boton en la web llama siempre a
+// este mismo endpoint; app_main.c es quien sabe en que estado (0..4) esta el
+// ensayo y decide que transicion corresponde. Este archivo no sabe nada del
+// significado de los estados, solo avisa "tocaron el boton".
+static esp_err_t avanzar_ensayo_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    if (!s_callbacks.on_avanzar_ensayo) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    s_callbacks.on_avanzar_ensayo();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_avanzar_ensayo = {
+    .uri = "/avanzar_ensayo", .method = HTTP_POST, .handler = avanzar_ensayo_handler,
+};
+
 // Handshake / frames entrantes del WebSocket. No esperamos nada del cliente
 // por ahora (el canal es solo controlador -> navegador), asi que alcanza con
 // aceptar el handshake y descartar cualquier frame que llegue.
@@ -376,7 +406,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 2; // + margen para pedidos HTTP normales
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 14; // 13 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 16; // 15 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -392,10 +422,12 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_equipo_png);
     httpd_register_uri_handler(s_servidor, &s_uri_calibracion_json);
     httpd_register_uri_handler(s_servidor, &s_uri_sistema_json);
+    httpd_register_uri_handler(s_servidor, &s_uri_corridas_csv);
     httpd_register_uri_handler(s_servidor, &s_uri_listado);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_cero);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_maximo);
     httpd_register_uri_handler(s_servidor, &s_uri_configurar_red);
+    httpd_register_uri_handler(s_servidor, &s_uri_avanzar_ensayo);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
 
     ESP_LOGI(TAG, "Servidor HTTP + WS listo (puerto %d)", config.server_port);

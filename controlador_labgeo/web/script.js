@@ -11,6 +11,23 @@ function fmtTiempo(ms) {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
+// Un solo boton para las dos corridas -- el texto depende del "estado" que
+// manda el firmware (ver app_main.c, estado_ensayo_t). La web NUNCA decide
+// el estado por su cuenta, solo lo refleja -- asi no se desincroniza si hay
+// mas de una pestana abierta.
+const ESTADOS_BOTON_ENSAYO = {
+  0: "Iniciar Corrida 1",
+  1: "Detener Corrida 1",
+  2: "Iniciar Corrida 2",
+  3: "Detener Corrida 2",
+  4: "Reiniciar Todo",
+};
+
+function actualizarBotonEnsayo(estado) {
+  const btn = document.getElementById("btn-avanzar-ensayo");
+  btn.textContent = ESTADOS_BOTON_ENSAYO[estado] ?? "Iniciar Corrida 1";
+}
+
 // Pinta solo los campos que vengan en 'd' -- mientras se van sumando
 // sensores de a uno (ver app_main.c), el WS todavia no manda el esquema
 // completo (por ejemplo, hoy solo llega celda_crudo/peso_n, sin los
@@ -35,6 +52,9 @@ function pintar(d) {
   }
   if (d.tiempo_ms !== undefined) {
     document.getElementById("tiempo").textContent = fmtTiempo(d.tiempo_ms);
+  }
+  if (d.estado !== undefined) {
+    actualizarBotonEnsayo(d.estado);
   }
 }
 
@@ -210,3 +230,21 @@ function iniciarConfigRed() {
 }
 
 iniciarConfigRed();
+
+// ---------------------------------------------------------------------------
+// Boton unico de la corrida -- solo dispara POST /avanzar_ensayo. El texto
+// del boton lo actualiza actualizarBotonEnsayo() cuando llega el "estado"
+// por WS (ver pintar()); este handler no cambia el texto el mismo, para no
+// mostrar algo que despues el firmware podria contradecir.
+// ---------------------------------------------------------------------------
+
+function iniciarBotonEnsayo() {
+  document.getElementById("btn-avanzar-ensayo").addEventListener("click", () => {
+    fetch("/avanzar_ensayo", { method: "POST" }).catch(() => {
+      // Si falla el POST, el boton se queda como estaba -- el proximo
+      // mensaje de WS (~200ms) va a confirmar el estado real de todos modos.
+    });
+  });
+}
+
+iniciarBotonEnsayo();

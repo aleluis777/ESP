@@ -13,6 +13,8 @@
 
 #include "dial_caliper.h"
 #include "esp_rom_sys.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #define DIAL_REQ_ACTIVO_ALTO 1 // el original hace digitalWrite(REQ, 1) para pedir lectura
 
@@ -66,23 +68,36 @@ bool dial_caliper_leer_digitos(dial_caliper_t *d, char digitos[13], uint32_t tim
             // Espera a que CLK suba (estaba en reposo bajo). El sondeo cada
             // DIAL_POLL_DELAY_US es igual de importante que el timeout: es
             // el ritmo con el que ya se probo que el calibre responde bien.
+            // Cada 1000 iteraciones (~10ms de trabajo) se cede el CPU con
+            // vTaskDelay(1): sin esto, un dial desconectado (CLK sin
+            // flancos) deja esta tarea en espera activa pura por ~1s de
+            // corrido y, al correr en una prioridad mayor a la de IDLE,
+            // esa tarea nunca llega a ejecutar -- el Task Watchdog de
+            // ESP-IDF termina reseteando el equipo a los ~5s.
             while (gpio_get_level(d->pin_clk) == 0) {
                 esp_rom_delay_us(DIAL_POLL_DELAY_US);
                 if ((timeout--) == 0) {
                     req_liberar(d);
                     return false;
                 }
+                if ((timeout % 1000) == 0) {
+                    vTaskDelay(1);
+                }
             }
 
             timeout = DIAL_TIMEOUT_ITERACIONES;
 
             // Espera a que CLK vuelva a bajar -- el dato se lee DESPUES de
-            // este flanco de bajada (asi lo hacia el codigo original).
+            // este flanco de bajada (asi lo hacia el codigo original). Mismo
+            // motivo que arriba para el vTaskDelay(1) periodico.
             while (gpio_get_level(d->pin_clk) == 1) {
                 esp_rom_delay_us(DIAL_POLL_DELAY_US);
                 if ((timeout--) == 0) {
                     req_liberar(d);
                     return false;
+                }
+                if ((timeout % 1000) == 0) {
+                    vTaskDelay(1);
                 }
             }
 

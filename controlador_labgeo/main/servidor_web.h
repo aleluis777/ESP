@@ -37,10 +37,18 @@ typedef void (*servidor_web_cb_calibrar_maximo_t)(float peso_n);
 // config_labgeo.h, solo pasa lo que vino en el body tal cual.
 typedef void (*servidor_web_cb_configurar_red_t)(const char *ip, const char *gateway, const char *mascara);
 
+// Llego POST /avanzar_ensayo -- un solo boton en la web dispara siempre este
+// mismo endpoint; app_main.c decide que transicion corresponde segun el
+// estado actual (0..4, ver comentario de estado_ensayo_t en app_main.c) y lo
+// aplica. La web no manda ni decide el estado, solo "avisa que tocaron el
+// boton".
+typedef void (*servidor_web_cb_avanzar_ensayo_t)(void);
+
 typedef struct {
     servidor_web_cb_calibrar_cero_t on_calibrar_cero;      // llego POST /calibrar_cero
     servidor_web_cb_calibrar_maximo_t on_calibrar_maximo;  // llego POST /calibrar_maximo con {"peso_n": N}
     servidor_web_cb_configurar_red_t on_configurar_red;    // llego POST /configurar_red
+    servidor_web_cb_avanzar_ensayo_t on_avanzar_ensayo;    // llego POST /avanzar_ensayo
 } servidor_web_callbacks_t;
 
 void servidor_web_set_callbacks(servidor_web_callbacks_t callbacks);
