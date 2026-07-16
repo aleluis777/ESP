@@ -120,6 +120,11 @@ static void tarea_dial1(void *arg)
         int32_t crudo;
         if (dial_caliper_leer(&s_dial1, &crudo, 0)) {
             s_dial1_um_crudo = crudo;
+            vTaskDelay(1); // le cede el CPU al IDLE entre lecturas sanas -- dial_caliper.c ya no
+                            // yieldea en el medio del sondeo (rompia el timing del protocolo), asi
+                            // que esta es la unica pausa de esta tarea con un dial conectado y
+                            // respondiendo; sin esto, una racha de lecturas exitosas seguidas nunca
+                            // le da lugar al IDLE de este nucleo y el Task Watchdog termina reseteando.
         } else {
             ESP_LOGW(TAG, "Dial 1: timeout de lectura (sin cambios, se mantiene el ultimo valor)");
             vTaskDelay(pdMS_TO_TICKS(100)); // dial desconectado -- no reintentar sin pausa (satura el nucleo)
@@ -133,6 +138,7 @@ static void tarea_dial2(void *arg)
         int32_t crudo;
         if (dial_caliper_leer(&s_dial2, &crudo, 0)) {
             s_dial2_um_crudo = crudo;
+            vTaskDelay(1); // ver el comentario equivalente en tarea_dial1()
         } else {
             ESP_LOGW(TAG, "Dial 2: timeout de lectura (sin cambios, se mantiene el ultimo valor)");
             vTaskDelay(pdMS_TO_TICKS(100)); // dial desconectado -- no reintentar sin pausa (satura el nucleo)
@@ -479,8 +485,16 @@ void app_main(void)
     // s_dial1_um_crudo arriba): asi ninguno atrasa al WS. Prioridad 5, igual
     // que tarea_sensores -- ninguna es mas urgente que otra.
     //
-    xTaskCreate(tarea_dial1, "tarea_dial1", 3072, NULL, 5, NULL);
-    xTaskCreate(tarea_dial2, "tarea_dial2", 3072, NULL, 5, NULL);
+    // Dial 1 y Dial 2 van pineados al nucleo 1 (NO el 0) a proposito:
+    // app_main()/red_eth_init() corren en el nucleo 0
+    // (CONFIG_ESP_MAIN_TASK_AFFINITY_CPU0=y), y ahi tambien vive el manejo
+    // de la interrupcion del W5500 -- confirmado en pruebas que compartir
+    // nucleo con eso corrompia el sondeo de un dial. Quedan los dos en el
+    // mismo nucleo (1) porque solo hay dos nucleos disponibles; si aparece
+    // corrupcion nueva por Dial1/Dial2 turnandose entre si (round-robin,
+    // misma prioridad), es la primera cosa a revisar.
+    xTaskCreatePinnedToCore(tarea_dial1, "tarea_dial1", 3072, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(tarea_dial2, "tarea_dial2", 3072, NULL, 5, NULL, 1);
     xTaskCreate(tarea_celda, "tarea_celda", 3072, NULL, 5, NULL);
     xTaskCreate(tarea_sensores, "tarea_sensores", 4096, NULL, 5, NULL);
 

@@ -2,6 +2,16 @@
 # correlo a mano antes del primer build.
 CONFIG_IDF_TARGET="esp32"
 
+# 240MHz -- mismo default que usa el Arduino IDE para ESP32 Dev Module (el
+# entorno donde ya funcionaba bien labgeo2025.ino/LABGEO2.ino). El default de
+# ESP-IDF es 160MHz; dial_caliper.c tiene un bucle de asentamiento de 2000
+# ciclos de CPU crudos (no calibrados a microsegundos) antes de leer DATA --
+# a 160MHz esos 2000 ciclos representan una ventana de tiempo real distinta
+# a la que tenia el .ino probado a 240MHz, lo que encaja con las lecturas de
+# dial que salen mal de forma intermitente.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
+
 # Particiones propias: agrega una particion SPIFFS ("storage") para guardar
 # el historial de las corridas, ver partitions.csv. La tabla ocupa ~2.07MB,
 # por eso hace falta declarar flash de 4MB (default de la mayoria de los

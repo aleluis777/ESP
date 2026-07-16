@@ -15,6 +15,7 @@ body {
   border-radius: 18px;
   padding: 28px 32px;
   box-shadow: 0 8px 24px rgba(51, 71, 91, 0.15);
+  overflow: hidden;
 }
 
 .panel-header {
@@ -23,13 +24,25 @@ body {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  margin: -28px -32px 24px;
+  padding: 20px 32px;
+  background: #2ba8e0;
 }
 
 .panel-header h1 {
   margin: 0;
   font-size: 2rem;
   font-weight: 600;
-  color: #33475b;
+  color: white;
+}
+
+.panel-header .btn-primario {
+  background: white;
+  color: #2ba8e0;
+}
+
+.panel-header .btn-primario:hover {
+  background: #eef3f8;
 }
 
 .header-acciones {
@@ -149,6 +162,12 @@ body {
 }
 
 .btn-primario:hover { background: #1f8dc0; }
+
+a.btn-primario,
+a.btn-secundario {
+  display: inline-block;
+  text-decoration: none;
+}
 
 .btn-secundario {
   padding: 10px 20px;

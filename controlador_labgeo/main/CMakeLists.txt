@@ -1,4 +1,7 @@
-idf_component_register(SRCS "app_main.c" "dial_caliper.c" "config_labgeo.c"
+# PRUEBA TEMPORAL: "app_main2.c" en vez de "app_main.c" -- prueba minima de
+# solo Dial 1 por consola (ver app_main2.c). Para volver al firmware real,
+# cambiar "app_main2.c" de nuevo por "app_main.c" aca abajo.
+idf_component_register(SRCS "app_main2.c" "dial_caliper.c" "config_labgeo.c"
                              "almacenamiento.c" "programador_corrida.c" "uart_link.c"
                              "red_eth.c" "servidor_web.c" "ping_monitor.c"
                        REQUIRES esp_driver_gpio esp_driver_uart spiffs esp_timer

@@ -22,14 +22,35 @@
 //     usan para el valor, podrian tener esa info si hiciera falta negativos
 //     mas adelante).
 //
+// NOTA: se probo tambien una version por interrupcion de GPIO (captura en
+// el flanco de bajada de CLK en vez de sondeo) para sacarse de encima la
+// dependencia del scheduling -- se descarto porque una interrupcion por
+// flanco no tiene NINGUN filtro natural contra rebote/ruido electrico en la
+// linea (cada rebote dispara su propia interrupcion y se cuenta como bit
+// real), y ni con debounce por software se estabilizo. Se vuelve a esta
+// version por sondeo, que es la que ya se confirmo funcionando (con
+// consenso de 2 lecturas) contra hardware real.
+//
 // Timing: el CLK lo genera el calibre, no el ESP32 -- este driver solo lo
 // sondea (polling), asi que el ritmo de sondeo importa tanto como la logica
 // de bits. Se usan los mismos numeros que el .ino ya probado y no un timeout
-// generico por wall-clock: 100000 intentos por semiflanco con 10us entre
-// cada intento (~1s maximo de espera por semiflanco), y ~2000 ciclos vacios
-// de asentamiento antes de leer DATA tras el flanco de bajada. El parametro
-// timeout_ms de las funciones de abajo queda sin usar por este motivo (se
-// mantiene en la firma por compatibilidad).
+// generico por wall-clock: 100000 intentos por semiflanco con 1us entre
+// cada intento (~100ms maximo de espera por semiflanco), y 2000 ciclos
+// vacios de asentamiento antes de leer DATA tras el flanco de bajada. El
+// parametro timeout_ms de las funciones de abajo queda sin usar por este
+// motivo (se mantiene en la firma por compatibilidad).
+//
+// IMPORTANTE: esos numeros solo dan el mismo tiempo real que el .ino de
+// referencia si la CPU corre a la MISMA frecuencia (240MHz, el default de
+// Arduino IDE para ESP32 -- ver sdkconfig.defaults, el proyecto ESP-IDF
+// tenia 160MHz antes de este ajuste, que es una causa probable de las
+// lecturas corruptas intermitentes que se vieron).
+//
+// dial_caliper_leer() ademas exige DOS lecturas consecutivas identicas
+// antes de aceptar un valor (ver DIAL_CONSENSO_MAX_INTENTOS en el .c) --
+// el bit-banging por software puede corromper una lectura puntual entera
+// (no solo "ruido chico"), asi que una sola lectura no alcanza para confiar
+// en el valor.
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -52,6 +73,15 @@ void dial_caliper_init(dial_caliper_t *d, gpio_num_t pin_req, gpio_num_t pin_clk
 // para depurar si el valor final no cierra: se pueden ver todos los
 // digitos, no solo los 5 que se usan.
 bool dial_caliper_leer_digitos(dial_caliper_t *d, char digitos[13], uint32_t timeout_ms);
+
+// Igual que dial_caliper_leer_digitos(), pero ademas devuelve por
+// 'margen_minimo_out' (puede ser NULL si no interesa) cuantas iteraciones le
+// quedaban al semiflanco mas ajustado de toda la lectura antes de
+// timeoutear -- puramente diagnostico, para ver si una lectura "buena" (sin
+// timeout) igual paso muy justa en algun punto. dial_caliper_leer() ya lo
+// usa internamente y loguea esto en cada intento -- ver dial_caliper.c.
+bool dial_caliper_leer_digitos_dbg(dial_caliper_t *d, char digitos[13], uint32_t timeout_ms,
+                                    uint32_t *margen_minimo_out);
 
 // Lee y devuelve la posicion en micrometros (sin signo por ahora), tomando
 // los digitos 6-10 ("DD.DDD" mm) del calibre.

@@ -138,6 +138,9 @@ static const archivo_estatico_t s_archivo_index      = { "/www/index.html", "tex
 static const archivo_estatico_t s_archivo_style      = { "/www/style.css", "text/css" };
 static const archivo_estatico_t s_archivo_script     = { "/www/script.js", "application/javascript" };
 static const archivo_estatico_t s_archivo_files_html = { "/www/files.html", "text/html" };
+// Grafica del historial de corridas (web/grafica.html), lee /corridas.csv
+// por su cuenta con fetch() -- no necesita nada especial del backend.
+static const archivo_estatico_t s_archivo_grafica_html = { "/www/grafica.html", "text/html" };
 static const archivo_estatico_t s_archivo_equipo_png = { "/www/equipo.png", "image/png" };
 // Sirven calibracion.json/sistema.json tal cual estan en SPIFFS -- dan 404
 // hasta el primer guardado de cada uno (config_labgeo_guardar()/
@@ -171,6 +174,10 @@ static const httpd_uri_t s_uri_script = {
 static const httpd_uri_t s_uri_files_html = {
     .uri = "/files.html", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_files_html,
+};
+static const httpd_uri_t s_uri_grafica_html = {
+    .uri = "/grafica.html", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_grafica_html,
 };
 static const httpd_uri_t s_uri_equipo_png = {
     .uri = "/equipo.png", .method = HTTP_GET,
@@ -410,7 +417,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), dejamos 1 de margen
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 16; // 15 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 17; // 16 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -423,6 +430,7 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_style);
     httpd_register_uri_handler(s_servidor, &s_uri_script);
     httpd_register_uri_handler(s_servidor, &s_uri_files_html);
+    httpd_register_uri_handler(s_servidor, &s_uri_grafica_html);
     httpd_register_uri_handler(s_servidor, &s_uri_equipo_png);
     httpd_register_uri_handler(s_servidor, &s_uri_calibracion_json);
     httpd_register_uri_handler(s_servidor, &s_uri_sistema_json);
