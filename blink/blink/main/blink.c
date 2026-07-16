@@ -42,45 +42,96 @@ static void reset_sensores(void)
     lv_label_set_text(ui->lbl_tiempo, "00:00:00");
 }
 
-// Boton principal: inicia o detiene la corrida activa. El tiempo y los 4
-// sensores los maneja el controlador (llegan por UART); aca solo se manda
-// la orden de start/stop y se actualiza el estado de los botones.
+// Boton principal: inicia o detiene la corrida activa. Solo manda la orden
+// por UART -- NO toca ningun label ni estado de boton directamente. El texto
+// y habilitado real de los botones los decide aplicar_estado_remoto() cuando
+// llega la confirmacion del controlador (mismo criterio que la web: el
+// controlador manda, el cliente no predice el estado por su cuenta -- evita
+// que el boton muestre algo que en realidad no paso, por ej. si la trama se
+// perdio o el controlador rechazo el pedido).
 static void iniciar_detener_cb(lv_event_t *e)
 {
-    corriendo = !corriendo;
-
     if (corriendo) {
-        ESP_LOGI(TAG, "Corrida %d iniciada", (int)corrida_actual);
-        uart_labgeo_enviar_start((uint8_t)corrida_actual);
-        lv_label_set_text(ui->lbl_btn_iniciar, "Detener Corrida");
-        lv_obj_add_state(ui->btn_siguiente, LV_STATE_DISABLED);
-        return;
-    }
-
-    ESP_LOGI(TAG, "Corrida %d detenida", (int)corrida_actual);
-    uart_labgeo_enviar_stop((uint8_t)corrida_actual);
-    if (corrida_actual == CORRIDA_PRIMERA) {
-        lv_label_set_text(ui->lbl_btn_iniciar, "Primera Corrida Finalizada");
-        lv_obj_add_state(ui->btn_iniciar, LV_STATE_DISABLED);
-        lv_obj_remove_state(ui->btn_siguiente, LV_STATE_DISABLED);
+        ESP_LOGI(TAG, "-> STOP corrida %d (esperando confirmacion por UART)", (int)corrida_actual);
+        uart_labgeo_enviar_stop((uint8_t)corrida_actual);
     } else {
-        lv_label_set_text(ui->lbl_btn_iniciar, "Ensayo Finalizado");
-        lv_obj_add_state(ui->btn_iniciar, LV_STATE_DISABLED);
+        ESP_LOGI(TAG, "-> START corrida %d (esperando confirmacion por UART)", (int)corrida_actual);
+        uart_labgeo_enviar_start((uint8_t)corrida_actual);
     }
 }
 
-// Boton "Siguiente": pasa de la Primera a la Segunda Corrida.
+// ---------- Sincronizacion con el estado remoto (via SENSOR_UPDATE) ----------
+// El controlador manda, 5 veces por segundo, el mismo status 0..4 del boton
+// unico que usa la web (ver protocolo_labgeo.h) -- si el cambio de estado lo
+// disparo la web (o esta misma pantalla, que ya manda START/STOP), esta
+// pantalla lo refleja igual. 's_ultimo_estado_remoto' evita tocar la UI en
+// cada SENSOR_UPDATE cuando no cambio nada (harian falta redibujar labels a
+// 5Hz sin necesidad).
+static uint8_t s_ultimo_estado_remoto = 0xFF; // invalido, fuerza la primera sincronizacion
+
+static void aplicar_estado_remoto(uint8_t estado)
+{
+    if (estado == s_ultimo_estado_remoto) {
+        return;
+    }
+    s_ultimo_estado_remoto = estado;
+
+    switch (estado) {
+    case 0: // inicial
+        corrida_actual = CORRIDA_PRIMERA;
+        corriendo = false;
+        reset_sensores();
+        lv_label_set_text(ui->lbl_corrida_activa, "Corrida activa: Primera Corrida");
+        lv_label_set_text(ui->lbl_btn_iniciar, "Iniciar Primera Corrida");
+        lv_obj_remove_state(ui->btn_iniciar, LV_STATE_DISABLED);
+        lv_obj_add_state(ui->btn_siguiente, LV_STATE_DISABLED);
+        break;
+    case 1: // corrida 1 iniciada
+        corrida_actual = CORRIDA_PRIMERA;
+        corriendo = true;
+        lv_label_set_text(ui->lbl_corrida_activa, "Corrida activa: Primera Corrida");
+        lv_label_set_text(ui->lbl_btn_iniciar, "Detener Corrida");
+        lv_obj_remove_state(ui->btn_iniciar, LV_STATE_DISABLED);
+        lv_obj_add_state(ui->btn_siguiente, LV_STATE_DISABLED);
+        break;
+    case 2: // corrida 1 finalizada
+        corrida_actual = CORRIDA_PRIMERA;
+        corriendo = false;
+        lv_label_set_text(ui->lbl_btn_iniciar, "Primera Corrida Finalizada");
+        lv_obj_add_state(ui->btn_iniciar, LV_STATE_DISABLED);
+        lv_obj_remove_state(ui->btn_siguiente, LV_STATE_DISABLED);
+        break;
+    case 3: // corrida 2 iniciada
+        corrida_actual = CORRIDA_SEGUNDA;
+        corriendo = true;
+        reset_sensores(); // limpia los valores de la corrida 1 antes de que lleguen los de la 2
+        lv_label_set_text(ui->lbl_corrida_activa, "Corrida activa: Segunda Corrida");
+        lv_label_set_text(ui->lbl_btn_iniciar, "Detener Corrida");
+        lv_obj_remove_state(ui->btn_iniciar, LV_STATE_DISABLED);
+        lv_obj_add_state(ui->btn_siguiente, LV_STATE_DISABLED);
+        break;
+    case 4: // corrida 2 finalizada
+        corrida_actual = CORRIDA_SEGUNDA;
+        corriendo = false;
+        lv_label_set_text(ui->lbl_btn_iniciar, "Ensayo Finalizado");
+        lv_obj_add_state(ui->btn_iniciar, LV_STATE_DISABLED);
+        lv_obj_add_state(ui->btn_siguiente, LV_STATE_DISABLED);
+        break;
+    default:
+        ESP_LOGW(TAG, "estado remoto desconocido: %u", (unsigned)estado);
+        break;
+    }
+}
+
+// Boton "Siguiente": pasa de la Primera a la Segunda Corrida. Igual que en
+// el equipo/web, esto es UN solo paso -- arranca la corrida 2 directamente
+// (no hay un estado intermedio "lista pero sin arrancar"). Tampoco toca la
+// UI: el boton queda como esta hasta que llegue la confirmacion (estado=3)
+// via aplicar_estado_remoto().
 static void siguiente_cb(lv_event_t *e)
 {
-    corrida_actual = CORRIDA_SEGUNDA;
-    reset_sensores();
-
-    lv_label_set_text(ui->lbl_corrida_activa, "Corrida activa: Segunda Corrida");
-    lv_label_set_text(ui->lbl_btn_iniciar, "Iniciar Segunda Corrida");
-    lv_obj_remove_state(ui->btn_iniciar, LV_STATE_DISABLED);
-    lv_obj_add_state(ui->btn_siguiente, LV_STATE_DISABLED);
-
-    ESP_LOGI(TAG, "Avanzando a la Segunda Corrida");
+    ESP_LOGI(TAG, "-> START corrida 2 (esperando confirmacion por UART)");
+    uart_labgeo_enviar_start((uint8_t)CORRIDA_SEGUNDA);
 }
 
 // ---------- Navegacion entre vistas (dashboard <-> grafica) ----------
@@ -214,6 +265,11 @@ void app_main(void)
     }
 
     // ---------- 5. Enlace UART con el controlador de sensores ----------
+    // Registrar el callback de estado ANTES de uart_labgeo_init() (mismo
+    // criterio que el resto de los callbacks del proyecto): evita una
+    // ventana de tiempo donde pueda llegar un SENSOR_UPDATE y no haya nadie
+    // escuchando.
+    uart_labgeo_set_cb_estado(aplicar_estado_remoto);
     uart_labgeo_init(ui, grafica);
 
     ESP_LOGI(TAG, "UI lista. app_main libre para tu logica en el nucleo 0");

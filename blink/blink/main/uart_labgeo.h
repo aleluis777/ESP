@@ -28,6 +28,20 @@ void uart_labgeo_enviar_stop(uint8_t run_id);
 // inmediato (queda vacio hasta que empiecen a llegar los LABGEO_CMD_RUN_CHUNK).
 void uart_labgeo_enviar_request_run(uint8_t run_id);
 
+// ---------- Estado remoto del boton unico (Controlador -> Pantalla) ----------
+
+// El controlador manda, dentro de cada SENSOR_UPDATE, el mismo status 0..4
+// del boton unico que ya usa la web (0=inicial, 1=corrida1 iniciada,
+// 2=corrida1 finalizada, 3=corrida2 iniciada, 4=corrida2 finalizada) -- asi
+// esta pantalla queda sincronizada sin importar si el cambio de estado lo
+// disparo ella misma (via uart_labgeo_enviar_start/stop) o la web. Se llama
+// desde la tarea de recepcion UART, con el LVGL lock ya tomado.
+typedef void (*uart_labgeo_cb_estado_t)(uint8_t estado_ensayo);
+
+// Registrar ANTES de uart_labgeo_init(), mismo criterio que el resto de los
+// callbacks de este proyecto.
+void uart_labgeo_set_cb_estado(uart_labgeo_cb_estado_t cb);
+
 #ifdef __cplusplus
 }
 #endif

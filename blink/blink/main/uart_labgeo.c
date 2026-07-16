@@ -19,6 +19,7 @@ static const char *TAG = "UART_LABGEO";
 
 static ui_labgeo_t  *s_ui = NULL;
 static ui_grafica_t *s_grafica = NULL;
+static uart_labgeo_cb_estado_t s_cb_estado = NULL;
 
 // ---------- Envio de tramas ----------
 
@@ -52,6 +53,11 @@ void uart_labgeo_enviar_stop(uint8_t run_id)
     enviar_frame(LABGEO_CMD_STOP, &run_id, 1);
 }
 
+void uart_labgeo_set_cb_estado(uart_labgeo_cb_estado_t cb)
+{
+    s_cb_estado = cb;
+}
+
 void uart_labgeo_enviar_request_run(uint8_t run_id)
 {
     ESP_LOGI(TAG, "-> REQUEST_RUN corrida %u", (unsigned)run_id);
@@ -67,7 +73,7 @@ void uart_labgeo_enviar_request_run(uint8_t run_id)
 
 static void aplicar_sensor_update(const uint8_t *p, uint16_t len)
 {
-    if (len < 17 || !s_ui) {
+    if (len < 18 || !s_ui) {
         ESP_LOGW(TAG, "SENSOR_UPDATE invalido (len=%u)", (unsigned)len);
         return;
     }
@@ -77,6 +83,7 @@ static void aplicar_sensor_update(const uint8_t *p, uint16_t len)
     int32_t  dial2_um   = labgeo_leer_i32(&p[5]);
     int32_t  peso_mN    = labgeo_leer_i32(&p[9]);
     uint32_t tiempo_ms  = labgeo_leer_u32(&p[13]);
+    uint8_t  estado_ensayo = p[17]; // ver uart_labgeo_cb_estado_t en uart_labgeo.h
     (void) run_id; // se podria comparar contra la corrida activa si hace falta validar
 
     if (lvgl_port_lock(0)) {
@@ -87,6 +94,12 @@ static void aplicar_sensor_update(const uint8_t *p, uint16_t len)
         uint32_t total_s = tiempo_ms / 1000;
         lv_label_set_text_fmt(s_ui->lbl_tiempo, "%02" PRIu32 ":%02" PRIu32 ":%02" PRIu32,
                                total_s / 3600, (total_s / 60) % 60, total_s % 60);
+
+        // Con el LVGL lock ya tomado -- el callback solo toca lv_obj/lv_label,
+        // no vuelve a pedir el lock (evita bloqueo/reentrancia).
+        if (s_cb_estado) {
+            s_cb_estado(estado_ensayo);
+        }
 
         lvgl_port_unlock();
     }

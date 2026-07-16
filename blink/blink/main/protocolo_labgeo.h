@@ -12,6 +12,11 @@
 
 typedef enum {
     // Controlador -> Pantalla
+    // SENSOR_UPDATE payload (18 bytes): run_id(u8) + dial1_um(i32) +
+    // dial2_um(i32) + peso_mN(i32) + tiempo_ms(u32) + estado_ensayo(u8).
+    // estado_ensayo (0..4) es el mismo status del boton unico que ya usa la
+    // web -- ver uart_labgeo_cb_estado_t en uart_labgeo.h para como esta
+    // pantalla lo aplica.
     LABGEO_CMD_SENSOR_UPDATE = 0x01, // lectura en vivo (hasta 5 veces/seg)
     LABGEO_CMD_RUN_CHUNK     = 0x02, // datos guardados de una corrida (bajo pedido)
 
