@@ -1,4 +1,6 @@
 #include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -71,6 +73,39 @@ void uart_labgeo_enviar_request_run(uint8_t run_id)
 
 // ---------- Aplicar datos recibidos a la UI ----------
 
+// Formatea 'valor_milesimas' (entero en milesimas de la unidad -- p.ej.
+// micrometros para mostrar mm, o mN para mostrar N) como texto
+// "[-]entero.fraccion" con 'decimales' cifras decimales, SIN usar "%f" en
+// ningun lado. CONFIG_LV_USE_FLOAT esta apagado en este proyecto (ver
+// sdkconfig), y con eso el sprintf propio de LVGL (CONFIG_LV_USE_BUILTIN_SPRINTF)
+// no soporta "%f" -- lv_label_set_text_fmt(..., "%.3f", ...) terminaba
+// mostrando literalmente la letra "f" en la pantalla en vez del numero.
+static void formatear_milesimas(char *buf, size_t buf_len, int32_t valor_milesimas, int decimales)
+{
+    bool negativo = valor_milesimas < 0;
+    uint32_t v = negativo ? (uint32_t)(-valor_milesimas) : (uint32_t)valor_milesimas;
+
+    uint32_t divisor = 1;
+    for (int i = 0; i < (3 - decimales); i++) {
+        divisor *= 10;
+    }
+    uint32_t tope_frac = 1;
+    for (int i = 0; i < decimales; i++) {
+        tope_frac *= 10;
+    }
+
+    uint32_t entero = v / 1000;
+    uint32_t resto = v % 1000;
+    uint32_t frac = (resto + divisor / 2) / divisor; // redondeo al mas cercano
+    if (frac >= tope_frac) {                          // se llevo un digito entero (ej 999.96 -> 1000)
+        frac -= tope_frac;
+        entero += 1;
+    }
+
+    snprintf(buf, buf_len, "%s%" PRIu32 ".%0*" PRIu32,
+             negativo ? "-" : "", entero, decimales, frac);
+}
+
 static void aplicar_sensor_update(const uint8_t *p, uint16_t len)
 {
     if (len < 18 || !s_ui) {
@@ -87,9 +122,16 @@ static void aplicar_sensor_update(const uint8_t *p, uint16_t len)
     (void) run_id; // se podria comparar contra la corrida activa si hace falta validar
 
     if (lvgl_port_lock(0)) {
-        lv_label_set_text_fmt(s_ui->lbl_dial1, "%.3f", dial1_um / 1000.0);
-        lv_label_set_text_fmt(s_ui->lbl_dial2, "%.3f", dial2_um / 1000.0);
-        lv_label_set_text_fmt(s_ui->lbl_peso, "%.1f", peso_mN / 1000.0);
+        char texto[16];
+
+        formatear_milesimas(texto, sizeof(texto), dial1_um, 3);
+        lv_label_set_text(s_ui->lbl_dial1, texto);
+
+        formatear_milesimas(texto, sizeof(texto), dial2_um, 3);
+        lv_label_set_text(s_ui->lbl_dial2, texto);
+
+        formatear_milesimas(texto, sizeof(texto), peso_mN, 1);
+        lv_label_set_text(s_ui->lbl_peso, texto);
 
         uint32_t total_s = tiempo_ms / 1000;
         lv_label_set_text_fmt(s_ui->lbl_tiempo, "%02" PRIu32 ":%02" PRIu32 ":%02" PRIu32,
