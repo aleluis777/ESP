@@ -1,4 +1,44 @@
 dependencies:
+  esp-idf-lib/esp_idf_lib_helpers:
+    component_hash: 689853bb8993434f9556af0f2816e808bf77b5d22100144b21f3519993daf237
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32
+    - esp32c2
+    - esp32c3
+    - esp32c5
+    - esp32c6
+    - esp32c61
+    - esp32h2
+    - esp32p4
+    - esp32s2
+    - esp32s3
+    version: 1.4.0
+  esp-idf-lib/hx711:
+    component_hash: a746fa21c76a94e9796e85c9b5ac7054eff64587ab8e87c94615b4e80ccc2992
+    dependencies:
+    - name: esp-idf-lib/esp_idf_lib_helpers
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32c2
+    - esp32c3
+    - esp32c5
+    - esp32c6
+    - esp32c61
+    - esp32h2
+    - esp32p4
+    - esp32s2
+    - esp32s3
+    version: 1.1.0
   espressif/cjson:
     component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
     dependencies:
@@ -136,8 +176,9 @@ dependencies:
       type: idf
     version: 6.0.2
 direct_dependencies:
+- esp-idf-lib/hx711
 - espressif/cjson
 - espressif/ethernet_init
-manifest_hash: dccd8c9e1fbe5e7731020a53e042e0b5090483904b29e05c163f4c57744e2b80
+manifest_hash: 90def24606e4b4c305c0b79e902df35e7f2c09b50cca67a9a66167baed6921e3
 target: esp32
 version: 3.0.0

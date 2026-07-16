@@ -53,7 +53,16 @@ static const char *TAG = "DIAG_RED_ETH";
 // Buzzer: GPIO15 (P7).
 #define PIN_BUZZER GPIO_NUM_15  // P7
 
-static hx711_t s_celda;
+// Celda de carga: ya no es nuestro driver bit-bang propio -- se reemplazo
+// por el componente esp-idf-lib/hx711 (ver main/idf_component.yml), un
+// driver probado y mantenido. HX711_GAIN_A_128 = canal A, ganancia 128 (1
+// pulso extra despues de los 24 bits de dato) -- mismo modo que usaba
+// nuestro driver viejo.
+static hx711_t s_celda = {
+    .dout = PIN_HX711_DOUT,
+    .pd_sck = PIN_HX711_SCK,
+    .gain = HX711_GAIN_A_128,
+};
 static dial_caliper_t s_dial1;
 static dial_caliper_t s_dial2;
 static config_calibracion_t s_cal; // calibracion cargada de /www/calibracion.json
@@ -80,6 +89,7 @@ static programador_t s_prog = { .activa = false };
 // ---------------------------------------------------------------------------
 static volatile int32_t s_dial1_um_crudo = 0;
 static volatile int32_t s_dial2_um_crudo = 0;
+static volatile int32_t s_celda_cruda = 0;
 
 // Buzzer simple (on/off, sin PWM/tono -- alcanza para un beep de aviso).
 // Bloquea la tarea que lo llama por 'duracion_ms' -- se usa desde el arranque
@@ -118,6 +128,25 @@ static void tarea_dial2(void *arg)
         } else {
             ESP_LOGW(TAG, "Dial 2: timeout de lectura (sin cambios, se mantiene el ultimo valor)");
         }
+    }
+}
+
+// Mismo tratamiento que los diales, pero con el primitivo realmente
+// no-bloqueante que da la libreria (hx711_is_ready() solo lee el pin una vez
+// y vuelve al toque, a diferencia de hx711_wait() que bloquea hasta
+// 'timeout_ms' esperando). Si no hay dato listo, cede CPU con vTaskDelay(1)
+// y reintenta -- nunca bloquea a nadie, ni siquiera hasta 50ms como antes.
+static void tarea_celda(void *arg)
+{
+    while (1) {
+        bool listo = false;
+        if (hx711_is_ready(&s_celda, &listo) == ESP_OK && listo) {
+            int32_t crudo;
+            if (hx711_read_data(&s_celda, &crudo) == ESP_OK) {
+                s_celda_cruda = crudo;
+            }
+        }
+        vTaskDelay(1); // no listo todavia (o celda desconectada) -- reintenta sin trabar a nadie
     }
 }
 
@@ -175,20 +204,19 @@ static void on_avanzar_ensayo(void)
 }
 
 // ---------------------------------------------------------------------------
-// Loop de sensores (WS a ritmo fijo ~5Hz, pase lo que pase con los diales):
-// lee la celda (unica que de verdad bloquea aca, con timeout real de 50ms),
-// toma los diales de la CACHE que llenan tarea_dial1()/tarea_dial2() (nunca
-// espera por ellos), calibra, alimenta el programador, y manda todo por WS.
+// Loop de sensores (WS a ritmo fijo ~5Hz, pase lo que pase con los sensores):
+// los 3 sensores (celda + 2 diales) viven en sus propias tareas (ver
+// tarea_celda()/tarea_dial1()/tarea_dial2()) y solo actualizan una cache --
+// esta tarea NUNCA llama a un driver de sensor directamente, solo lee las
+// variables cacheadas (nunca bloquea), calibra, alimenta el programador, y
+// manda todo por WS a un ritmo fijo de ~200ms.
 // ---------------------------------------------------------------------------
 static void tarea_sensores(void *arg)
 {
     while (1) {
-        int32_t dial1_crudo_um = s_dial1_um_crudo; // ultimo valor cacheado, sin bloquear
+        int32_t dial1_crudo_um = s_dial1_um_crudo; // ultimos valores cacheados, sin bloquear
         int32_t dial2_crudo_um = s_dial2_um_crudo;
-
-        int32_t celda_cruda = 0;
-        bool ok3 = hx711_leer(&s_celda, &celda_cruda, 50);
-        if (!ok3) ESP_LOGW(TAG, "Celda de carga: timeout de lectura");
+        int32_t celda_cruda = s_celda_cruda;
 
         // Calibracion: los diales ya vienen en MICROMETROS reales del driver
         // (ver comentario arriba) -- la calibracion se aplica en ese mismo
@@ -213,8 +241,14 @@ static void tarea_sensores(void *arg)
         uint32_t tiempo_ms = 0;
         programador_actualizar(&s_prog, dial1_um, dial2_um, peso_mN, &tiempo_ms);
 
-        ESP_LOGI(TAG, "dial1=%.4fmm dial2=%.4fmm peso=%.3fN tiempo=%" PRIu32 "ms activa=%d run=%u",
-                 dial1_mm, dial2_mm, peso_n, tiempo_ms, s_prog.activa, (unsigned)s_prog.run_id);
+        // Crudo y calibrado juntos de los 3 sensores -- util para ver de un
+        // vistazo si un valor calibrado raro viene del sensor (crudo tambien
+        // raro) o de la calibracion (crudo normal, calibrado disparatado).
+        ESP_LOGI(TAG,
+                 "dial1: crudo=%" PRId32 "um cal=%.4fmm | dial2: crudo=%" PRId32 "um cal=%.4fmm | "
+                 "celda: crudo=%" PRId32 " peso=%.3fN | tiempo=%" PRIu32 "ms activa=%d run=%u",
+                 dial1_crudo_um, dial1_mm, dial2_crudo_um, dial2_mm,
+                 celda_cruda, peso_n, tiempo_ms, s_prog.activa, (unsigned)s_prog.run_id);
 
         char json[192];
         snprintf(json, sizeof(json),
@@ -228,12 +262,18 @@ static void tarea_sensores(void *arg)
     }
 }
 
-// POST /calibrar_cero: sin peso sobre la celda, el crudo de ahora mismo ES
-// el offset. Hay que llamar esto ANTES de /calibrar_maximo.
+// Cuantas lecturas se promedian para cada paso de calibracion -- el HX711
+// tiene ruido de muestra a muestra, y calibrar con una sola lectura instantanea
+// arrastra ese ruido a offset/pendiente para siempre. Promediar unas pocas
+// (nada de tiempo real de por medio en un click de calibracion) lo estabiliza.
+#define CALIBRACION_LECTURAS_PROMEDIO 5
+
+// POST /calibrar_cero: sin peso sobre la celda, el promedio de varias
+// lecturas ES el offset. Hay que llamar esto ANTES de /calibrar_maximo.
 static void on_calibrar_cero(void)
 {
     int32_t crudo = 0;
-    if (!hx711_leer(&s_celda, &crudo, 200)) {
+    if (hx711_read_average(&s_celda, CALIBRACION_LECTURAS_PROMEDIO, &crudo) != ESP_OK) {
         ESP_LOGW(TAG, "calibrar_cero: timeout leyendo la celda, no se guarda nada");
         return;
     }
@@ -257,7 +297,7 @@ static void on_calibrar_maximo(float peso_n)
     }
 
     int32_t crudo = 0;
-    if (!hx711_leer(&s_celda, &crudo, 200)) {
+    if (hx711_read_average(&s_celda, CALIBRACION_LECTURAS_PROMEDIO, &crudo) != ESP_OK) {
         ESP_LOGW(TAG, "calibrar_maximo: timeout leyendo la celda, no se guarda nada");
         return;
     }
@@ -307,7 +347,14 @@ void app_main(void)
 
     // 3) Sensores + buzzer: tampoco dependen de la red -- se inicializan y
     // arrancan su tarea siempre, este o no este el Ethernet disponible.
-    hx711_init(&s_celda, PIN_HX711_DOUT, PIN_HX711_SCK);
+    // hx711_init() puede devolver ESP_ERR_TIMEOUT si la celda no esta
+    // conectada/alimentada todavia -- no es fatal, se loguea y se sigue
+    // igual (tarea_sensores ya maneja los timeouts de lectura despues).
+    esp_err_t err_celda = hx711_init(&s_celda);
+    if (err_celda != ESP_OK) {
+        ESP_LOGW(TAG, "hx711_init() fallo (%s) -- revisar cableado/alimentacion de la celda",
+                 esp_err_to_name(err_celda));
+    }
     dial_caliper_init(&s_dial1, PIN_DIAL1_REQ, PIN_DIAL1_CLK, PIN_DIAL1_DATA);
     dial_caliper_init(&s_dial2, PIN_DIAL2_REQ, PIN_DIAL2_CLK, PIN_DIAL2_DATA);
 
@@ -315,11 +362,12 @@ void app_main(void)
     gpio_set_direction(PIN_BUZZER, GPIO_MODE_OUTPUT);
     gpio_set_level(PIN_BUZZER, 0);
 
-    // Cada dial en su propia tarea (ver comentario junto a s_dial1_um_crudo
-    // arriba): asi un dial lento/desconectado no atrasa el WS. Prioridad 5,
-    // igual que tarea_sensores -- ninguna es mas urgente que otra.
+    // Los 3 sensores en sus propias tareas (ver comentario junto a
+    // s_dial1_um_crudo arriba): asi ninguno atrasa al WS. Prioridad 5, igual
+    // que tarea_sensores -- ninguna es mas urgente que otra.
     xTaskCreate(tarea_dial1, "tarea_dial1", 3072, NULL, 5, NULL);
     xTaskCreate(tarea_dial2, "tarea_dial2", 3072, NULL, 5, NULL);
+    xTaskCreate(tarea_celda, "tarea_celda", 3072, NULL, 5, NULL);
     xTaskCreate(tarea_sensores, "tarea_sensores", 4096, NULL, 5, NULL);
 
     // 4) Registrar los callbacks ANTES de levantar el servidor web, mismo

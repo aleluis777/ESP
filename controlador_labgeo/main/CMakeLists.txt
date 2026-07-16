@@ -1,4 +1,4 @@
-idf_component_register(SRCS "app_main.c" "hx711.c" "dial_caliper.c" "config_labgeo.c"
+idf_component_register(SRCS "app_main.c" "dial_caliper.c" "config_labgeo.c"
                              "almacenamiento.c" "programador_corrida.c" "uart_link.c"
                              "red_eth.c" "servidor_web.c" "ping_monitor.c"
                        REQUIRES esp_driver_gpio esp_driver_uart spiffs esp_timer
