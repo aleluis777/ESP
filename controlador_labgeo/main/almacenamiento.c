@@ -30,6 +30,15 @@ static const char *TAG = "ALMACENAMIENTO";
 #define RUTA_CORRIDAS "/www/corridas.csv"
 #define PUNTO_BYTES 12
 
+// Offset (en corridas.csv) del ULTIMO marcador escrito de cada run_id (1 o
+// 2), cacheado en RAM para no tener que escanear el archivo entero cada vez
+// que la pantalla pide ver una grafica (REQUEST_RUN) -- ver el comentario
+// arriba de almacenamiento_leer_corrida(). Indice 0 sin usar (run_id es 1 o
+// 2); -1 = "todavia no se escribio ninguna corrida de este tipo en este
+// arranque", fuerza el escaneo de respaldo (por ejemplo, justo despues de
+// reiniciar el equipo y pedir una corrida de antes del reinicio).
+static long s_offset_ultima_corrida[3] = { -1, -1, -1 };
+
 // Arma "---CORRIDA1---" / "---CORRIDA2---" segun run_id.
 static void marcador_de(uint8_t run_id, char *buf, size_t buf_len)
 {
@@ -67,10 +76,21 @@ esp_err_t almacenamiento_iniciar_corrida(uint8_t run_id)
         return ESP_FAIL;
     }
 
+    // fseek a SEEK_END antes de leer la posicion: en modo "a" el indicador de
+    // posicion no queda confiable hasta la primera escritura en todos los
+    // backends de stdio -- este fseek garantiza que offset_marcador sea
+    // realmente donde va a arrancar la linea del marcador.
+    fseek(f, 0, SEEK_END);
+    long offset_marcador = ftell(f);
+
     char marcador[24];
     marcador_de(run_id, marcador, sizeof(marcador));
     fprintf(f, "%s\n", marcador);
     fclose(f);
+
+    if (run_id == 1 || run_id == 2) {
+        s_offset_ultima_corrida[run_id] = offset_marcador;
+    }
 
     ESP_LOGI(TAG, "Corrida %u: marcador '%s' agregado en %s (append, no se borro nada)",
              (unsigned)run_id, marcador, RUTA_CORRIDAS);
@@ -107,19 +127,29 @@ esp_err_t almacenamiento_leer_corrida(uint8_t run_id, almacenamiento_chunk_cb_t 
         return ESP_OK;
     }
 
-    // Primera pasada: recorrer el archivo entero buscando la ULTIMA linea
-    // que sea el marcador de ESTE run_id (puede haber varias, de sesiones
-    // anteriores) -- nos quedamos con el offset de esa linea (el lugar
-    // exacto donde empieza) para poder volver ahi en la segunda pasada.
-    long offset_ultima_sesion = -1;
-    long offset_linea = 0;
     char linea[64];
+    long offset_ultima_sesion = (run_id == 1 || run_id == 2) ? s_offset_ultima_corrida[run_id] : -1;
 
-    while (fgets(linea, sizeof(linea), f)) {
-        if (strncmp(linea, marcador, marcador_len) == 0) {
-            offset_ultima_sesion = offset_linea;
+    if (offset_ultima_sesion >= 0) {
+        // Camino rapido: ya sabemos donde escribio almacenamiento_iniciar_corrida()
+        // el marcador mas reciente de este run_id en ESTE arranque -- nos
+        // ahorramos escanear corridas.csv entero (que solo crece, nunca se
+        // trunca, y puede tener dias/semanas de historial acumulado).
+        ESP_LOGI(TAG, "Corrida %u: usando offset cacheado %ld (sin escanear el archivo)",
+                 (unsigned)run_id, offset_ultima_sesion);
+    } else {
+        // Camino lento de respaldo: solo hace falta si todavia no se
+        // arranco ninguna corrida de este tipo en este arranque (por
+        // ejemplo, justo despues de reiniciar el equipo y pedir ver una
+        // corrida de antes del reinicio) -- recorre el archivo entero
+        // buscando la ULTIMA linea que sea el marcador de ESTE run_id.
+        long offset_linea = 0;
+        while (fgets(linea, sizeof(linea), f)) {
+            if (strncmp(linea, marcador, marcador_len) == 0) {
+                offset_ultima_sesion = offset_linea;
+            }
+            offset_linea = ftell(f);
         }
-        offset_linea = ftell(f);
     }
 
     if (offset_ultima_sesion < 0) {

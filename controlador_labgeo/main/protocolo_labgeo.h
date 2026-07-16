@@ -13,6 +13,14 @@
 
 typedef enum {
     // Controlador -> Pantalla
+    // SENSOR_UPDATE payload (18 bytes): run_id(u8) + dial1_um(i32) +
+    // dial2_um(i32) + peso_mN(i32) + tiempo_ms(u32) + estado_ensayo(u8).
+    // estado_ensayo es el mismo status 0..4 del boton unico que ya se manda
+    // por WebSocket (ver campo "estado" en servidor_web.c / app_main.c) --
+    // agregado como ULTIMO byte del payload (antes eran 17 bytes) para que
+    // la pantalla pueda mostrar el boton correcto sin rearmar su propia
+    // maquina de estados. PENDIENTE actualizar este mismo archivo del lado
+    // de la pantalla (blink/blink/main/protocolo_labgeo.h) para que lo lea.
     LABGEO_CMD_SENSOR_UPDATE = 0x01, // lectura en vivo (hasta 5 veces/seg)
     LABGEO_CMD_RUN_CHUNK     = 0x02, // datos guardados de una corrida (bajo pedido)
 

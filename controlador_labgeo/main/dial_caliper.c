@@ -80,7 +80,7 @@ bool dial_caliper_leer_digitos(dial_caliper_t *d, char digitos[13], uint32_t tim
                     req_liberar(d);
                     return false;
                 }
-                if ((timeout % 1000) == 0) {
+                if ((timeout % 100) == 0) {
                     vTaskDelay(1);
                 }
             }
@@ -96,7 +96,7 @@ bool dial_caliper_leer_digitos(dial_caliper_t *d, char digitos[13], uint32_t tim
                     req_liberar(d);
                     return false;
                 }
-                if ((timeout % 1000) == 0) {
+                if ((timeout % 100) == 0) {
                     vTaskDelay(1);
                 }
             }

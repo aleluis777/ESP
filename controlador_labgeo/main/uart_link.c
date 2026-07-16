@@ -20,15 +20,16 @@
 
 static const char *TAG = "UART_LINK";
 
-// OJO: estos son placeholders, todavia sin confirmar. GPIO17/18 (los que
-// usa la pantalla del otro lado) NO SIRVEN ACA: en este controlador GPIO17
-// es el CS del W5500 (Ethernet.init(17) en LinaresETH.cpp) y GPIO18 es casi
-// seguro el SCK del bus SPI por defecto (VSPI) que usa el mismo modulo.
-// GPIO4 y GPIO16 no aparecen usados en LABGEO2.ino ni en LinaresETH, pero
-// confirmalos contra tu cableado real antes de flashear.
+// GPIO4 y GPIO16 (lo que se habia puesto antes) NO SIRVEN: GPIO4 es
+// PIN_DIAL2_DATA (app_main.c) y GPIO16 es CONFIG_ETHERNET_SPI_INT0_GPIO
+// (sdkconfig.defaults, el INT del W5500) -- los dos ya estan ocupados.
+// GPIO13/GPIO14 no aparecen usados por ningun otro modulo de este
+// controlador (W5500: 5/16/17/18/19/23; HX711: 21/22; Dial1: 12/25/27;
+// Dial2: 2/4/26; Buzzer: 15) pero confirmalos contra tu cableado real antes
+// de flashear.
 #define LABGEO_UART_PORT   UART_NUM_1
-#define LABGEO_UART_TX_PIN GPIO_NUM_4
-#define LABGEO_UART_RX_PIN GPIO_NUM_16
+#define LABGEO_UART_TX_PIN GPIO_NUM_13
+#define LABGEO_UART_RX_PIN GPIO_NUM_14
 #define LABGEO_UART_BAUD   115200
 
 static uart_link_callbacks_t s_cb = {0};
@@ -58,20 +59,21 @@ static void enviar_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
     uart_write_bytes(LABGEO_UART_PORT, (const char *)buf, i);
 }
 
-// Arma el payload de SENSOR_UPDATE (17 bytes: run_id + 3 valores i32 + 1
-// tiempo u32) usando los helpers little-endian de protocolo_labgeo.h, y lo
-// manda. Lo llama app_main.c hasta 5 veces por segundo mientras hay una
-// corrida activa.
+// Arma el payload de SENSOR_UPDATE (18 bytes: run_id + 3 valores i32 + 1
+// tiempo u32 + 1 estado u8) usando los helpers little-endian de
+// protocolo_labgeo.h, y lo manda. Lo llama app_main.c hasta 5 veces por
+// segundo mientras hay una corrida activa.
 void uart_link_enviar_sensor_update(uint8_t run_id, int32_t dial1_um, int32_t dial2_um,
-                                     int32_t peso_mN, uint32_t tiempo_ms)
+                                     int32_t peso_mN, uint32_t tiempo_ms, uint8_t estado_ensayo)
 {
-    uint8_t payload[17];
+    uint8_t payload[18];
     uint16_t idx = 0;
     labgeo_put_u8(payload, &idx, run_id);
     labgeo_put_i32(payload, &idx, dial1_um);
     labgeo_put_i32(payload, &idx, dial2_um);
     labgeo_put_i32(payload, &idx, peso_mN);
     labgeo_put_u32(payload, &idx, tiempo_ms);
+    labgeo_put_u8(payload, &idx, estado_ensayo);
 
     enviar_frame(LABGEO_CMD_SENSOR_UPDATE, payload, idx);
 }

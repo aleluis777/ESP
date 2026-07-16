@@ -13,6 +13,12 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 # WebSocket en esp_http_server (lo usa servidor_web.c para /ws).
 CONFIG_HTTPD_WS_SUPPORT=y
 
+# Default (10) se quedaba corto: esp_http_server ya usa 3 sockets para si
+# mismo, y una carga de pagina normal (index.html + style.css + equipo.png,
+# sin keep-alive) mas el WS facil llega a 4-5 conexiones simultaneas, dejando
+# el WS sin lugar. Con 16 sobra margen (ver max_open_sockets en servidor_web.c).
+CONFIG_LWIP_MAX_SOCKETS=16
+
 # Ethernet: modulo W5500 por SPI, pines confirmados contra labgeo2025.ino /
 # LinaresETH.cpp. Apagamos el EMAC interno (viene prendido por defecto y
 # rompe el init si no hay un PHY RMII real conectado) y prendemos el modulo

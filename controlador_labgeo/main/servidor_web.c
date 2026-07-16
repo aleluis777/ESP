@@ -20,10 +20,14 @@
 #include "cJSON.h"
 
 static const char *TAG = "SERVIDOR_WEB";
-// LWIP_MAX_SOCKETS (default de este proyecto) solo da margen para 7 sockets
-// abiertos en simultaneo, y esp_http_server ya usa 3 para si mismo -- por
-// eso el limite real de clientes WS es bajo. Si hace falta mas clientes a
-// la vez, subir CONFIG_LWIP_MAX_SOCKETS en sdkconfig.defaults.
+// CONFIG_LWIP_MAX_SOCKETS=16 en este proyecto (ver sdkconfig.defaults) --
+// esp_http_server usa 3 sockets para si mismo, asi que max_open_sockets no
+// puede pasar de 13 (16-3, el propio httpd_start() lo rechaza con
+// ESP_ERR_INVALID_ARG si te pasas -- confirmado, ver historial). Antes esto
+// estaba en 10 (default de ESP-IDF) y una carga de pagina normal
+// (index.html + style.css + equipo.png, sin keep-alive, cada uno con su
+// propia conexion) mas el WS llegaban a llenar el limite disponible, dejando
+// el WS sin socket. Con 16 sobra margen de verdad.
 #define WS_MAX_CLIENTES 4
 
 static httpd_handle_t s_servidor = NULL;
@@ -404,7 +408,7 @@ esp_err_t servidor_web_init(void)
     montar_www();
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_open_sockets = WS_MAX_CLIENTES + 2; // + margen para pedidos HTTP normales
+    config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), dejamos 1 de margen
     config.lru_purge_enable = true;
     config.max_uri_handlers = 16; // 15 rutas registradas, con un poco de margen
 

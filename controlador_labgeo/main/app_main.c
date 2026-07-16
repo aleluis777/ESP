@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // VERSION DE DIAGNOSTICO -- no es el firmware normal, pero ya tiene todos
-// los sensores + el guardado real de corridas conectados (falta UART hacia
-// la pantalla fisica y el observador de ping, a proposito -- no hacen falta
-// todavia).
+// los sensores + el guardado real de corridas + UART hacia la pantalla
+// fisica conectados (falta solo el observador de ping, a proposito -- no
+// hace falta todavia).
 //
 // Confirmado hasta ahora: hardware/IRQ del W5500 OK, red_eth_init() OK (ping
 // responde), servidor_web_init() OK, celda de carga + calibracion via
@@ -12,6 +12,11 @@
 //   - programador_corrida.c (decide CUANDO se guarda un punto).
 //   - El boton unico de la web (estado 0..4) ahora dispara de verdad
 //     programador_iniciar()/programador_detener(), no es solo cosmetico.
+//   - uart_link.c conectado: START/STOP/REQUEST_RUN de la pantalla fisica
+//     ya disparan lo mismo que el boton de la web (on_uart_start/on_uart_stop
+//     actualizan s_estado_ensayo), y SENSOR_UPDATE ahora manda tambien el
+//     byte de estado 0..4 (ver protocolo_labgeo.h) para que la pantalla
+//     muestre el boton correcto sin rearmar su propia maquina de estados.
 //
 // OJO unidades: dial_caliper_leer() devuelve la posicion ya en MICROMETROS
 // reales (ver dial_caliper.h, el propio parametro se llama valor_um) -- NO
@@ -35,6 +40,7 @@
 #include "config_labgeo.h"
 #include "almacenamiento.h"
 #include "programador_corrida.h"
+#include "uart_link.h"
 
 static const char *TAG = "DIAG_RED_ETH";
 
@@ -116,6 +122,7 @@ static void tarea_dial1(void *arg)
             s_dial1_um_crudo = crudo;
         } else {
             ESP_LOGW(TAG, "Dial 1: timeout de lectura (sin cambios, se mantiene el ultimo valor)");
+            vTaskDelay(pdMS_TO_TICKS(100)); // dial desconectado -- no reintentar sin pausa (satura el nucleo)
         }
     }
 }
@@ -128,6 +135,7 @@ static void tarea_dial2(void *arg)
             s_dial2_um_crudo = crudo;
         } else {
             ESP_LOGW(TAG, "Dial 2: timeout de lectura (sin cambios, se mantiene el ultimo valor)");
+            vTaskDelay(pdMS_TO_TICKS(100)); // dial desconectado -- no reintentar sin pausa (satura el nucleo)
         }
     }
 }
@@ -224,6 +232,51 @@ static void on_avanzar_ensayo(void)
 }
 
 // ---------------------------------------------------------------------------
+// Callbacks UART (pantalla fisica): a diferencia del boton unico de la web
+// (que no manda run_id, solo "avanzar"), START/STOP de la pantalla ya traen
+// el run_id explicito (1 o 2) -- de todas formas actualizamos
+// s_estado_ensayo para que el boton de la web quede sincronizado con lo que
+// hizo la pantalla, y viceversa (la pantalla se entera del estado por el
+// byte nuevo que se agrego a SENSOR_UPDATE, ver protocolo_labgeo.h).
+// ---------------------------------------------------------------------------
+static void on_uart_start(uint8_t run_id)
+{
+    buzzer_beep(100);
+    programador_iniciar(&s_prog, run_id);
+    s_estado_ensayo = (run_id == 1) ? ESTADO_CORRIDA1_INICIADA : ESTADO_CORRIDA2_INICIADA;
+    ESP_LOGI(TAG, "UART START: corrida %u, nuevo estado=%d", (unsigned)run_id, (int)s_estado_ensayo);
+}
+
+static void on_uart_stop(uint8_t run_id)
+{
+    buzzer_beep(100);
+    programador_detener(&s_prog);
+    // Se usa s_prog.run_id (no el 'run_id' que llego en la trama) porque
+    // programador_detener() no lo borra -- asi el estado queda bien aunque
+    // la pantalla mande STOP sin run_id valido.
+    s_estado_ensayo = (s_prog.run_id == 1) ? ESTADO_CORRIDA1_FINALIZADA : ESTADO_CORRIDA2_FINALIZADA;
+    ESP_LOGI(TAG, "UART STOP: corrida %u, nuevo estado=%d", (unsigned)run_id, (int)s_estado_ensayo);
+}
+
+// Reenvia cada bloque que arma almacenamiento_leer_corrida() directo por
+// UART -- ya viene empaquetado en el formato de 12 bytes/punto del
+// protocolo (ver almacenamiento.h), no hay que reinterpretar nada.
+static void uart_chunk_cb(const uint8_t *puntos_buf, uint8_t count, bool es_ultimo, void *ctx)
+{
+    uint8_t run_id = *(uint8_t *)ctx;
+    uart_link_enviar_run_chunk(run_id, puntos_buf, count, es_ultimo ? 1 : 0);
+}
+
+// CMD_REQUEST_RUN: la pantalla pide ver la grafica de una corrida guardada
+// (run_id 1 o 2) -- se busca la ultima sesion de ese tipo en corridas.csv y
+// se manda entera por UART en bloques (RUN_CHUNK), via uart_chunk_cb().
+static void on_uart_request_run(uint8_t run_id)
+{
+    ESP_LOGI(TAG, "UART REQUEST_RUN: corrida %u", (unsigned)run_id);
+    almacenamiento_leer_corrida(run_id, uart_chunk_cb, &run_id);
+}
+
+// ---------------------------------------------------------------------------
 // Loop de sensores (WS a ritmo fijo ~5Hz, pase lo que pase con los sensores):
 // los 3 sensores (celda + 2 diales) viven en sus propias tareas (ver
 // tarea_celda()/tarea_dial1()/tarea_dial2()) y solo actualizan una cache --
@@ -277,6 +330,11 @@ static void tarea_sensores(void *arg)
                  (unsigned)s_prog.run_id, s_prog.activa ? "true" : "false",
                  dial1_mm, dial2_mm, peso_n, tiempo_ms, (int)s_estado_ensayo);
         servidor_web_enviar_ws(json);
+
+        // Misma info que el WS, para que la pantalla fisica quede sincronizada
+        // con el mismo estado del boton unico (ver protocolo_labgeo.h).
+        uart_link_enviar_sensor_update(s_prog.run_id, dial1_um, dial2_um, peso_mN, tiempo_ms,
+                                        (uint8_t)s_estado_ensayo);
 
         vTaskDelay(pdMS_TO_TICKS(200));
     }
@@ -420,6 +478,7 @@ void app_main(void)
     // Los 3 sensores en sus propias tareas (ver comentario junto a
     // s_dial1_um_crudo arriba): asi ninguno atrasa al WS. Prioridad 5, igual
     // que tarea_sensores -- ninguna es mas urgente que otra.
+    //
     xTaskCreate(tarea_dial1, "tarea_dial1", 3072, NULL, 5, NULL);
     xTaskCreate(tarea_dial2, "tarea_dial2", 3072, NULL, 5, NULL);
     xTaskCreate(tarea_celda, "tarea_celda", 3072, NULL, 5, NULL);
@@ -434,6 +493,17 @@ void app_main(void)
         .on_avanzar_ensayo = on_avanzar_ensayo,
     };
     servidor_web_set_callbacks(web_cbs);
+
+    // Callbacks UART (pantalla fisica) -- mismo criterio: registrar ANTES de
+    // uart_link_init(), para que no haya ventana donde llegue un comando y
+    // no haya nadie escuchando.
+    uart_link_callbacks_t uart_cbs = {
+        .on_start = on_uart_start,
+        .on_stop = on_uart_stop,
+        .on_request_run = on_uart_request_run,
+    };
+    uart_link_set_callbacks(uart_cbs);
+    uart_link_init();
 
     esp_err_t err = red_eth_init();
     if (err != ESP_OK) {
@@ -450,5 +520,5 @@ void app_main(void)
 
     buzzer_beep(200); // aviso de "equipo listo", una sola vez al terminar el arranque
 
-    ESP_LOGI(TAG, "Listo (sin UART a la pantalla fisica ni ping_monitor todavia, a proposito).");
+    ESP_LOGI(TAG, "Listo (UART a la pantalla fisica conectado; falta solo ping_monitor, a proposito).");
 }
