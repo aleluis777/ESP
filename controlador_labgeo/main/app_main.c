@@ -57,7 +57,7 @@ static const char *TAG = "DIAG_RED_ETH";
 #define PIN_DIAL2_DATA  GPIO_NUM_4   // AA4 (antes P7/GPIO15 -- se libero para el buzzer, ver abajo)
 
 // Buzzer: GPIO15 (P7).
-#define PIN_BUZZER GPIO_NUM_15  // P7
+#define PIN_BUZZER GPIO_NUM_33
 
 // Celda de carga: ya no es nuestro driver bit-bang propio -- se reemplazo
 // por el componente esp-idf-lib/hx711 (ver main/idf_component.yml), un
@@ -391,6 +391,8 @@ static bool leer_celda_promedio_cache(size_t muestras, int32_t *promedio)
 // lecturas ES el offset. Hay que llamar esto ANTES de /calibrar_maximo.
 static void on_calibrar_cero(void)
 {
+    buzzer_beep(100); // aviso de que arranco la calibracion, mismo criterio que avanzar_ensayo/UART start-stop
+
     int32_t crudo = 0;
     if (!leer_celda_promedio_cache(CALIBRACION_LECTURAS_PROMEDIO, &crudo)) {
         ESP_LOGW(TAG, "calibrar_cero: timeout leyendo la celda, no se guarda nada");

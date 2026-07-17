@@ -7,9 +7,11 @@
 // (cooldown de 20ms entre reintentos de consenso, lectura en secuencia con
 // backoff en vez de una tarea por dial, nucleo 1 separado de la red).
 //
-// Todavia sin los endpoints web de calibracion/red/avanzar_ensayo -- el
-// arranque/parada de una corrida se maneja por UART (la pantalla fisica),
-// que ya estaba conectado desde el paso anterior.
+// Ahora tambien con los endpoints web (calibrar_cero/calibrar_maximo/
+// configurar_red/avanzar_ensayo) y el buzzer -- mismo boton unico que la
+// pantalla fisica (UART start/stop y el POST /avanzar_ensayo disparan la
+// misma maquina de estados), y beep en cada cambio de estado + al arrancar
+// la calibracion.
 //
 // Para volver al firmware real: en main/CMakeLists.txt, en la lista de SRCS,
 // cambiar "app_main2.c" de nuevo por "app_main.c".
@@ -17,6 +19,7 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -45,6 +48,8 @@ static const char *TAG = "PRUEBA_DIAL_RED";
 #define PIN_HX711_DOUT  GPIO_NUM_22
 #define PIN_HX711_SCK   GPIO_NUM_21
 
+#define PIN_BUZZER      GPIO_NUM_33
+
 static dial_caliper_t s_dial1;
 static dial_caliper_t s_dial2;
 
@@ -64,6 +69,15 @@ static volatile int32_t s_dial1_um = 0;
 static volatile int32_t s_dial2_um = 0;
 static volatile int32_t s_celda_cruda = 0;
 static volatile int32_t s_celda_cruda_prom = 0;
+
+// Buzzer simple (on/off, sin PWM/tono) -- bloquea la tarea que lo llama por
+// 'duracion_ms', igual que el firmware real.
+static void buzzer_beep(uint32_t duracion_ms)
+{
+    gpio_set_level(PIN_BUZZER, 1);
+    vTaskDelay(pdMS_TO_TICKS(duracion_ms));
+    gpio_set_level(PIN_BUZZER, 0);
+}
 
 // ---------------------------------------------------------------------------
 // Backoff por dial desconectado: si un dial no esta enchufado, cada intento
@@ -244,6 +258,7 @@ static void tarea_publicar(void *arg)
 // ---------------------------------------------------------------------------
 static void on_uart_start(uint8_t run_id)
 {
+    buzzer_beep(100);
     programador_iniciar(&s_prog, run_id);
     s_estado_ensayo = (run_id == 1) ? ESTADO_CORRIDA1_INICIADA : ESTADO_CORRIDA2_INICIADA;
     ESP_LOGI(TAG, "UART START: corrida %u, nuevo estado=%d", (unsigned)run_id, (int)s_estado_ensayo);
@@ -251,6 +266,7 @@ static void on_uart_start(uint8_t run_id)
 
 static void on_uart_stop(uint8_t run_id)
 {
+    buzzer_beep(100);
     programador_detener(&s_prog);
     // s_prog.run_id (no el 'run_id' de la trama) porque programador_detener()
     // no lo borra -- el estado queda bien aunque la pantalla mande STOP sin
@@ -272,6 +288,131 @@ static void on_uart_request_run(uint8_t run_id)
 {
     ESP_LOGI(TAG, "UART REQUEST_RUN: corrida %u", (unsigned)run_id);
     almacenamiento_leer_corrida(run_id, uart_chunk_cb, &run_id);
+}
+
+// ---------------------------------------------------------------------------
+// POST /avanzar_ensayo: un solo boton en la web llama siempre a este mismo
+// endpoint -- ac's se decide que transicion corresponde segun el estado
+// actual. Misma maquina de estados que UART start/stop (por eso el UART y
+// la web nunca se desincronizan entre si).
+// ---------------------------------------------------------------------------
+static void on_avanzar_ensayo(void)
+{
+    buzzer_beep(100); // aviso corto en cada click del boton, sin importar la transicion
+
+    switch (s_estado_ensayo) {
+    case ESTADO_INICIAL:
+        programador_iniciar(&s_prog, 1);
+        s_estado_ensayo = ESTADO_CORRIDA1_INICIADA;
+        break;
+    case ESTADO_CORRIDA1_INICIADA:
+        programador_detener(&s_prog);
+        s_estado_ensayo = ESTADO_CORRIDA1_FINALIZADA;
+        break;
+    case ESTADO_CORRIDA1_FINALIZADA:
+        programador_iniciar(&s_prog, 2);
+        s_estado_ensayo = ESTADO_CORRIDA2_INICIADA;
+        break;
+    case ESTADO_CORRIDA2_INICIADA:
+        programador_detener(&s_prog);
+        s_estado_ensayo = ESTADO_CORRIDA2_FINALIZADA;
+        break;
+    case ESTADO_CORRIDA2_FINALIZADA:
+        s_estado_ensayo = ESTADO_INICIAL; // el programador ya esta detenido, nada mas que hacer
+        break;
+    }
+    ESP_LOGI(TAG, "avanzar_ensayo: nuevo estado=%d", (int)s_estado_ensayo);
+}
+
+// Cuantas lecturas se promedian para cada paso de calibracion, y timeout
+// total por si tarea_celda no esta actualizando el cache (celda
+// desconectada) -- mismo criterio que el firmware real.
+#define CALIBRACION_LECTURAS_PROMEDIO 5
+#define CALIBRACION_TIMEOUT_MS 2000
+
+// Promedia 'muestras' lecturas SIN tocar el HX711 directamente -- toma el
+// valor cacheado por tarea_celda y espera a que cambie antes de tomar cada
+// muestra, para asegurarse de que sea una conversion nueva y no la misma
+// repetida.
+static bool leer_celda_promedio_cache(size_t muestras, int32_t *promedio)
+{
+    int64_t suma = 0;
+    for (size_t i = 0; i < muestras; i++) {
+        int32_t anterior = s_celda_cruda;
+        uint32_t espera_ms = 0;
+        while (s_celda_cruda == anterior) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            espera_ms += 10;
+            if (espera_ms >= CALIBRACION_TIMEOUT_MS) {
+                return false;
+            }
+        }
+        suma += s_celda_cruda;
+    }
+    *promedio = (int32_t)(suma / (int64_t)muestras);
+    return true;
+}
+
+// POST /calibrar_cero: sin peso sobre la celda, el promedio de varias
+// lecturas ES el offset. Hay que llamar esto ANTES de /calibrar_maximo.
+static void on_calibrar_cero(void)
+{
+    buzzer_beep(100); // aviso de que arranco la calibracion
+
+    int32_t crudo = 0;
+    if (!leer_celda_promedio_cache(CALIBRACION_LECTURAS_PROMEDIO, &crudo)) {
+        ESP_LOGW(TAG, "calibrar_cero: timeout leyendo la celda, no se guarda nada");
+        return;
+    }
+
+    s_cal.celda_offset = (float)crudo;
+    if (config_labgeo_guardar(&s_cal) == ESP_OK) {
+        ESP_LOGI(TAG, "calibrar_cero: offset=%.0f guardado en calibracion.json", s_cal.celda_offset);
+    } else {
+        ESP_LOGE(TAG, "calibrar_cero: no se pudo guardar calibracion.json");
+    }
+}
+
+// POST /calibrar_maximo: con el peso de referencia 'peso_n' ya puesto,
+// calcula la pendiente contra el offset que ya deberia estar guardado por
+// /calibrar_cero. Si peso_n es 0 no hace nada (evita dividir por cero).
+static void on_calibrar_maximo(float peso_n)
+{
+    if (peso_n == 0.0f) {
+        ESP_LOGW(TAG, "calibrar_maximo: peso_n=0, no se puede calcular la pendiente");
+        return;
+    }
+
+    int32_t crudo = 0;
+    if (!leer_celda_promedio_cache(CALIBRACION_LECTURAS_PROMEDIO, &crudo)) {
+        ESP_LOGW(TAG, "calibrar_maximo: timeout leyendo la celda, no se guarda nada");
+        return;
+    }
+
+    s_cal.celda_pendiente = ((float)crudo - s_cal.celda_offset) / peso_n;
+    if (config_labgeo_guardar(&s_cal) == ESP_OK) {
+        ESP_LOGI(TAG, "calibrar_maximo: pendiente=%.4f guardada (crudo=%" PRId32 ", peso_n=%.2f, offset=%.0f)",
+                 s_cal.celda_pendiente, crudo, peso_n, s_cal.celda_offset);
+    } else {
+        ESP_LOGE(TAG, "calibrar_maximo: no se pudo guardar calibracion.json");
+    }
+}
+
+// POST /configurar_red: por ahora SOLO guarda ip/gateway/mascara en
+// sistema.json -- todavia no los aplica al W5500.
+static void on_configurar_red(const char *ip, const char *gateway, const char *mascara)
+{
+    config_red_t red;
+    strncpy(red.ip, ip, sizeof(red.ip) - 1);
+    red.ip[sizeof(red.ip) - 1] = '\0';
+    strncpy(red.gateway, gateway, sizeof(red.gateway) - 1);
+    red.gateway[sizeof(red.gateway) - 1] = '\0';
+    strncpy(red.mascara, mascara, sizeof(red.mascara) - 1);
+    red.mascara[sizeof(red.mascara) - 1] = '\0';
+
+    if (config_labgeo_guardar_red(&red) != ESP_OK) {
+        ESP_LOGE(TAG, "configurar_red: no se pudo guardar sistema.json");
+    }
 }
 
 void app_main(void)
@@ -297,6 +438,10 @@ void app_main(void)
     ESP_LOGI(TAG, "Dial 1 (REQ=%d CLK=%d DATA=%d) y Dial 2 (REQ=%d CLK=%d DATA=%d) listos",
              PIN_DIAL1_REQ, PIN_DIAL1_CLK, PIN_DIAL1_DATA, PIN_DIAL2_REQ, PIN_DIAL2_CLK, PIN_DIAL2_DATA);
 
+    gpio_reset_pin(PIN_BUZZER);
+    gpio_set_direction(PIN_BUZZER, GPIO_MODE_OUTPUT);
+    gpio_set_level(PIN_BUZZER, 0);
+
     // Nucleo 1 a proposito, NO el 0: app_main()/red_eth_init() corren en el
     // nucleo 0 (CONFIG_ESP_MAIN_TASK_AFFINITY_CPU0=y), y ahi tambien vive el
     // manejo de la interrupcion del W5500 -- confirmado que compartir
@@ -306,9 +451,17 @@ void app_main(void)
     xTaskCreatePinnedToCore(tarea_diales, "tarea_diales", 3072, NULL, 5, NULL, 1);
     xTaskCreate(tarea_celda, "tarea_celda", 3072, NULL, 5, NULL);
 
-    // 4) Callbacks UART ANTES de uart_link_init(), mismo criterio que el
-    // resto del proyecto: evita una ventana donde llegue un comando de la
-    // pantalla y no haya nadie escuchando.
+    // 4) Callbacks web ANTES de servidor_web_init(), y UART ANTES de
+    // uart_link_init() -- mismo criterio en los dos casos: evita una
+    // ventana donde llegue un comando y no haya nadie escuchando.
+    servidor_web_callbacks_t web_cbs = {
+        .on_calibrar_cero = on_calibrar_cero,
+        .on_calibrar_maximo = on_calibrar_maximo,
+        .on_configurar_red = on_configurar_red,
+        .on_avanzar_ensayo = on_avanzar_ensayo,
+    };
+    servidor_web_set_callbacks(web_cbs);
+
     uart_link_callbacks_t uart_cbs = {
         .on_start = on_uart_start,
         .on_stop = on_uart_stop,
@@ -335,4 +488,6 @@ void app_main(void)
     // red -- el UART a la pantalla fisica no depende de que el Ethernet este
     // disponible.
     xTaskCreate(tarea_publicar, "tarea_publicar", 4096, NULL, 5, NULL);
+
+    buzzer_beep(200); // aviso de "equipo listo", una sola vez al terminar el arranque
 }
