@@ -18,6 +18,7 @@ typedef struct {
 
     lv_obj_t *chart;
     lv_chart_series_t *serie_dial1;
+    lv_chart_series_t *serie_dial2;
     lv_chart_series_t *serie_peso;
 } ui_grafica_t;
 
@@ -26,9 +27,9 @@ typedef struct {
 // El puntero devuelto es estatico (vive mientras dure el programa), no hay que liberarlo.
 ui_grafica_t *ui_grafica_create(lv_obj_t *parent);
 
-// Agrega un punto nuevo a las series (valor de Dial 1 y de Peso), alimentado
-// por los datos que llegan del controlador (ver uart_labgeo.c).
-void ui_grafica_agregar_punto(ui_grafica_t *ui, int32_t valor_dial1, int32_t valor_peso);
+// Agrega un punto nuevo a las series (valor de Dial 1, Dial 2 y de Peso),
+// alimentado por los datos que llegan del controlador (ver uart_labgeo.c).
+void ui_grafica_agregar_punto(ui_grafica_t *ui, int32_t valor_dial1, int32_t valor_dial2, int32_t valor_peso);
 
 // Vacia el chart (se usa antes de pedir los datos de una corrida nueva).
 void ui_grafica_reset(ui_grafica_t *ui);

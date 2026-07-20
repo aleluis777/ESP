@@ -265,7 +265,7 @@ static void on_uart_stop(uint8_t run_id)
 }
 
 // Reenvia cada bloque que arma almacenamiento_leer_corrida() directo por
-// UART -- ya viene empaquetado en el formato de 12 bytes/punto del
+// UART -- ya viene empaquetado en el formato de 16 bytes/punto del
 // protocolo (ver almacenamiento.h), no hay que reinterpretar nada.
 static void uart_chunk_cb(const uint8_t *puntos_buf, uint8_t count, bool es_ultimo, void *ctx)
 {

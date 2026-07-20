@@ -100,9 +100,9 @@ bool programador_actualizar(programador_t *p, int32_t dial1_um, int32_t dial2_um
         return false;
     }
 
-    // Guarda el punto (con los 3 valores actuales) y avanza al proximo
+    // Guarda el punto (con los 4 valores actuales) y avanza al proximo
     // checkpoint de la tabla.
-    almacenamiento_agregar_punto(p->run_id, dial1_um, peso_mN, tiempo_ms);
+    almacenamiento_agregar_punto(p->run_id, dial1_um, dial2_um, peso_mN, tiempo_ms);
     p->siguiente_checkpoint++;
 
     uint16_t total = (p->run_id == 1) ? N_SEGUNDOS : N_MICROMETROS;

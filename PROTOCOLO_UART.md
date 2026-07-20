@@ -117,31 +117,39 @@ AA 01 11 00  01  39 30 00 00  40 1F 00 00  79 CC 00 00  E8 FD 00 00  66
 ### `0x02` RUN_CHUNK (Controlador -> Pantalla)
 
 Respuesta a `REQUEST_RUN`. Los datos guardados de una corrida se mandan en
-uno o mas paquetes ("chunks") de hasta 16 puntos cada uno, para no violar el
+uno o mas paquetes ("chunks") de hasta 15 puntos cada uno, para no violar el
 limite de 255 bytes de payload.
 
 | Offset | Tamano | Campo      | Tipo | Descripcion |
 |--------|--------|------------|------|-------------|
 | 0      | 1      | run_id     | u8   | 1 o 2 |
-| 1      | 1      | count      | u8   | cantidad de puntos en este chunk (1-16) |
+| 1      | 1      | count      | u8   | cantidad de puntos en este chunk (1-15) |
 | 2      | 1      | es_ultimo  | u8   | 1 = es el ultimo chunk de esta corrida, 0 = vienen mas |
-| 3      | 12*count | puntos   | —    | `count` estructuras de 12 bytes (ver abajo) |
+| 3      | 16*count | puntos   | —    | `count` estructuras de 16 bytes (ver abajo) |
 
-Cada **punto** (12 bytes):
+Cada **punto** (16 bytes) -- mismo orden de campos que SENSOR_UPDATE (sin
+`run_id`):
 
 | Offset | Tamano | Campo   | Tipo | Unidad |
 |--------|--------|---------|------|--------|
 | 0      | 4      | dial1   | i32  | micrometros (µm) |
-| 4      | 4      | peso    | i32  | milinewtons (mN) |
-| 8      | 4      | tiempo  | u32  | milisegundos desde el inicio de la corrida |
+| 4      | 4      | dial2   | i32  | micrometros (µm) |
+| 8      | 4      | peso    | i32  | milinewtons (mN) |
+| 12     | 4      | tiempo  | u32  | milisegundos desde el inicio de la corrida |
 
-Payload total por chunk: `3 + count*12` bytes (maximo 195 con count=16).
+Payload total por chunk: `3 + count*16` bytes (maximo 243 con count=15).
 
-La pantalla hoy solo grafica `dial1` y `peso` (por indice de punto, no usa el
+La pantalla grafica `dial1`, `dial2` y `peso` (por indice de punto, no usa el
 campo `tiempo` del punto todavia como eje X — queda disponible para cuando se
 quiera graficar por tiempo real en vez de por muestra). No hay limite de
 cuantos chunks se pueden mandar para una corrida; la pantalla los va
 agregando al grafico (rolling window de 30 puntos) a medida que llegan.
+
+**Nota histórica:** hasta esta version el punto tenia 12 bytes (sin `dial2`,
+`3 + count*12` con `count` maximo 16) -- se agrego `dial2` porque Corrida 2
+decide CUANDO guardar un punto segun cuanto avanzo Dial 2 (ver
+`programador_corrida.c`), pero antes ese mismo punto se guardaba sin el valor
+de Dial 2 que lo disparo.
 
 **No hace falta que el controlador sepa el total de puntos de antemano**:
 puede ir leyendo su almacenamiento y mandando chunks de 16 en 16 a medida que

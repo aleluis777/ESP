@@ -15,6 +15,10 @@
 #include "esp_http_server.h"
 #include "esp_spiffs.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
 #include "cJSON.h"
@@ -138,6 +142,7 @@ static const archivo_estatico_t s_archivo_index      = { "/www/index.html", "tex
 static const archivo_estatico_t s_archivo_style      = { "/www/style.css", "text/css" };
 static const archivo_estatico_t s_archivo_script     = { "/www/script.js", "application/javascript" };
 static const archivo_estatico_t s_archivo_files_html = { "/www/files.html", "text/html" };
+static const archivo_estatico_t s_archivo_ota_html   = { "/www/ota.html", "text/html" };
 // Grafica del historial de corridas (web/grafica.html), lee /corridas.csv
 // por su cuenta con fetch() -- no necesita nada especial del backend.
 static const archivo_estatico_t s_archivo_grafica_html = { "/www/grafica.html", "text/html" };
@@ -174,6 +179,10 @@ static const httpd_uri_t s_uri_script = {
 static const httpd_uri_t s_uri_files_html = {
     .uri = "/files.html", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_files_html,
+};
+static const httpd_uri_t s_uri_ota_html = {
+    .uri = "/ota.html", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_ota_html,
 };
 static const httpd_uri_t s_uri_grafica_html = {
     .uri = "/grafica.html", .method = HTTP_GET,
@@ -248,6 +257,240 @@ static esp_err_t listado_www_handler(httpd_req_t *req)
 static const httpd_uri_t s_uri_listado = {
     .uri = "/files", .method = HTTP_GET,
     .handler = listado_www_handler,
+};
+
+// Nombre de archivo aceptado para /upload y /descargar: sin '/' (SPIFFS "www"
+// es plano, sin subcarpetas) y sin ".." (no se puede salir de /www).
+static bool nombre_archivo_valido(const char *nombre)
+{
+    return nombre[0] != '\0' && strchr(nombre, '/') == NULL && strstr(nombre, "..") == NULL;
+}
+
+// Solo para /descargar -- las rutas fijas de arriba (index.html, style.css,
+// etc.) ya mandan su Content-Type correcto a mano; esto es nada mas para lo
+// que se sube por /upload y no tiene ruta fija propia.
+static const char *content_type_por_extension(const char *nombre)
+{
+    const char *punto = strrchr(nombre, '.');
+    if (!punto) {
+        return "application/octet-stream";
+    }
+    if (strcmp(punto, ".html") == 0) return "text/html";
+    if (strcmp(punto, ".css") == 0) return "text/css";
+    if (strcmp(punto, ".js") == 0) return "application/javascript";
+    if (strcmp(punto, ".json") == 0) return "application/json";
+    if (strcmp(punto, ".csv") == 0) return "text/csv";
+    if (strcmp(punto, ".png") == 0) return "image/png";
+    if (strcmp(punto, ".jpg") == 0 || strcmp(punto, ".jpeg") == 0) return "image/jpeg";
+    if (strcmp(punto, ".txt") == 0) return "text/plain";
+    return "application/octet-stream";
+}
+
+// POST /upload -- sube (o sobreescribe) un archivo en /www. El nombre viene
+// en la cabecera "X-Filename" (no en el body, para no tener que parsear
+// multipart/form-data), el contenido crudo es el body entero, escrito a
+// disco en pedazos igual que archivo_estatico_handler pero al reves.
+#define UPLOAD_BUF_LEN 512
+
+static esp_err_t upload_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char nombre[64];
+    size_t hdr_len = httpd_req_get_hdr_value_len(req, "X-Filename");
+    if (hdr_len == 0 || hdr_len >= sizeof(nombre) ||
+        httpd_req_get_hdr_value_str(req, "X-Filename", nombre, sizeof(nombre)) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta o es invalida la cabecera \"X-Filename\"");
+        return ESP_FAIL;
+    }
+    if (!nombre_archivo_valido(nombre)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "nombre de archivo invalido (sin '/' ni '..')");
+        return ESP_FAIL;
+    }
+
+    char ruta[80];
+    snprintf(ruta, sizeof(ruta), "/www/%s", nombre);
+
+    FILE *f = fopen(ruta, "wb");
+    if (!f) {
+        ESP_LOGE(TAG, "upload: no se pudo crear %s", ruta);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no se pudo crear el archivo en /www");
+        return ESP_FAIL;
+    }
+
+    char buf[UPLOAD_BUF_LEN];
+    size_t restantes = req->content_len;
+    bool error = false;
+    while (restantes > 0) {
+        size_t a_leer = restantes < sizeof(buf) ? restantes : sizeof(buf);
+        int leidos = httpd_req_recv(req, buf, a_leer);
+        if (leidos == HTTPD_SOCK_ERR_TIMEOUT) {
+            continue; // reintenta -- mismo criterio que el ejemplo de esp_http_server
+        }
+        if (leidos <= 0 || fwrite(buf, 1, leidos, f) != (size_t)leidos) {
+            error = true;
+            break;
+        }
+        restantes -= (size_t)leidos;
+    }
+    fclose(f);
+
+    if (error) {
+        ESP_LOGE(TAG, "upload: fallo recibiendo/escribiendo %s (particion 'www' llena?)", ruta);
+        remove(ruta); // no dejar un archivo a medio escribir
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "error recibiendo el archivo");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "upload: %s guardado (%u bytes)", ruta, (unsigned)req->content_len);
+
+    char resp[128];
+    snprintf(resp, sizeof(resp), "{\"ok\":true,\"nombre\":\"%s\",\"bytes\":%u}",
+             nombre, (unsigned)req->content_len);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, resp);
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_upload = {
+    .uri = "/upload", .method = HTTP_POST, .handler = upload_handler,
+};
+
+// GET /descargar?nombre=xxx -- para ver/bajar un archivo de /www que no
+// tenga ya su propia ruta fija arriba (por ejemplo, algo nuevo subido por
+// /upload). Las rutas fijas siguen siendo la forma normal de servir
+// index.html/style.css/etc, esto es solo el complemento para lo demas.
+static esp_err_t descargar_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char query[96];
+    char nombre[64];
+    if (httpd_req_get_url_query_len(req) == 0 ||
+        httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "nombre", nombre, sizeof(nombre)) != ESP_OK ||
+        !nombre_archivo_valido(nombre)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta \"nombre\" valido en la query");
+        return ESP_FAIL;
+    }
+
+    char ruta[80];
+    snprintf(ruta, sizeof(ruta), "/www/%s", nombre);
+
+    FILE *f = fopen(ruta, "r");
+    if (!f) {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, content_type_por_extension(nombre));
+
+    char buf[512];
+    size_t leidos;
+    while ((leidos = fread(buf, 1, sizeof(buf), f)) > 0) {
+        if (httpd_resp_send_chunk(req, buf, leidos) != ESP_OK) {
+            fclose(f);
+            httpd_resp_send_chunk(req, NULL, 0);
+            return ESP_FAIL;
+        }
+    }
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_descargar = {
+    .uri = "/descargar", .method = HTTP_GET, .handler = descargar_handler,
+};
+
+// POST /ota -- sube un firmware nuevo (el .bin que genera "idf.py build") y
+// lo escribe en la particion OTA que NO esta corriendo ahora (ota_0/ota_1,
+// ver partitions.csv), streameado igual que /upload pero con esp_ota_write()
+// en vez de fwrite(). Si esp_ota_end() valida bien la imagen (checksum/
+// firma), la marca para bootear y reinicia -- si el firmware nuevo no llega
+// a confirmarse con esp_ota_mark_app_valid_cancel_rollback() (ver
+// app_main2.c, se llama despues de que arranca todo bien), el bootloader
+// vuelve solo al firmware anterior en el proximo reset
+// (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y, ver sdkconfig.defaults).
+#define OTA_BUF_LEN 1024
+
+static esp_err_t ota_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    if (req->content_len == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio -- mandar el .bin como body crudo");
+        return ESP_FAIL;
+    }
+
+    const esp_partition_t *particion_destino = esp_ota_get_next_update_partition(NULL);
+    if (!particion_destino) {
+        ESP_LOGE(TAG, "ota: no se encontro particion OTA destino (revisar partitions.csv)");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no hay particion OTA disponible");
+        return ESP_FAIL;
+    }
+
+    esp_ota_handle_t ota_handle;
+    esp_err_t err = esp_ota_begin(particion_destino, OTA_SIZE_UNKNOWN, &ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ota: esp_ota_begin() fallo (%s)", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no se pudo empezar el OTA");
+        return ESP_FAIL;
+    }
+
+    char buf[OTA_BUF_LEN];
+    size_t restantes = req->content_len;
+    bool error = false;
+    while (restantes > 0) {
+        size_t a_leer = restantes < sizeof(buf) ? restantes : sizeof(buf);
+        int leidos = httpd_req_recv(req, buf, a_leer);
+        if (leidos == HTTPD_SOCK_ERR_TIMEOUT) {
+            continue; // reintenta -- mismo criterio que /upload
+        }
+        if (leidos <= 0 || esp_ota_write(ota_handle, buf, leidos) != ESP_OK) {
+            error = true;
+            break;
+        }
+        restantes -= (size_t)leidos;
+    }
+
+    if (error) {
+        ESP_LOGE(TAG, "ota: fallo recibiendo/escribiendo el firmware");
+        esp_ota_abort(ota_handle);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "error recibiendo el firmware");
+        return ESP_FAIL;
+    }
+
+    err = esp_ota_end(ota_handle);
+    if (err != ESP_OK) {
+        // Imagen invalida (checksum/firma mal, o no llego el header
+        // completo) -- esp_ota_end() ya se aseguro de no dejar nada
+        // aplicado, el firmware que esta corriendo ahora no se toco.
+        ESP_LOGE(TAG, "ota: esp_ota_end() rechazo la imagen (%s)", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "imagen de firmware invalida, no se aplico nada");
+        return ESP_FAIL;
+    }
+
+    err = esp_ota_set_boot_partition(particion_destino);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ota: esp_ota_set_boot_partition() fallo (%s)", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no se pudo marcar la particion para bootear");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "ota: firmware nuevo OK en '%s' (%u bytes) -- reiniciando",
+             particion_destino->label, (unsigned)req->content_len);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true,\"mensaje\":\"firmware aplicado, reiniciando\"}");
+
+    vTaskDelay(pdMS_TO_TICKS(500)); // le da tiempo a la respuesta de salir antes de reiniciar
+    esp_restart();
+    return ESP_OK; // no se llega aca
+}
+
+static const httpd_uri_t s_uri_ota = {
+    .uri = "/ota", .method = HTTP_POST, .handler = ota_handler,
 };
 
 // POST /calibrar_cero -- sin body. Le avisa a app_main.c que ahora mismo la
@@ -417,7 +660,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), dejamos 1 de margen
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 17; // 16 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 21; // 20 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -430,12 +673,16 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_style);
     httpd_register_uri_handler(s_servidor, &s_uri_script);
     httpd_register_uri_handler(s_servidor, &s_uri_files_html);
+    httpd_register_uri_handler(s_servidor, &s_uri_ota_html);
     httpd_register_uri_handler(s_servidor, &s_uri_grafica_html);
     httpd_register_uri_handler(s_servidor, &s_uri_equipo_png);
     httpd_register_uri_handler(s_servidor, &s_uri_calibracion_json);
     httpd_register_uri_handler(s_servidor, &s_uri_sistema_json);
     httpd_register_uri_handler(s_servidor, &s_uri_corridas_csv);
     httpd_register_uri_handler(s_servidor, &s_uri_listado);
+    httpd_register_uri_handler(s_servidor, &s_uri_upload);
+    httpd_register_uri_handler(s_servidor, &s_uri_descargar);
+    httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_cero);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_maximo);
     httpd_register_uri_handler(s_servidor, &s_uri_configurar_red);

@@ -9,7 +9,11 @@
 
 #define LABGEO_SOF          0xAA
 #define LABGEO_MAX_PAYLOAD  255      // limite de payload por trama (LEN <= 255) en esta v1
-#define LABGEO_CHUNK_MAX_PUNTOS 16   // puntos maximos por trama RUN_CHUNK (3 + 16*12 = 195 bytes)
+// Punto de RUN_CHUNK ahora son 16 bytes (dial1+dial2+peso+tiempo, ver abajo)
+// en vez de 12 (dial1+peso+tiempo) -- con 16 puntos se pasaria de los 255
+// bytes de payload (3 + 16*16 = 259), por eso el max bajo de 16 a 15
+// (3 + 15*16 = 243).
+#define LABGEO_CHUNK_MAX_PUNTOS 15   // puntos maximos por trama RUN_CHUNK (3 + 15*16 = 243 bytes)
 
 typedef enum {
     // Controlador -> Pantalla

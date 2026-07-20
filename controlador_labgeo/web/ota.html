@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindtic - Actualizar firmware</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .aviso { background: #fff3cd; color: #664d03; border: 1px solid #ffe69c; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+  .subida { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .error { color: #b71c1c; }
+  .ok { color: #1b5e20; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Braindtic</h1>
+    <span>Actualizar firmware (OTA)</span>
+  </header>
+
+  <main>
+    <p class="aviso">
+      Elegi el archivo <strong>.bin</strong> que genera <code>idf.py build</code>
+      (queda en <code>build/controlador_labgeo.bin</code>). El equipo lo valida
+      y, si esta bien, <strong>se reinicia solo</strong> con el firmware nuevo.
+      Si el firmware nuevo no arranca bien, el equipo vuelve solo al anterior.
+    </p>
+
+    <div class="subida">
+      <input type="file" id="input-firmware" accept=".bin">
+      <button id="btn-subir-firmware">Actualizar firmware</button>
+    </div>
+    <p id="ota-mensaje"></p>
+  </main>
+
+  <script>
+    // POST /ota con el .bin entero como body crudo (sin multipart, sin
+    // cabecera de nombre -- el firmware no necesita saber como se llamaba el
+    // archivo). servidor_web.c lo escribe con esp_ota_write() en la
+    // particion OTA que no esta corriendo, y si esp_ota_end() lo valida,
+    // reinicia solo.
+    function iniciarSubidaFirmware() {
+      const input = document.getElementById('input-firmware');
+      const boton = document.getElementById('btn-subir-firmware');
+      const mensaje = document.getElementById('ota-mensaje');
+
+      boton.addEventListener('click', () => {
+        const archivo = input.files[0];
+        if (!archivo) {
+          mensaje.textContent = 'Elegi un archivo .bin primero.';
+          mensaje.className = 'error';
+          return;
+        }
+
+        boton.disabled = true;
+        mensaje.textContent = `Subiendo "${archivo.name}" (${archivo.size} bytes)...`;
+        mensaje.className = '';
+
+        fetch('/ota', { method: 'POST', body: archivo })
+          .then((r) => {
+            if (!r.ok) throw new Error();
+            mensaje.textContent = 'Firmware aplicado -- el equipo se esta reiniciando. Esta pagina va a dejar de responder unos segundos.';
+            mensaje.className = 'ok';
+          })
+          .catch(() => {
+            mensaje.textContent = 'No se pudo aplicar el firmware (ver el log serie del equipo para el detalle).';
+            mensaje.className = 'error';
+            boton.disabled = false;
+          });
+      });
+    }
+
+    iniciarSubidaFirmware();
+  </script>
+</body>
+</html>

@@ -13,12 +13,20 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
 
 # Particiones propias: agrega una particion SPIFFS ("storage") para guardar
-# el historial de las corridas, ver partitions.csv. La tabla ocupa ~2.07MB,
-# por eso hace falta declarar flash de 4MB (default de la mayoria de los
-# modulos ESP32 WROOM-32; si el tuyo es de 2MB, avisame y la reduzco).
+# el historial de las corridas, mas ota_0/ota_1/otadata para poder actualizar
+# el firmware por OTA (POST /ota en servidor_web.c) en vez de solo por USB --
+# ver partitions.csv. La tabla ocupa ~3.8MB de los 4MB del modulo (confirmado
+# con el usuario), por eso hace falta declarar flash de 4MB.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Rollback automatico: si el firmware que se subio por /ota no llega a
+# confirmarse como valido (ver esp_ota_mark_app_valid_cancel_rollback() en
+# app_main2.c) -- por ejemplo, crashea o se cuelga apenas arranca -- el
+# bootloader vuelve solo al firmware anterior en el proximo reset/watchdog,
+# en vez de dejar el equipo baneado con un firmware roto.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # WebSocket en esp_http_server (lo usa servidor_web.c para /ws).
 CONFIG_HTTPD_WS_SUPPORT=y

@@ -17,6 +17,6 @@
 // Misma IP/gateway/mascara que usa hoy red_eth.c hardcodeado -- estos son
 // solo los defaults del archivo; aplicarlos de verdad al W5500 es el paso 3
 // (todavia no implementado, ver conversacion).
-#define RED_IP_DEFAULT      "192.168.18.91"
-#define RED_GATEWAY_DEFAULT "192.168.18.1"
+#define RED_IP_DEFAULT      "192.168.5.91"
+#define RED_GATEWAY_DEFAULT "192.168.5.1"
 #define RED_MASCARA_DEFAULT "255.255.255.0"

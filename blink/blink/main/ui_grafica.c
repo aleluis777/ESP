@@ -3,6 +3,7 @@
 #define COLOR_BG_ROOT   lv_color_hex(0xF2F2F2)
 #define COLOR_TITULO    lv_color_hex(0x606060)
 #define COLOR_DIAL1     lv_color_hex(0x1976D2)
+#define COLOR_DIAL2     lv_color_hex(0x2E9E4F)
 #define COLOR_PESO      lv_color_hex(0xE81010)
 
 #define PUNTOS_CHART 30
@@ -91,6 +92,7 @@ ui_grafica_t *ui_grafica_create(lv_obj_t *parent)
     lv_obj_set_flex_align(leyenda, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(leyenda, 30, 0);
     crear_item_leyenda(leyenda, COLOR_DIAL1, "Dial 1 (mm)");
+    crear_item_leyenda(leyenda, COLOR_DIAL2, "Dial 2 (mm)");
     crear_item_leyenda(leyenda, COLOR_PESO, "Peso (N)");
 
     // Chart (se lleva todo el alto sobrante)
@@ -109,6 +111,7 @@ ui_grafica_t *ui_grafica_create(lv_obj_t *parent)
     lv_chart_set_axis_range(ui.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 5000); // Peso, en N
 
     ui.serie_dial1 = lv_chart_add_series(ui.chart, COLOR_DIAL1, LV_CHART_AXIS_PRIMARY_Y);
+    ui.serie_dial2 = lv_chart_add_series(ui.chart, COLOR_DIAL2, LV_CHART_AXIS_PRIMARY_Y);
     ui.serie_peso  = lv_chart_add_series(ui.chart, COLOR_PESO, LV_CHART_AXIS_SECONDARY_Y);
 
     ui_grafica_reset(&ui);
@@ -116,14 +119,16 @@ ui_grafica_t *ui_grafica_create(lv_obj_t *parent)
     return &ui;
 }
 
-void ui_grafica_agregar_punto(ui_grafica_t *g, int32_t valor_dial1, int32_t valor_peso)
+void ui_grafica_agregar_punto(ui_grafica_t *g, int32_t valor_dial1, int32_t valor_dial2, int32_t valor_peso)
 {
     lv_chart_set_next_value(g->chart, g->serie_dial1, valor_dial1);
+    lv_chart_set_next_value(g->chart, g->serie_dial2, valor_dial2);
     lv_chart_set_next_value(g->chart, g->serie_peso, valor_peso);
 }
 
 void ui_grafica_reset(ui_grafica_t *g)
 {
     lv_chart_set_all_values(g->chart, g->serie_dial1, LV_CHART_POINT_NONE);
+    lv_chart_set_all_values(g->chart, g->serie_dial2, LV_CHART_POINT_NONE);
     lv_chart_set_all_values(g->chart, g->serie_peso, LV_CHART_POINT_NONE);
 }

@@ -169,8 +169,8 @@ esp_err_t red_eth_init(void)
     // Hay que apagar el cliente DHCP antes de poder fijar la IP a mano.
     ESP_ERROR_CHECK(esp_netif_dhcpc_stop(eth_netif));
     esp_netif_ip_info_t ip_info = {
-        .ip.addr = ESP_IP4TOADDR(192, 168, 18, 91),
-        .gw.addr = ESP_IP4TOADDR(192, 168, 18, 1),
+        .ip.addr = ESP_IP4TOADDR(192, 168, 5, 91),
+        .gw.addr = ESP_IP4TOADDR(192, 168, 5, 1),
         .netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
     };
     ESP_ERROR_CHECK(esp_netif_set_ip_info(eth_netif, &ip_info));

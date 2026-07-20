@@ -33,7 +33,7 @@ void uart_link_enviar_sensor_update(uint8_t run_id, int32_t dial1_um, int32_t di
                                      int32_t peso_mN, uint32_t tiempo_ms, uint8_t estado_ensayo);
 
 // Manda un bloque de hasta LABGEO_CHUNK_MAX_PUNTOS puntos (CMD_RUN_CHUNK).
-// 'puntos_buf' ya tiene que venir en el formato de 12 bytes/punto del
+// 'puntos_buf' ya tiene que venir en el formato de 16 bytes/punto del
 // protocolo (ver protocolo_labgeo.h) -- es literalmente lo que devuelve
 // almacenamiento_leer_corrida() en cada chunk, sin reempacar.
 void uart_link_enviar_run_chunk(uint8_t run_id, const uint8_t *puntos_buf, uint8_t count, uint8_t es_ultimo);

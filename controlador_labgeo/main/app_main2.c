@@ -25,6 +25,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
+#include "esp_ota_ops.h"
 #include "dial_caliper.h"
 #include "hx711.h"
 #include "config_labgeo.h"
@@ -276,7 +277,7 @@ static void on_uart_stop(uint8_t run_id)
 }
 
 // Reenvia cada bloque que arma almacenamiento_leer_corrida() directo por
-// UART -- ya viene empaquetado en el formato de 12 bytes/punto del
+// UART -- ya viene empaquetado en el formato de 16 bytes/punto del
 // protocolo, no hay que reinterpretar nada.
 static void uart_chunk_cb(const uint8_t *puntos_buf, uint8_t count, bool es_ultimo, void *ctx)
 {
@@ -488,6 +489,14 @@ void app_main(void)
     // red -- el UART a la pantalla fisica no depende de que el Ethernet este
     // disponible.
     xTaskCreate(tarea_publicar, "tarea_publicar", 4096, NULL, 5, NULL);
+
+    // Si este arranque viene de un firmware recien subido por POST /ota (ver
+    // servidor_web.c) y llego hasta aca sin resetearse solo, se confirma
+    // como valido -- CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y (sdkconfig.defaults)
+    // hace que si NUNCA se llama esto (crash/watchdog antes de llegar aca en
+    // los proximos arranques), el bootloader vuelva solo al firmware
+    // anterior en vez de quedar reintentando uno roto para siempre.
+    esp_ota_mark_app_valid_cancel_rollback();
 
     buzzer_beep(200); // aviso de "equipo listo", una sola vez al terminar el arranque
 }

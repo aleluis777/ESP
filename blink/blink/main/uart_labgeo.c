@@ -158,19 +158,20 @@ static void aplicar_run_chunk(const uint8_t *p, uint16_t len)
     uint8_t count     = p[1];
     uint8_t es_ultimo = p[2];
 
-    if (count > LABGEO_CHUNK_MAX_PUNTOS || len < (uint16_t)(3 + count * 12)) {
+    if (count > LABGEO_CHUNK_MAX_PUNTOS || len < (uint16_t)(3 + count * 16)) {
         ESP_LOGW(TAG, "RUN_CHUNK con datos incompletos (count=%u, len=%u)", (unsigned)count, (unsigned)len);
         return;
     }
 
     if (lvgl_port_lock(0)) {
         for (uint8_t i = 0; i < count; i++) {
-            const uint8_t *punto = &p[3 + i * 12];
+            const uint8_t *punto = &p[3 + i * 16];
             int32_t dial1_um = labgeo_leer_i32(&punto[0]);
-            int32_t peso_mN  = labgeo_leer_i32(&punto[4]);
-            // El tiempo del punto (punto[8..11]) no se usa como eje X todavia;
+            int32_t dial2_um = labgeo_leer_i32(&punto[4]);
+            int32_t peso_mN  = labgeo_leer_i32(&punto[8]);
+            // El tiempo del punto (punto[12..15]) no se usa como eje X todavia;
             // el chart grafica por indice de punto.
-            ui_grafica_agregar_punto(s_grafica, dial1_um / 1000, peso_mN / 1000);
+            ui_grafica_agregar_punto(s_grafica, dial1_um / 1000, dial2_um / 1000, peso_mN / 1000);
         }
         lvgl_port_unlock();
     }

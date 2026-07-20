@@ -114,7 +114,7 @@ nada del formato de las tramas, eso es responsabilidad de `uart_link.c`.
 | `hx711.c/.h` | Driver bit-bang del HX711 (celda de carga): 24 pulsos de reloj, lee 24 bits con signo. |
 | `dial_caliper.c/.h` | Driver bit-bang del protocolo de calibre digital (REQ/CLK/DATA). **Sin validar contra hardware real todavía** -- tiene `#define` al principio del `.c` para ajustar polaridad/orden de bits una vez que se pruebe. |
 | `config_labgeo.c/.h` | Calibración (pendiente/offset de cada sensor) guardada en NVS. Reemplaza la EEPROM del `.ino` viejo. |
-| `almacenamiento.c/.h` | Guarda/lee el historial de cada corrida en SPIFFS. Un archivo por corrida, 12 bytes por punto (mismo layout que la trama `RUN_CHUNK`, para no tener que reempacar al mandarlo). |
+| `almacenamiento.c/.h` | Guarda/lee el historial de cada corrida en SPIFFS. Un archivo por corrida, 16 bytes por punto (mismo layout que la trama `RUN_CHUNK`, para no tener que reempacar al mandarlo). |
 | `programador_corrida.c/.h` | El cronograma de cada corrida: tiempos fijos (Corrida 1) o umbrales de desplazamiento (Corrida 2). Decide *cuándo* se guarda un punto. |
 | `red_eth.c/.h` | Levanta el W5500 (Ethernet) usando el componente `espressif/ethernet_init`. IP estática. |
 | `servidor_web.c/.h` | Servidor HTTP + endpoint WebSocket `/ws`. `servidor_web_enviar_ws()` le manda un string a todos los clientes conectados. Loguea (INFO) cada peticion HTTP que entra: metodo, URI e IP del cliente. |

@@ -4,10 +4,10 @@
 //
 // Formato del archivo:
 //   ---CORRIDA1---
-//   dial1_um,peso_mN,tiempo_ms
-//   dial1_um,peso_mN,tiempo_ms
+//   dial1_um,dial2_um,peso_mN,tiempo_ms
+//   dial1_um,dial2_um,peso_mN,tiempo_ms
 //   ---CORRIDA2---
-//   dial1_um,peso_mN,tiempo_ms
+//   dial1_um,dial2_um,peso_mN,tiempo_ms
 //   ---CORRIDA1---
 //   ...
 //
@@ -28,7 +28,7 @@
 static const char *TAG = "ALMACENAMIENTO";
 
 #define RUTA_CORRIDAS "/www/corridas.csv"
-#define PUNTO_BYTES 12
+#define PUNTO_BYTES 16
 
 // Offset (en corridas.csv) del ULTIMO marcador escrito de cada run_id (1 o
 // 2), cacheado en RAM para no tener que escanear el archivo entero cada vez
@@ -99,7 +99,8 @@ esp_err_t almacenamiento_iniciar_corrida(uint8_t run_id)
 
 // Agrega una linea CSV al final del archivo. No hace falta repetir el
 // run_id en la linea -- ya queda implicito por el marcador que la precede.
-esp_err_t almacenamiento_agregar_punto(uint8_t run_id, int32_t dial1_um, int32_t peso_mN, uint32_t tiempo_ms)
+esp_err_t almacenamiento_agregar_punto(uint8_t run_id, int32_t dial1_um, int32_t dial2_um, int32_t peso_mN,
+                                        uint32_t tiempo_ms)
 {
     (void)run_id;
 
@@ -109,7 +110,7 @@ esp_err_t almacenamiento_agregar_punto(uint8_t run_id, int32_t dial1_um, int32_t
         return ESP_FAIL;
     }
 
-    fprintf(f, "%" PRId32 ",%" PRId32 ",%" PRIu32 "\n", dial1_um, peso_mN, tiempo_ms);
+    fprintf(f, "%" PRId32 ",%" PRId32 ",%" PRId32 ",%" PRIu32 "\n", dial1_um, dial2_um, peso_mN, tiempo_ms);
     fclose(f);
     return ESP_OK;
 }
@@ -127,7 +128,7 @@ esp_err_t almacenamiento_leer_corrida(uint8_t run_id, almacenamiento_chunk_cb_t 
         return ESP_OK;
     }
 
-    char linea[64];
+    char linea[80];
     long offset_ultima_sesion = (run_id == 1 || run_id == 2) ? s_offset_ultima_corrida[run_id] : -1;
 
     if (offset_ultima_sesion >= 0) {
@@ -162,9 +163,9 @@ esp_err_t almacenamiento_leer_corrida(uint8_t run_id, almacenamiento_chunk_cb_t 
     // Segunda pasada: parados justo en el marcador encontrado, lo salteamos
     // y leemos punto por punto hasta el PROXIMO marcador (de cualquier
     // corrida -- ahi es donde termina esta sesion) o el fin del archivo.
-    // Se reempaqueta al formato binario de 12 bytes/punto en bloques de
-    // hasta LABGEO_CHUNK_MAX_PUNTOS, igual que se mandaba antes por
-    // RUN_CHUNK -- no cambia el contrato con quien llama a esta funcion.
+    // Se reempaqueta al formato binario de 16 bytes/punto en bloques de
+    // hasta LABGEO_CHUNK_MAX_PUNTOS, igual que se manda por RUN_CHUNK -- no
+    // cambia el contrato con quien llama a esta funcion.
     fseek(f, offset_ultima_sesion, SEEK_SET);
     fgets(linea, sizeof(linea), f); // saltea la linea del marcador en si
 
@@ -177,9 +178,10 @@ esp_err_t almacenamiento_leer_corrida(uint8_t run_id, almacenamiento_chunk_cb_t 
             break; // empezo la proxima sesion -- esta ya termino
         }
 
-        int32_t dial1_um, peso_mN;
+        int32_t dial1_um, dial2_um, peso_mN;
         uint32_t tiempo_ms;
-        if (sscanf(linea, "%" SCNd32 ",%" SCNd32 ",%" SCNu32, &dial1_um, &peso_mN, &tiempo_ms) != 3) {
+        if (sscanf(linea, "%" SCNd32 ",%" SCNd32 ",%" SCNd32 ",%" SCNu32,
+                   &dial1_um, &dial2_um, &peso_mN, &tiempo_ms) != 4) {
             ESP_LOGW(TAG, "Linea rara en %s, se ignora: %s", RUTA_CORRIDAS, linea);
             continue;
         }
@@ -187,6 +189,7 @@ esp_err_t almacenamiento_leer_corrida(uint8_t run_id, almacenamiento_chunk_cb_t 
         uint16_t idx = 0;
         uint8_t *punto = &buf[count * PUNTO_BYTES];
         labgeo_put_i32(punto, &idx, dial1_um);
+        labgeo_put_i32(punto, &idx, dial2_um);
         labgeo_put_i32(punto, &idx, peso_mN);
         labgeo_put_u32(punto, &idx, tiempo_ms);
         count++;

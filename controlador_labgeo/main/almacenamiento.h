@@ -4,8 +4,8 @@
 // /www/corridas.csv (particion SPIFFS "www", la misma del sitio web) --
 // append-only, nunca se trunca ni se borra nada. Cada corrida arranca con
 // una linea marcadora ("---CORRIDA1---" / "---CORRIDA2---") seguida de sus
-// puntos ("dial1_um,peso_mN,tiempo_ms" por linea) hasta la proxima linea
-// marcadora (de cualquier corrida) o el fin del archivo.
+// puntos ("dial1_um,dial2_um,peso_mN,tiempo_ms" por linea) hasta la proxima
+// linea marcadora (de cualquier corrida) o el fin del archivo.
 //
 // Por que en "www" y no en una particion aparte "storage": para que el
 // usuario pueda bajarlo directo desde el navegador (como calibracion.json/
@@ -37,16 +37,17 @@ esp_err_t almacenamiento_init(void);
 // de sesiones anteriores, ni de esta misma corrida ni de la otra.
 esp_err_t almacenamiento_iniciar_corrida(uint8_t run_id);
 
-// Agrega un punto (una linea "dial1_um,peso_mN,tiempo_ms") al final de
-// corridas.csv. Pertenece a la sesion mas reciente (la del ultimo marcador
-// escrito por almacenamiento_iniciar_corrida()), por eso no hace falta
-// repetir el run_id en cada linea.
-esp_err_t almacenamiento_agregar_punto(uint8_t run_id, int32_t dial1_um, int32_t peso_mN, uint32_t tiempo_ms);
+// Agrega un punto (una linea "dial1_um,dial2_um,peso_mN,tiempo_ms") al final
+// de corridas.csv. Pertenece a la sesion mas reciente (la del ultimo
+// marcador escrito por almacenamiento_iniciar_corrida()), por eso no hace
+// falta repetir el run_id en cada linea.
+esp_err_t almacenamiento_agregar_punto(uint8_t run_id, int32_t dial1_um, int32_t dial2_um, int32_t peso_mN,
+                                        uint32_t tiempo_ms);
 
 // Busca la ULTIMA sesion guardada de 'run_id' (puede haber varias, de
 // distintos dias) y recorre solo esos puntos en bloques de hasta
 // LABGEO_CHUNK_MAX_PUNTOS, invocando 'cb' por cada bloque -- los reempaqueta
-// al formato binario de 12 bytes/punto (mismo layout que la trama RUN_CHUNK)
+// al formato binario de 16 bytes/punto (mismo layout que la trama RUN_CHUNK)
 // para no cambiarle el contrato a quien ya llama a esta funcion. Si esa
 // corrida nunca se corrio, llama a 'cb' una vez con count=0, es_ultimo=true.
 typedef void (*almacenamiento_chunk_cb_t)(const uint8_t *puntos_buf, uint8_t count, bool es_ultimo, void *ctx);

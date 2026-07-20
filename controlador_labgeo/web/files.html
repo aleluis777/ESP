@@ -12,15 +12,25 @@
   td.bytes { text-align: right; font-variant-numeric: tabular-nums; }
   .resumen { margin-bottom: 16px; color: #444; }
   .error { color: #b71c1c; }
+  .ok { color: #1b5e20; }
+  .subida { display: flex; gap: 8px; align-items: center; margin-bottom: 20px; }
+  a.nombre-archivo { color: inherit; text-decoration: underline; }
 </style>
 </head>
 <body>
   <header>
     <h1>Braindtic</h1>
     <span>Archivos en /www</span>
+    <a href="/ota.html" style="margin-left:16px;">Actualizar firmware &raquo;</a>
   </header>
 
   <main>
+    <div class="subida">
+      <input type="file" id="input-archivo">
+      <button id="btn-subir">Subir archivo</button>
+      <span id="subida-mensaje"></span>
+    </div>
+
     <p class="resumen" id="resumen">Cargando...</p>
     <table>
       <thead><tr><th>Nombre</th><th>Bytes</th></tr></thead>
@@ -31,26 +41,77 @@
   <script>
     // Pide el JSON crudo a /files (la API que ya sirve servidor_web.c) y
     // arma esta tabla -- toda la logica de listar SPIFFS vive en el
-    // firmware, esta pagina solo pinta lo que ese endpoint devuelve.
-    fetch('/files')
-      .then((r) => r.json())
-      .then((d) => {
-        const resumen = document.getElementById('resumen');
-        const libres = d.total_bytes - d.usados_bytes;
-        resumen.textContent =
-          `Particion 'www': ${d.usados_bytes} de ${d.total_bytes} bytes usados (${libres} libres)`;
+    // firmware, esta pagina solo pinta lo que ese endpoint devuelve. El
+    // nombre de cada fila apunta a /descargar?nombre=... para poder verlo o
+    // bajarlo (las rutas fijas como index.html/style.css tambien se pueden
+    // ver por su URL normal, esto sirve sobre todo para lo que no tiene una
+    // ruta fija propia).
+    function cargarListado() {
+      fetch('/files')
+        .then((r) => r.json())
+        .then((d) => {
+          const resumen = document.getElementById('resumen');
+          const libres = d.total_bytes - d.usados_bytes;
+          resumen.textContent =
+            `Particion 'www': ${d.usados_bytes} de ${d.total_bytes} bytes usados (${libres} libres)`;
 
-        const filas = document.getElementById('filas');
-        d.archivos.forEach((a) => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${a.nombre}</td><td class="bytes">${a.bytes}</td>`;
-          filas.appendChild(tr);
+          const filas = document.getElementById('filas');
+          filas.innerHTML = '';
+          d.archivos.forEach((a) => {
+            const tr = document.createElement('tr');
+            const nombreCodificado = encodeURIComponent(a.nombre);
+            tr.innerHTML =
+              `<td><a class="nombre-archivo" href="/descargar?nombre=${nombreCodificado}">${a.nombre}</a></td>` +
+              `<td class="bytes">${a.bytes}</td>`;
+            filas.appendChild(tr);
+          });
+        })
+        .catch((e) => {
+          document.getElementById('resumen').innerHTML =
+            `<span class="error">No se pudo leer /files: ${e}</span>`;
         });
-      })
-      .catch((e) => {
-        document.getElementById('resumen').innerHTML =
-          `<span class="error">No se pudo leer /files: ${e}</span>`;
+    }
+
+    // Sube el archivo elegido a POST /upload -- el nombre va en la cabecera
+    // "X-Filename" (asi el body es el archivo crudo, sin armar
+    // multipart/form-data), mismo nombre pisa el archivo existente.
+    function iniciarSubida() {
+      const input = document.getElementById('input-archivo');
+      const boton = document.getElementById('btn-subir');
+      const mensaje = document.getElementById('subida-mensaje');
+
+      boton.addEventListener('click', () => {
+        const archivo = input.files[0];
+        if (!archivo) {
+          mensaje.textContent = 'Elegi un archivo primero.';
+          mensaje.className = 'error';
+          return;
+        }
+
+        mensaje.textContent = 'Subiendo...';
+        mensaje.className = '';
+
+        fetch('/upload', {
+          method: 'POST',
+          headers: { 'X-Filename': archivo.name },
+          body: archivo,
+        })
+          .then((r) => {
+            if (!r.ok) throw new Error();
+            mensaje.textContent = `"${archivo.name}" subido.`;
+            mensaje.className = 'ok';
+            input.value = '';
+            cargarListado();
+          })
+          .catch(() => {
+            mensaje.textContent = `No se pudo subir "${archivo.name}".`;
+            mensaje.className = 'error';
+          });
       });
+    }
+
+    cargarListado();
+    iniciarSubida();
   </script>
 </body>
 </html>

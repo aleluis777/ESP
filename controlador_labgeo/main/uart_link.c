@@ -79,19 +79,19 @@ void uart_link_enviar_sensor_update(uint8_t run_id, int32_t dial1_um, int32_t di
 }
 
 // Arma un RUN_CHUNK: run_id + count + es_ultimo + los bytes crudos de hasta
-// 16 puntos (ya vienen armados desde almacenamiento.c, se copian tal cual
-// sin reinterpretarlos). Lo llama app_main.c una vez por cada bloque que le
-// entrega almacenamiento_leer_corrida().
+// LABGEO_CHUNK_MAX_PUNTOS puntos de 16 bytes cada uno (ya vienen armados
+// desde almacenamiento.c, se copian tal cual sin reinterpretarlos). Lo llama
+// app_main.c una vez por cada bloque que le entrega almacenamiento_leer_corrida().
 void uart_link_enviar_run_chunk(uint8_t run_id, const uint8_t *puntos_buf, uint8_t count, uint8_t es_ultimo)
 {
-    uint8_t payload[3 + 12 * LABGEO_CHUNK_MAX_PUNTOS];
+    uint8_t payload[3 + 16 * LABGEO_CHUNK_MAX_PUNTOS];
     uint16_t idx = 0;
     labgeo_put_u8(payload, &idx, run_id);
     labgeo_put_u8(payload, &idx, count);
     labgeo_put_u8(payload, &idx, es_ultimo);
     if (count > 0) {
-        memcpy(&payload[idx], puntos_buf, (size_t)count * 12);
-        idx += (uint16_t)(count * 12);
+        memcpy(&payload[idx], puntos_buf, (size_t)count * 16);
+        idx += (uint16_t)(count * 16);
     }
 
     enviar_frame(LABGEO_CMD_RUN_CHUNK, payload, idx);
