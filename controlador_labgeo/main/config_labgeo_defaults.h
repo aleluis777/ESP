@@ -20,3 +20,11 @@
 #define RED_IP_DEFAULT      "192.168.5.91"
 #define RED_GATEWAY_DEFAULT "192.168.5.1"
 #define RED_MASCARA_DEFAULT "255.255.255.0"
+
+// Datos generales del equipo (nombre, diametro de la probeta en mm, unidad
+// de peso a mostrar) -- se guardan en sistema.json, igual que "red". El
+// diametro lo usa grafica.html (web/grafica.html) para calcular area y el
+// desplazamiento de referencia del grafico "versus" de la Corrida 2.
+#define EQUIPO_NOMBRE_DEFAULT   ""
+#define EQUIPO_DIAMETRO_DEFAULT (0.0f)
+#define EQUIPO_UNIDAD_DEFAULT   "Kg"

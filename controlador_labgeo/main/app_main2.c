@@ -230,6 +230,14 @@ static void tarea_publicar(void *arg)
         float peso_n = (s_cal.celda_pendiente != 0.0f)
                            ? ((float)celda_cruda - s_cal.celda_offset) / s_cal.celda_pendiente
                            : 0.0f;
+        // Correccion de escala pedida por el usuario: el valor de la celda
+        // venia 1000 veces mas grande de lo esperado. Se corrige ACA, antes
+        // de derivar 'peso_mN' (2 lineas mas abajo) -- como 'peso_mN' se
+        // calcula multiplicando ESTE 'peso_n' ya corregido por 1000, la
+        // correccion se propaga sola al WS (usa 'peso_n' directo en el JSON),
+        // al CSV y al UART (los dos usan 'peso_mN'). Los tres quedan
+        // consistentes con el mismo valor corregido, cada uno en su unidad.
+        peso_n = peso_n / 1000.0f;
 
         int32_t dial1_um = (int32_t)dial1_um_cal;
         int32_t dial2_um = (int32_t)dial2_um_cal;
@@ -416,6 +424,22 @@ static void on_configurar_red(const char *ip, const char *gateway, const char *m
     }
 }
 
+// POST /configurar_equipo: igual que on_configurar_red, por ahora SOLO
+// guarda nombre/diametro/unidad en sistema.json.
+static void on_configurar_equipo(const char *nombre, float diametro, const char *unidad)
+{
+    config_equipo_t equipo;
+    strncpy(equipo.nombre, nombre, sizeof(equipo.nombre) - 1);
+    equipo.nombre[sizeof(equipo.nombre) - 1] = '\0';
+    equipo.diametro = diametro;
+    strncpy(equipo.unidad, unidad, sizeof(equipo.unidad) - 1);
+    equipo.unidad[sizeof(equipo.unidad) - 1] = '\0';
+
+    if (config_labgeo_guardar_equipo(&equipo) != ESP_OK) {
+        ESP_LOGE(TAG, "configurar_equipo: no se pudo guardar sistema.json");
+    }
+}
+
 void app_main(void)
 {
     // 1) Calibracion primero: monta SPIFFS "www" y carga calibracion.json (o
@@ -459,6 +483,7 @@ void app_main(void)
         .on_calibrar_cero = on_calibrar_cero,
         .on_calibrar_maximo = on_calibrar_maximo,
         .on_configurar_red = on_configurar_red,
+        .on_configurar_equipo = on_configurar_equipo,
         .on_avanzar_ensayo = on_avanzar_ensayo,
     };
     servidor_web_set_callbacks(web_cbs);

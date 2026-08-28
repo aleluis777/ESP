@@ -45,10 +45,12 @@ function pintar(d) {
     document.getElementById("dial2").textContent = d.dial2_mm.toFixed(4);
   }
   if (d.peso_N !== undefined) {
-    document.getElementById("peso").textContent = d.peso_N.toFixed(1);
+    // El firmware ya manda peso_N dividido entre 1000 (ver app_main2.c,
+    // tarea_publicar) -- aca solo se formatea, no se vuelve a dividir.
+    document.getElementById("peso").textContent = d.peso_N.toFixed(2);
   } else if (d.peso_n !== undefined) {
     // Formato del diagnostico actual (solo la celda conectada todavia).
-    document.getElementById("peso").textContent = d.peso_n.toFixed(1);
+    document.getElementById("peso").textContent = d.peso_n.toFixed(2);
   }
   if (d.tiempo_ms !== undefined) {
     document.getElementById("tiempo").textContent = fmtTiempo(d.tiempo_ms);
@@ -163,10 +165,12 @@ function iniciarCalibracion() {
 iniciarCalibracion();
 
 // ---------------------------------------------------------------------------
-// Modal de configuracion de red -- GET /sistema.json (seccion "red") y
-// POST /configurar_red. Por ahora solo GUARDA los valores (ver app_main.c,
-// on_configurar_red) -- todavia no se aplican al W5500, eso es un paso
-// pendiente aparte.
+// Modal de configuracion de red + equipo -- GET /sistema.json (secciones
+// "red" y "equipo") y, al guardar, POST /configurar_red + POST
+// /configurar_equipo (un solo boton dispara los dos). Por ahora solo GUARDA
+// los valores (ver app_main2.c, on_configurar_red/on_configurar_equipo) --
+// ni la red ni la unidad/area/desplazamiento se aplican todavia a ningun
+// calculo, eso es un paso pendiente aparte.
 // ---------------------------------------------------------------------------
 
 function mostrarMensajeRed(texto, esError) {
@@ -182,10 +186,16 @@ function cargarRedActual() {
       return r.json();
     })
     .then((d) => {
-      if (!d.red) return;
-      document.getElementById("input-red-ip").value = d.red.ip || "";
-      document.getElementById("input-red-gateway").value = d.red.gateway || "";
-      document.getElementById("input-red-mascara").value = d.red.mascara || "";
+      if (d.red) {
+        document.getElementById("input-red-ip").value = d.red.ip || "";
+        document.getElementById("input-red-gateway").value = d.red.gateway || "";
+        document.getElementById("input-red-mascara").value = d.red.mascara || "";
+      }
+      if (d.equipo) {
+        document.getElementById("input-equipo-nombre").value = d.equipo.nombre || "";
+        document.getElementById("input-equipo-diametro").value = d.equipo.diametro ?? "";
+        document.getElementById("input-equipo-unidad").value = d.equipo.unidad || "Kg";
+      }
     })
     .catch(() => {
       // Sin config.json todavia -- se dejan los placeholders con los
@@ -212,20 +222,30 @@ function iniciarConfigRed() {
     const gateway = document.getElementById("input-red-gateway").value.trim();
     const mascara = document.getElementById("input-red-mascara").value.trim();
 
+    const nombre = document.getElementById("input-equipo-nombre").value.trim();
+    const diametro = parseFloat(document.getElementById("input-equipo-diametro").value) || 0;
+    const unidad = document.getElementById("input-equipo-unidad").value;
+
     if (!ip || !gateway || !mascara) {
-      mostrarMensajeRed("Completa los tres campos (IP, gateway y mascara).", true);
+      mostrarMensajeRed("Completa los tres campos de red (IP, gateway y mascara).", true);
       return;
     }
 
-    fetch("/configurar_red", {
-      method: "POST",
-      body: JSON.stringify({ ip, gateway, mascara }),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error();
-        mostrarMensajeRed("Configuracion de red guardada (todavia no aplicada).", false);
+    Promise.all([
+      fetch("/configurar_red", {
+        method: "POST",
+        body: JSON.stringify({ ip, gateway, mascara }),
+      }),
+      fetch("/configurar_equipo", {
+        method: "POST",
+        body: JSON.stringify({ nombre, diametro, unidad }),
+      }),
+    ])
+      .then((respuestas) => {
+        if (respuestas.some((r) => !r.ok)) throw new Error();
+        mostrarMensajeRed("Configuracion guardada (la de red todavia no se aplica).", false);
       })
-      .catch(() => mostrarMensajeRed("No se pudo guardar la configuracion de red.", true));
+      .catch(() => mostrarMensajeRed("No se pudo guardar la configuracion.", true));
   });
 }
 

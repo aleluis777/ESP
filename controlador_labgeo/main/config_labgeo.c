@@ -257,3 +257,45 @@ esp_err_t config_labgeo_guardar_red(const config_red_t *cfg)
     }
     return err;
 }
+
+void config_labgeo_cargar_equipo(config_equipo_t *cfg)
+{
+    cJSON *raiz = cargar_json_archivo(RUTA_SISTEMA);
+
+    const cJSON *equipo = cJSON_GetObjectItemCaseSensitive(raiz, "equipo");
+    if (cJSON_IsObject(equipo)) {
+        leer_campo_str(equipo, "nombre", cfg->nombre, sizeof(cfg->nombre), EQUIPO_NOMBRE_DEFAULT);
+        cfg->diametro = leer_campo_num(equipo, "diametro", EQUIPO_DIAMETRO_DEFAULT);
+        leer_campo_str(equipo, "unidad", cfg->unidad, sizeof(cfg->unidad), EQUIPO_UNIDAD_DEFAULT);
+    } else {
+        strncpy(cfg->nombre, EQUIPO_NOMBRE_DEFAULT, sizeof(cfg->nombre) - 1);
+        cfg->nombre[sizeof(cfg->nombre) - 1] = '\0';
+        cfg->diametro = EQUIPO_DIAMETRO_DEFAULT;
+        strncpy(cfg->unidad, EQUIPO_UNIDAD_DEFAULT, sizeof(cfg->unidad) - 1);
+        cfg->unidad[sizeof(cfg->unidad) - 1] = '\0';
+    }
+
+    cJSON_Delete(raiz);
+    ESP_LOGI(TAG, "Configuracion de equipo cargada de %s", RUTA_SISTEMA);
+}
+
+esp_err_t config_labgeo_guardar_equipo(const config_equipo_t *cfg)
+{
+    cJSON *raiz = cargar_json_archivo(RUTA_SISTEMA); // conserva "red" y cualquier otra seccion
+
+    cJSON_DeleteItemFromObject(raiz, "equipo");
+    cJSON *equipo = cJSON_CreateObject();
+    cJSON_AddStringToObject(equipo, "nombre", cfg->nombre);
+    cJSON_AddNumberToObject(equipo, "diametro", cfg->diametro);
+    cJSON_AddStringToObject(equipo, "unidad", cfg->unidad);
+    cJSON_AddItemToObject(raiz, "equipo", equipo);
+
+    esp_err_t err = guardar_json_archivo(RUTA_SISTEMA_TMP, RUTA_SISTEMA, raiz);
+    cJSON_Delete(raiz);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Configuracion de equipo guardada en %s (nombre=%s diametro=%.3f unidad=%s)",
+                 RUTA_SISTEMA, cfg->nombre, cfg->diametro, cfg->unidad);
+    }
+    return err;
+}

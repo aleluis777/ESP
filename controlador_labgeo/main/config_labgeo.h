@@ -35,6 +35,18 @@ typedef struct {
     char mascara[16];
 } config_red_t;
 
+// Datos generales del equipo -- nombre para identificarlo (por ejemplo si
+// hay mas de uno en la misma red), diametro de la probeta en mm (grafica.html
+// lo usa para el area y el desplazamiento de referencia del grafico "versus"
+// de la Corrida 2), y la unidad en la que se quiere ver el peso en pantalla
+// ("Kg" o "KN"). Igual que config_red_t: el firmware solo lo guarda, no hace
+// ningun calculo con esto todavia.
+typedef struct {
+    char nombre[32];
+    float diametro; // mm
+    char unidad[4]; // "Kg" o "KN" + '\0'
+} config_equipo_t;
+
 // Monta la particion SPIFFS "www" (donde vive config.json, junto con el
 // sitio estatico). Idempotente: si servidor_web_init() (u otra llamada
 // previa) ya la monto, no hace nada y devuelve ESP_OK -- por eso es seguro
@@ -58,6 +70,11 @@ esp_err_t config_labgeo_guardar(const config_calibracion_t *cfg);
 // para la seccion "red" del archivo (IP/gateway/mascara).
 void config_labgeo_cargar_red(config_red_t *cfg);
 esp_err_t config_labgeo_guardar_red(const config_red_t *cfg);
+
+// Mismo criterio, para la seccion "equipo" del archivo (nombre/area/
+// desplazamiento/unidad).
+void config_labgeo_cargar_equipo(config_equipo_t *cfg);
+esp_err_t config_labgeo_guardar_equipo(const config_equipo_t *cfg);
 
 #ifdef __cplusplus
 }

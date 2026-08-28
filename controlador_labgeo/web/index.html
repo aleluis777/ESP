@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Braindtic - Monitor</title>
-<link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Braindtic - Monitor</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
+
 <body>
   <div class="panel">
     <header class="panel-header">
@@ -13,7 +15,8 @@
       <div class="header-acciones">
         <button id="btn-abrir-calibracion" class="btn-icono" title="Calibrar celda de carga">⚖️</button>
         <button id="btn-abrir-red" class="btn-icono" title="Configuración de red">⚙️</button>
-        <a href="/grafica.html" class="btn-primario" id="btn-ver-grafica" title="Ver historial de corridas">📈 Ver Gráfica</a>
+        <a href="/grafica.html" class="btn-primario" id="btn-ver-grafica" title="Ver historial de corridas">📈 Ver
+          Gráfica</a>
         <span id="estado-conexion" class="badge badge-off">Desconectado</span>
       </div>
     </header>
@@ -33,7 +36,7 @@
           </div>
           <div class="tarjeta">
             <h2>Peso / Carga</h2>
-            <p><span id="peso">0.0</span> <small>N</small></p>
+            <p><span id="peso">0.0</span> <small>Kg</small></p>
           </div>
           <div class="tarjeta">
             <h2>Tiempo Transcurrido</h2>
@@ -60,7 +63,8 @@
 
       <ol class="instrucciones">
         <li>Sacá todo peso de la celda y presioná <strong>"1. Calibrar cero"</strong>.</li>
-        <li>Poné un peso de referencia conocido sobre la celda, escribí su valor en Newtons, y presioná <strong>"2. Calibrar con este peso"</strong>.</li>
+        <li>Poné un peso de referencia conocido sobre la celda, escribí su valor en Newtons, y presioná <strong>"2.
+            Calibrar con este peso"</strong>.</li>
       </ol>
 
       <p class="seteo-actual">
@@ -105,8 +109,26 @@
         <input type="text" id="input-red-mascara" placeholder="255.255.255.0">
       </div>
 
+      <h2>Configuración de equipo</h2>
+
       <div class="fila-calibracion">
-        <button id="btn-guardar-red">Guardar configuración de red</button>
+        <label for="input-equipo-nombre">Nombre del equipo</label>
+        <input type="text" id="input-equipo-nombre" placeholder="Prensa 1">
+      </div>
+      <div class="fila-calibracion">
+        <label for="input-equipo-diametro">Diámetro (mm)</label>
+        <input type="number" step="any" id="input-equipo-diametro" placeholder="0.00">
+      </div>
+      <div class="fila-calibracion">
+        <label for="input-equipo-unidad">Unidad</label>
+        <select id="input-equipo-unidad">
+          <option value="Kg" selected>Kg</option>
+          <option value="KN">KN</option>
+        </select>
+      </div>
+
+      <div class="fila-calibracion">
+        <button id="btn-guardar-red">Guardar configuración</button>
       </div>
 
       <p id="red-mensaje"></p>
@@ -115,4 +137,5 @@
 
   <script src="/script.js"></script>
 </body>
+
 </html>

@@ -15,6 +15,9 @@
   .ok { color: #1b5e20; }
   .subida { display: flex; gap: 8px; align-items: center; margin-bottom: 20px; }
   a.nombre-archivo { color: inherit; text-decoration: underline; }
+  td.acciones { text-align: right; }
+  button.btn-eliminar { background: #b71c1c; color: white; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.85rem; }
+  button.btn-eliminar:hover { background: #7f1313; }
 </style>
 </head>
 <body>
@@ -33,7 +36,7 @@
 
     <p class="resumen" id="resumen">Cargando...</p>
     <table>
-      <thead><tr><th>Nombre</th><th>Bytes</th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Bytes</th><th></th></tr></thead>
       <tbody id="filas"></tbody>
     </table>
   </main>
@@ -62,7 +65,8 @@
             const nombreCodificado = encodeURIComponent(a.nombre);
             tr.innerHTML =
               `<td><a class="nombre-archivo" href="/descargar?nombre=${nombreCodificado}">${a.nombre}</a></td>` +
-              `<td class="bytes">${a.bytes}</td>`;
+              `<td class="bytes">${a.bytes}</td>` +
+              `<td class="acciones"><button class="btn-eliminar" data-nombre="${a.nombre}">Eliminar</button></td>`;
             filas.appendChild(tr);
           });
         })
@@ -110,8 +114,39 @@
       });
     }
 
+    // Borra el archivo elegido con DELETE /descargar?nombre=... (mismo
+    // endpoint que se usa para verlo/bajarlo, solo cambia el metodo).
+    // Delegado en la tbody porque las filas se regeneran en cada
+    // cargarListado().
+    function iniciarEliminacion() {
+      const filas = document.getElementById('filas');
+      const resumen = document.getElementById('resumen');
+
+      filas.addEventListener('click', (ev) => {
+        const boton = ev.target.closest('.btn-eliminar');
+        if (!boton) return;
+
+        const nombre = boton.dataset.nombre;
+        if (!confirm(`Eliminar "${nombre}"? Esta accion no se puede deshacer.`)) {
+          return;
+        }
+
+        boton.disabled = true;
+        fetch(`/descargar?nombre=${encodeURIComponent(nombre)}`, { method: 'DELETE' })
+          .then((r) => {
+            if (!r.ok) throw new Error();
+            cargarListado();
+          })
+          .catch(() => {
+            resumen.innerHTML = `<span class="error">No se pudo eliminar "${nombre}".</span>`;
+            boton.disabled = false;
+          });
+      });
+    }
+
     cargarListado();
     iniciarSubida();
+    iniciarEliminacion();
   </script>
 </body>
 </html>

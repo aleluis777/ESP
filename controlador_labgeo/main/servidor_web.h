@@ -37,6 +37,12 @@ typedef void (*servidor_web_cb_calibrar_maximo_t)(float peso_n);
 // config_labgeo.h, solo pasa lo que vino en el body tal cual.
 typedef void (*servidor_web_cb_configurar_red_t)(const char *ip, const char *gateway, const char *mascara);
 
+// Llego POST /configurar_equipo con
+// {"nombre":"...","diametro":N,"unidad":"Kg"|"KN"}. Mismo criterio que
+// on_configurar_red: 'nombre'/'unidad' son punteros validos solo durante la
+// llamada.
+typedef void (*servidor_web_cb_configurar_equipo_t)(const char *nombre, float diametro, const char *unidad);
+
 // Llego POST /avanzar_ensayo -- un solo boton en la web dispara siempre este
 // mismo endpoint; app_main.c decide que transicion corresponde segun el
 // estado actual (0..4, ver comentario de estado_ensayo_t en app_main.c) y lo
@@ -48,6 +54,7 @@ typedef struct {
     servidor_web_cb_calibrar_cero_t on_calibrar_cero;      // llego POST /calibrar_cero
     servidor_web_cb_calibrar_maximo_t on_calibrar_maximo;  // llego POST /calibrar_maximo con {"peso_n": N}
     servidor_web_cb_configurar_red_t on_configurar_red;    // llego POST /configurar_red
+    servidor_web_cb_configurar_equipo_t on_configurar_equipo; // llego POST /configurar_equipo
     servidor_web_cb_avanzar_ensayo_t on_avanzar_ensayo;    // llego POST /avanzar_ensayo
 } servidor_web_callbacks_t;
 

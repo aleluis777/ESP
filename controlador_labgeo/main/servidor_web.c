@@ -403,6 +403,45 @@ static const httpd_uri_t s_uri_descargar = {
     .uri = "/descargar", .method = HTTP_GET, .handler = descargar_handler,
 };
 
+// DELETE /descargar?nombre=xxx -- borra un archivo de /www (mismo endpoint y
+// misma validacion de nombre que el GET, nada mas cambia el metodo). Lo usa
+// el boton "Eliminar" de files.html.
+static esp_err_t eliminar_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char query[96];
+    char nombre[64];
+    if (httpd_req_get_url_query_len(req) == 0 ||
+        httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+        httpd_query_key_value(query, "nombre", nombre, sizeof(nombre)) != ESP_OK ||
+        !nombre_archivo_valido(nombre)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta \"nombre\" valido en la query");
+        return ESP_FAIL;
+    }
+
+    char ruta[80];
+    snprintf(ruta, sizeof(ruta), "/www/%s", nombre);
+
+    if (remove(ruta) != 0) {
+        ESP_LOGW(TAG, "eliminar: no se pudo borrar %s (no existe?)", ruta);
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "eliminar: %s borrado", ruta);
+
+    char resp[96];
+    snprintf(resp, sizeof(resp), "{\"ok\":true,\"nombre\":\"%s\"}", nombre);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, resp);
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_eliminar = {
+    .uri = "/descargar", .method = HTTP_DELETE, .handler = eliminar_handler,
+};
+
 // POST /ota -- sube un firmware nuevo (el .bin que genera "idf.py build") y
 // lo escribe en la particion OTA que NO esta corriendo ahora (ota_0/ota_1,
 // ver partitions.csv), streameado igual que /upload pero con esp_ota_write()
@@ -597,6 +636,48 @@ static const httpd_uri_t s_uri_configurar_red = {
     .uri = "/configurar_red", .method = HTTP_POST, .handler = configurar_red_handler,
 };
 
+// POST /configurar_equipo -- body JSON {"nombre":"...","diametro":N,"unidad":"Kg"|"KN"}.
+// Igual que /configurar_red, por ahora solo guarda en sistema.json (via el
+// callback de app_main.c), no cambia todavia ningun calculo del firmware.
+static esp_err_t configurar_equipo_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char body[160];
+    int len = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+        return ESP_FAIL;
+    }
+    body[len] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    const cJSON *nombre_item   = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "nombre") : NULL;
+    const cJSON *diametro_item = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "diametro") : NULL;
+    const cJSON *unidad_item   = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "unidad") : NULL;
+
+    if (!cJSON_IsString(nombre_item) || !cJSON_IsNumber(diametro_item) || !cJSON_IsString(unidad_item)) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                             "faltan \"nombre\" (string), \"diametro\" (numero) o \"unidad\" (string) en el body");
+        return ESP_FAIL;
+    }
+
+    if (s_callbacks.on_configurar_equipo) {
+        s_callbacks.on_configurar_equipo(nombre_item->valuestring, (float)diametro_item->valuedouble,
+                                          unidad_item->valuestring);
+    }
+    cJSON_Delete(raiz);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_configurar_equipo = {
+    .uri = "/configurar_equipo", .method = HTTP_POST, .handler = configurar_equipo_handler,
+};
+
 // POST /avanzar_ensayo -- sin body. Un solo boton en la web llama siempre a
 // este mismo endpoint; app_main.c es quien sabe en que estado (0..4) esta el
 // ensayo y decide que transicion corresponde. Este archivo no sabe nada del
@@ -660,7 +741,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), dejamos 1 de margen
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 21; // 20 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 23; // 22 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -682,10 +763,12 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_listado);
     httpd_register_uri_handler(s_servidor, &s_uri_upload);
     httpd_register_uri_handler(s_servidor, &s_uri_descargar);
+    httpd_register_uri_handler(s_servidor, &s_uri_eliminar);
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_cero);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_maximo);
     httpd_register_uri_handler(s_servidor, &s_uri_configurar_red);
+    httpd_register_uri_handler(s_servidor, &s_uri_configurar_equipo);
     httpd_register_uri_handler(s_servidor, &s_uri_avanzar_ensayo);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
 
