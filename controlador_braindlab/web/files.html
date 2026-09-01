@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindlab - Archivos</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
+  nav a:hover { color: var(--acento); }
+  main { max-width: 800px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0.55rem 0.8rem; text-align: left; border-bottom: 1px solid var(--tarjeta-borde); font-size: 0.85rem; }
+  th { color: var(--texto-tenue); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  td.bytes { text-align: right; font-variant-numeric: tabular-nums; color: var(--texto-tenue); }
+  td.acciones { text-align: right; }
+  a.nombre-archivo { color: var(--texto); text-decoration: underline; }
+  .resumen { margin-bottom: 1rem; color: var(--texto-tenue); font-size: 0.85rem; }
+  .error { color: var(--alerta); }
+  .ok { color: var(--ok); }
+  .subida { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .subida button { background: var(--acento); color: #0f172a; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; }
+  .subida input[type="file"] { color: var(--texto); }
+  button.btn-eliminar { background: var(--alerta); color: white; border: none; border-radius: 0.4rem; padding: 0.3rem 0.7rem; cursor: pointer; font-size: 0.78rem; }
+  button.btn-eliminar:hover { opacity: 0.85; }
+</style>
+</head>
+<body>
+  <header class="topbar-simple">
+    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
+    <span>Archivos en /www</span>
+  </header>
+
+  <main>
+    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/ota.html">Firmware (OTA)</a></nav>
+
+    <div class="subida">
+      <input type="file" id="input-archivo">
+      <button id="btn-subir">Subir archivo</button>
+      <span id="subida-mensaje"></span>
+    </div>
+
+    <p class="resumen" id="resumen">Cargando...</p>
+    <table>
+      <thead><tr><th>Nombre</th><th>Bytes</th><th></th></tr></thead>
+      <tbody id="filas"></tbody>
+    </table>
+  </main>
+
+  <script>
+    // Pide el JSON crudo a /files (la API que ya sirve servidor_web.c) y
+    // arma esta tabla -- toda la logica de listar SPIFFS vive en el
+    // firmware, esta pagina solo pinta lo que ese endpoint devuelve. El
+    // nombre de cada fila apunta a /descargar?nombre=... para poder verlo o
+    // bajarlo. Mismo patron que controlador_labgeo.
+    function cargarListado() {
+      fetch('/files')
+        .then((r) => r.json())
+        .then((d) => {
+          const resumen = document.getElementById('resumen');
+          const libres = d.total_bytes - d.usados_bytes;
+          resumen.textContent =
+            `Particion 'www': ${d.usados_bytes} de ${d.total_bytes} bytes usados (${libres} libres)`;
+
+          const filas = document.getElementById('filas');
+          filas.innerHTML = '';
+          d.archivos.forEach((a) => {
+            const tr = document.createElement('tr');
+            const nombreCodificado = encodeURIComponent(a.nombre);
+            tr.innerHTML =
+              `<td><a class="nombre-archivo" href="/descargar?nombre=${nombreCodificado}">${a.nombre}</a></td>` +
+              `<td class="bytes">${a.bytes}</td>` +
+              `<td class="acciones"><button class="btn-eliminar" data-nombre="${a.nombre}">Eliminar</button></td>`;
+            filas.appendChild(tr);
+          });
+        })
+        .catch((e) => {
+          document.getElementById('resumen').innerHTML =
+            `<span class="error">No se pudo leer /files: ${e}</span>`;
+        });
+    }
+
+    // Sube el archivo elegido a POST /upload -- el nombre va en la cabecera
+    // "X-Filename" (asi el body es el archivo crudo, sin armar
+    // multipart/form-data), mismo nombre pisa el archivo existente.
+    function iniciarSubida() {
+      const input = document.getElementById('input-archivo');
+      const boton = document.getElementById('btn-subir');
+      const mensaje = document.getElementById('subida-mensaje');
+
+      boton.addEventListener('click', () => {
+        const archivo = input.files[0];
+        if (!archivo) {
+          mensaje.textContent = 'Elegi un archivo primero.';
+          mensaje.className = 'error';
+          return;
+        }
+
+        mensaje.textContent = 'Subiendo...';
+        mensaje.className = '';
+
+        fetch('/upload', {
+          method: 'POST',
+          headers: { 'X-Filename': archivo.name },
+          body: archivo,
+        })
+          .then((r) => {
+            if (!r.ok) throw new Error();
+            mensaje.textContent = `"${archivo.name}" subido.`;
+            mensaje.className = 'ok';
+            input.value = '';
+            cargarListado();
+          })
+          .catch(() => {
+            mensaje.textContent = `No se pudo subir "${archivo.name}".`;
+            mensaje.className = 'error';
+          });
+      });
+    }
+
+    // Borra el archivo elegido con DELETE /descargar?nombre=... (mismo
+    // endpoint que se usa para verlo/bajarlo, solo cambia el metodo).
+    function iniciarEliminacion() {
+      const filas = document.getElementById('filas');
+      const resumen = document.getElementById('resumen');
+
+      filas.addEventListener('click', (ev) => {
+        const boton = ev.target.closest('.btn-eliminar');
+        if (!boton) return;
+
+        const nombre = boton.dataset.nombre;
+        if (!confirm(`Eliminar "${nombre}"? Esta accion no se puede deshacer.`)) {
+          return;
+        }
+
+        boton.disabled = true;
+        fetch(`/descargar?nombre=${encodeURIComponent(nombre)}`, { method: 'DELETE' })
+          .then((r) => {
+            if (!r.ok) throw new Error();
+            cargarListado();
+          })
+          .catch(() => {
+            resumen.innerHTML = `<span class="error">No se pudo eliminar "${nombre}".</span>`;
+            boton.disabled = false;
+          });
+      });
+    }
+
+    cargarListado();
+    iniciarSubida();
+    iniciarEliminacion();
+  </script>
+</body>
+</html>

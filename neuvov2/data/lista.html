@@ -1,0 +1,256 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subir Firmware</title>
+    <style>
+        body{
+            margin: 0;
+        }
+        .body-content {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            min-width: 300px;
+        }
+        input[type="file"] {
+            margin: 15px 0;
+            width: 100%;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            position: relative;
+            min-width: 100px;
+        }
+        .top-bar {
+        grid-column: 1 / -1;
+        background: #ffffff;
+        color: white;
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+      }
+
+      .top-bar h1 {
+        font-size: 1.5rem;
+        margin: 0;
+      }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 15px;
+            min-height: 20px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 5px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .file-list {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+        
+        .file-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .file-name {
+            color: #007bff;
+            flex-grow: 1;
+        }
+        
+        .file-size {
+            color: #6c757d;
+            margin-left: 15px;
+        }
+        
+        .section-title {
+            color: #495057;
+            margin: 20px 0 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        .file-actions {
+        margin-left: 15px;
+        display: flex;
+        gap: 8px;
+    }
+    
+    .delete-btn {
+        background: #dc3545;
+        padding: 3px 8px;
+        font-size: 0.8em;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    
+    .delete-btn:hover {
+        background: #c82333;
+    }
+
+    </style>
+     <style>
+      /* ... (mantener todos los estilos anteriores) ... */
+      
+      .response-box {
+          margin-top: 15px;
+          padding: 10px;
+          border-radius: 5px;
+          background-color: #f8f9fa;
+          border: 1px solid #dee2e6;
+          max-height: 200px;
+          overflow-y: auto;
+          text-align: left;
+          white-space: pre-wrap;
+      }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    
+    <div class="logo">
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="body_1" width="165" height="31" preserveAspectRatio="xMidYMid meet" zoomAndPan="magnify" version="1.0" contentScriptType="text/ecmascript" contentStyleType="text/css">
+
+        <g transform="matrix(1.3333334 0 0 1.3333334 0 0)">
+          <a href="/">
+            <image x="0" y="0"  xlink:href="data:image/png;base64,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" preserveAspectRatio="none" width="123.75" height="23.25" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>
+          </a>
+          </g>
+        </svg>
+    </div>
+
+    <div class="hamburguesa" id="hamburguesa">
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+  </div>
+  <div class="body-content">
+    <div class=" ">
+      <div class="file-list">
+        <div class="section-title">Archivos en el servidor
+            <button onclick="loadFileList()" style="margin-left: 10px; padding: 2px 8px;">⟳ Actualizar</button>
+        </div>
+        <div id="fileListContent"></div>
+    </div>
+    </div>
+    
+  </div>
+
+
+  <script>
+    function formatFileSize(bytes) {
+    if(bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+    // Función para eliminar archivos
+    async function deleteFile(filename) {
+        try {
+            const response = await fetch('/delete/file', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name: filename })
+            });
+    
+            if(!response.ok) {
+                const error = await response.text();
+                throw new Error(error);
+            }
+    
+            // Actualizar lista después de eliminar
+            loadFileList();
+            document.getElementById('responseContent').textContent = `Archivo ${filename} eliminado correctamente`;
+    
+        } catch (error) {
+            document.getElementById('responseContent').textContent = `Error eliminando archivo: ${error.message}`;
+        }
+    }
+    
+    // Modificar la función de carga de archivos
+    async function loadFileList() {
+        try {
+            const response = await fetch('/list.json');
+            if(!response.ok) throw new Error('Error al obtener la lista');
+            
+            const files = await response.json();
+            const listContainer = document.getElementById('fileListContent');
+            
+            listContainer.innerHTML = files.map(file => `
+                <div class="file-item">
+                     
+                    <a href="/${encodeURIComponent(file.name)}" class="file-name">${file.name}</a>
+                    <span class="file-size">${formatFileSize(file.size)}</span>
+                    <div class="file-actions">
+                        <button class="delete-btn" 
+                                onclick="deleteFile('${file.name.replace(/'/g, "\\'")}')">
+                            Eliminar
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+        } catch (error) {
+            document.getElementById('responseContent').textContent = error.message;
+        }
+    }
+    loadFileList();
+    </script>
+</body>
+</html>
+
+

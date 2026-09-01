@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindlab - Configuracion</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
+  nav a:hover { color: var(--acento); }
+  form.tarjeta { display: flex; flex-direction: column; gap: 0.6rem; }
+  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
+  input[type="text"], input[type="number"] {
+    background: rgba(148,163,184,0.08);
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    color: var(--texto);
+    font-size: 0.95rem;
+  }
+  label.fila-check { flex-direction: row; align-items: center; gap: 0.5rem; }
+  button.guardar {
+    background: var(--acento); color: #0f172a; border: none; border-radius: 0.5rem;
+    padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; align-self: flex-start; margin-top: 0.25rem;
+  }
+  button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
+  .mensaje { font-size: 0.85rem; min-height: 1.1em; }
+  .mensaje.ok { color: var(--ok); }
+  .mensaje.error { color: var(--alerta); }
+  main { max-width: 600px; }
+</style>
+</head>
+<body>
+  <header class="topbar-simple">
+    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
+    <span>Configuracion</span>
+  </header>
+
+  <main>
+    <nav><a href="/">Panel</a><a href="/ota.html">Firmware (OTA)</a><a href="/files.html">Archivos</a></nav>
+
+    <form class="tarjeta" id="form-red">
+      <h2>Red</h2>
+      <label>IP
+        <input type="text" id="red-ip" placeholder="192.168.5.95" required>
+      </label>
+      <label>Gateway
+        <input type="text" id="red-gateway" placeholder="192.168.5.1" required>
+      </label>
+      <label>Mascara
+        <input type="text" id="red-mascara" placeholder="255.255.255.0" required>
+      </label>
+      <button class="guardar" type="submit">Guardar red</button>
+      <p class="mensaje" id="red-mensaje"></p>
+      <p class="detalle">
+        Por ahora solo se guarda en <code>config.json</code> -- todavia no se
+        aplica en caliente al W5500, hace falta reiniciar el equipo con la
+        IP fija actualizada en el firmware para que tome efecto.
+      </p>
+    </form>
+
+    <form class="tarjeta" id="form-climatizacion">
+      <h2>Climatizacion</h2>
+      <label>Cantidad de aires (1-4)
+        <input type="number" id="clima-cantidad" min="1" max="4" placeholder="4" required>
+      </label>
+      <label>Temp. minima (apaga todo)
+        <input type="number" step="0.1" id="clima-tmin" placeholder="25.0" required>
+      </label>
+      <label>Temp. maxima (etapa normal)
+        <input type="number" step="0.1" id="clima-tmax" placeholder="28.0" required>
+      </label>
+      <label>Temp. alta temperatura (alarma)
+        <input type="number" step="0.1" id="clima-tat" placeholder="80.0" required>
+      </label>
+      <label>Temp. bypass
+        <input type="number" step="0.1" id="clima-tbypass" placeholder="82.0" required>
+      </label>
+      <label>Fallas maximas antes de deshabilitar bypass automatico
+        <input type="number" id="clima-fails" placeholder="3" required>
+      </label>
+      <label class="fila-check">
+        <input type="checkbox" id="clima-rotar" checked>
+        Rotar la unidad de reserva semanalmente
+      </label>
+      <button class="guardar" type="submit">Guardar climatizacion</button>
+      <p class="mensaje" id="clima-mensaje"></p>
+      <p class="detalle">
+        Se guarda en <code>config.json</code> -- <code>tarea_climatizacion</code>
+        recien lo relee la proxima vez que el equipo arranca.
+      </p>
+    </form>
+  </main>
+
+  <script>
+    // Mismo criterio en las dos: junta los campos del form, valida que no
+    // esten vacios (el atributo 'required' ya ayuda), arma el JSON y lo
+    // manda por POST. La respuesta de los dos endpoints es siempre
+    // {"ok":true} si el body vino bien formado.
+    function mostrarMensaje(el, texto, clase) {
+      el.textContent = texto;
+      el.className = 'mensaje ' + clase;
+    }
+
+    document.getElementById('form-red').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const mensaje = document.getElementById('red-mensaje');
+      const cuerpo = {
+        ip: document.getElementById('red-ip').value.trim(),
+        gateway: document.getElementById('red-gateway').value.trim(),
+        mascara: document.getElementById('red-mascara').value.trim(),
+      };
+
+      fetch('/configurar_red', { method: 'POST', body: JSON.stringify(cuerpo) })
+        .then((r) => {
+          if (!r.ok) throw new Error();
+          mostrarMensaje(mensaje, 'Guardado.', 'ok');
+        })
+        .catch(() => mostrarMensaje(mensaje, 'No se pudo guardar (revisar los valores).', 'error'));
+    });
+
+    document.getElementById('form-climatizacion').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const mensaje = document.getElementById('clima-mensaje');
+      const cuerpo = {
+        cantidad_aires: Number(document.getElementById('clima-cantidad').value),
+        temp_min: Number(document.getElementById('clima-tmin').value),
+        temp_max: Number(document.getElementById('clima-tmax').value),
+        temp_at: Number(document.getElementById('clima-tat').value),
+        temp_bypass: Number(document.getElementById('clima-tbypass').value),
+        fails_max_bypass: Number(document.getElementById('clima-fails').value),
+        rotar_reserva: document.getElementById('clima-rotar').checked,
+      };
+
+      fetch('/configurar_climatizacion', { method: 'POST', body: JSON.stringify(cuerpo) })
+        .then((r) => {
+          if (!r.ok) throw new Error();
+          mostrarMensaje(mensaje, 'Guardado.', 'ok');
+        })
+        .catch(() => mostrarMensaje(mensaje, 'No se pudo guardar (revisar los valores).', 'error'));
+    });
+  </script>
+</body>
+</html>

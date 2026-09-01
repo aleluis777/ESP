@@ -1,0 +1,59 @@
+# Target: ESP32-WROOM-32D (no S3, sin PSRAM) -- ver HARDWARE.md. Si
+# "idf.py set-target esp32" no lo dejo asi, correrlo a mano antes del primer build.
+CONFIG_IDF_TARGET="esp32"
+
+# 240MHz -- mismo criterio que controlador_labgeo (consistencia de la familia
+# de proyectos). Aca no hay ningun bucle de timing crudo sensible a la
+# frecuencia de CPU (a diferencia de dial_caliper.c en labgeo), asi que no es
+# critico, pero tampoco hay motivo para bajarlo del default probado.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
+
+# Particiones propias: SPIFFS "storage" (historial/log, equivalente a
+# /log.csv de neuvov2.ino) + SPIFFS "www" (config.json + sitio estatico
+# cuando exista) + ota_0/ota_1/otadata para actualizar por OTA en vez de
+# solo por USB -- ver partitions.csv. Mismo esquema que controlador_labgeo.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Rollback automatico si un firmware subido por OTA no llega a confirmarse
+# como valido (crashea/cuelga apenas arranca) -- vuelve solo al anterior.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Ethernet: modulo W5500 por SPI. Mismos pines de bus que controlador_labgeo
+# (coincide con HARDWARE.md SS_TX=17, RST=5, SPI_SCK=18, SPI_MISO=19,
+# SPI_MOSI=23) -- pero OJO, esta placa NO es la misma que labgeo: el pin IRQ
+# del W5500 (pin 5 del modulo) esta SIN CONECTAR segun HARDWARE.md §4.1, asi
+# que el driver tiene que ir por POLLING (INT0_GPIO=-1). NO copiar el valor
+# de controlador_labgeo (GPIO16) -- en esta placa GPIO16 es el rele AA3
+# (HARDWARE.md §3), usarlo como IRQ del W5500 quemaria esa salida.
+CONFIG_ETHERNET_INTERNAL_SUPPORT=n
+CONFIG_ETHERNET_SPI_SUPPORT=y
+CONFIG_ETHERNET_SPI_DEV0_W5500=y
+CONFIG_ETHERNET_SPI_HOST=2
+CONFIG_ETHERNET_SPI_SCLK_GPIO=18
+CONFIG_ETHERNET_SPI_MOSI_GPIO=23
+CONFIG_ETHERNET_SPI_MISO_GPIO=19
+CONFIG_ETHERNET_SPI_CS0_GPIO=17
+CONFIG_ETHERNET_SPI_INT0_GPIO=-1
+CONFIG_ETHERNET_SPI_PHY_RST0_GPIO=5
+
+# WebSocket en esp_http_server (lo usa servidor_web.c para /ws) -- apagado
+# por defecto en ESP-IDF.
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# Default (10) se queda corto: esp_http_server ya usa 3 sockets para si
+# mismo, y una carga de pagina normal (index.html+style.css+script.js, sin
+# keep-alive) mas el WS llegan a llenar el limite. Mismo valor que
+# controlador_labgeo, sobra margen (ver max_open_sockets en servidor_web.c).
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# I2C (esp-idf-lib "i2cdev", usado por rtc_braindlab.c y sensores_temp.c):
+# default 1000ms por transaccion es demasiado -- tarea_climatizacion hace
+# varias transacciones I2C por vuelta (RTC + 4 canales del ADS1115), y esa
+# tarea es la misma que controla los reles. Si el bus se cuelga (ruido
+# electrico de los reles conmutando, ver conversacion), un timeout tan largo
+# podria congelar el control varios segundos. 150ms sigue siendo generoso
+# para un bus sano, pero acota bien el peor caso.
+CONFIG_I2CDEV_TIMEOUT=150

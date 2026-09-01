@@ -1,0 +1,26 @@
+{
+  "inputs":[0.0 ,0.0 ,0.0 ,0.0 ,0.0 ,0.0 ,1.0 ,1.0 ,1.0 ,1.0 ,1.0 ,1.0],
+  "fails":[0,0,0,0],
+  
+
+  "ip":[192,168,1,92],
+  "gateway":[192,168,1,1],
+  "subnet":[255,255,255,0],
+  "mac":[36,10,196,0,0,0],
+  "port":80,
+
+  "baudrate":9600,
+
+  "lead":1,
+  "type":"1+1",
+  "setpoints":[25.00, 28.00, 80.00, 82.00],
+
+  "snmpport":187,
+  "snmpcommunity":"shirey",
+  "snmpversion":2,
+  
+  "device":"Equipo Chiclayo2",
+  
+  "password":"admin",
+  "user":"admin"
+}

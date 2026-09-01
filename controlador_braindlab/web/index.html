@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controlador Braindlab</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="pagina-panel">
+
+<aside class="sidebar" id="sidebar">
+    <div class="marca">
+        <img class="marca-logo" src="/logo.png" alt="BraindLab">
+    </div>
+
+    <nav class="nav-lateral">
+        <a href="/" class="activo"><span class="nav-icono">&#8962;</span> Inicio</a>
+        <a href="/configurar.html"><span class="nav-icono">&#9881;</span> Configuracion</a>
+        <a class="nav-proximamente"><span class="nav-icono">&#9678;</span> Calibracion</a>
+        <a href="/files.html"><span class="nav-icono">&#9776;</span> Archivos</a>
+        <a href="/ota.html"><span class="nav-icono">&#8635;</span> Firmware (OTA)</a>
+        <a class="nav-proximamente"><span class="nav-icono">&#9650;</span> Historico</a>
+        <a class="nav-proximamente"><span class="nav-icono">&#9888;</span> Fallas</a>
+    </nav>
+
+    <button class="btn-colapsar" id="btn-colapsar" title="Colapsar menu">&#171;</button>
+</aside>
+
+<div class="contenido">
+    <header class="topbar">
+        <h1 id="nombre-equipo">CONTROLADOR-BRAINDLAB-01</h1>
+        <div class="topbar-datos">
+            <span class="pill-estado" id="estado-conexion"><i class="punto"></i> Conectando...</span>
+            <span class="topbar-item" id="fecha-actual">--</span>
+            <span class="topbar-item" id="hora-actual">--</span>
+            <span class="topbar-item" id="uptime">Tiempo de actividad: --</span>
+        </div>
+    </header>
+
+    <main>
+        <section class="fila-gauges">
+            <article class="tarjeta tarjeta-gauge" data-color="op1">
+                <header><i class="icono-metrica">&#127777;</i> T. Operacion 1</header>
+                <p class="valor-metrica" id="op1-valor">-- &deg;C</p>
+                <svg class="gauge" viewBox="0 0 200 110" aria-hidden="true">
+                    <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <path class="gauge-valor" id="op1-arco" pathLength="100" stroke-dasharray="0 100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <circle class="gauge-marcador" id="op1-marcador" cx="20" cy="100" r="5"/>
+                </svg>
+                <svg class="chispa" id="op1-chispa" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline id="op1-linea"/>
+                </svg>
+                <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
+            </article>
+
+            <article class="tarjeta tarjeta-gauge" data-color="op2">
+                <header><i class="icono-metrica">&#127777;</i> T. Operacion 2</header>
+                <p class="valor-metrica" id="op2-valor">-- &deg;C</p>
+                <svg class="gauge" viewBox="0 0 200 110" aria-hidden="true">
+                    <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <path class="gauge-valor" id="op2-arco" pathLength="100" stroke-dasharray="0 100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <circle class="gauge-marcador" id="op2-marcador" cx="20" cy="100" r="5"/>
+                </svg>
+                <svg class="chispa" id="op2-chispa" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline id="op2-linea"/>
+                </svg>
+                <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
+            </article>
+
+            <article class="tarjeta tarjeta-gauge" id="tarjeta-gestor-t" data-color="gestor-t">
+                <header><i class="icono-metrica">&#127777;</i> T. Gestor</header>
+                <p class="valor-metrica" id="gestor-t-valor">N/D</p>
+                <svg class="gauge" viewBox="0 0 200 110" aria-hidden="true">
+                    <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <path class="gauge-valor" id="gestor-t-arco" pathLength="100" stroke-dasharray="0 100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <circle class="gauge-marcador" id="gestor-t-marcador" cx="20" cy="100" r="5"/>
+                </svg>
+                <p class="nd-nota" id="gestor-t-nota">Esperando lectura del AM2301A...</p>
+            </article>
+
+            <article class="tarjeta tarjeta-gauge" id="tarjeta-gestor-h" data-color="gestor-h">
+                <header><i class="icono-metrica">&#128167;</i> H. Gestor</header>
+                <p class="valor-metrica" id="gestor-h-valor">N/D</p>
+                <svg class="gauge" viewBox="0 0 200 110" aria-hidden="true">
+                    <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <path class="gauge-valor" id="gestor-h-arco" pathLength="100" stroke-dasharray="0 100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <circle class="gauge-marcador" id="gestor-h-marcador" cx="20" cy="100" r="5"/>
+                </svg>
+                <p class="nd-nota" id="gestor-h-nota">Esperando lectura del AM2301A...</p>
+            </article>
+
+            <article class="tarjeta tarjeta-estado">
+                <header>Estado del sistema</header>
+                <p class="estado-titulo" id="estado-titulo">--</p>
+                <div class="estado-escudo" id="estado-escudo">&#10003;</div>
+                <p class="estado-detalle" id="estado-detalle">--</p>
+            </article>
+        </section>
+
+        <section class="tarjeta fila-actuadores">
+            <header>
+                Controles / Actuadores
+                <span class="detalle-inline">AA1-4, AT y Bypass se pueden forzar a mano (click)</span>
+                <button class="btn-auto" id="btn-volver-automatico">Volver a automatico</button>
+            </header>
+            <div class="grilla-actuadores">
+                <div class="actuador editable" id="act-aa1" data-tipo="aire" data-indice="0"><span>AA1</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-aa2" data-tipo="aire" data-indice="1"><span>AA2</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-aa3" data-tipo="aire" data-indice="2"><span>AA3</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-aa4" data-tipo="aire" data-indice="3"><span>AA4</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-at" data-tipo="at"><span>AT</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-bypass" data-tipo="bypass"><span>Bypass</span><em>--</em><i class="toggle"></i></div>
+            </div>
+        </section>
+
+        <section class="fila-esquema-eventos">
+            <article class="tarjeta esquema">
+                <header>Esquema del proceso</header>
+                <div class="diagrama">
+                    <div class="nodo-sensores">
+                        SENSORES
+                        <div class="sensores-grilla">
+                            <span>T1 <b id="d-t1">--</b></span>
+                            <span>T2 <b id="d-t2">--</b></span>
+                            <span>T3 <b id="d-t3">--</b></span>
+                            <span>T4 <b id="d-t4">--</b></span>
+                        </div>
+                    </div>
+                    <div class="flecha">&#8594;</div>
+                    <div class="nodo-gestor">
+                        GESTOR
+                        <span class="gestor-linea">&#127777; <b id="d-gestor-t">N/D</b></span>
+                        <span class="gestor-linea">&#128167; <b id="d-gestor-h">N/D</b></span>
+                    </div>
+                    <div class="flecha">&#8594;</div>
+                    <div class="col-bypass-at">
+                        <div class="nodo-bypass" id="d-bypass">BYPASS<br><span>--</span></div>
+                        <div class="nodo-at" id="d-at">AT<br><span>--</span></div>
+                    </div>
+                    <div class="flecha">&#8594;</div>
+                    <div class="col-salidas">
+                        <div class="nodo-chico" id="d-aa1">AA1<br><span>--</span></div>
+                        <div class="nodo-chico" id="d-aa2">AA2<br><span>--</span></div>
+                        <div class="nodo-chico" id="d-aa3">AA3<br><span>--</span></div>
+                        <div class="nodo-chico" id="d-aa4">AA4<br><span>--</span></div>
+                    </div>
+                </div>
+            </article>
+
+            <article class="tarjeta eventos">
+                <header>Eventos y alertas</header>
+                <ul id="lista-eventos"></ul>
+            </article>
+        </section>
+
+        <section class="fila-inferior">
+            <article class="tarjeta stat" data-color="iny1">
+                <p class="stat-titulo">T. Inyeccion 1</p>
+                <p class="stat-valor" id="iny1-valor">-- &deg;C</p>
+                <svg class="chispa-chica" id="iny1-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny1-linea"/></svg>
+            </article>
+            <article class="tarjeta stat" data-color="iny2">
+                <p class="stat-titulo">T. Inyeccion 2</p>
+                <p class="stat-valor" id="iny2-valor">-- &deg;C</p>
+                <svg class="chispa-chica" id="iny2-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny2-linea"/></svg>
+            </article>
+            <article class="tarjeta stat nd">
+                <p class="stat-titulo">Corriente AA1</p>
+                <p class="stat-valor">N/D</p>
+                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            </article>
+            <article class="tarjeta stat nd">
+                <p class="stat-titulo">Corriente AA2</p>
+                <p class="stat-valor">N/D</p>
+                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            </article>
+            <article class="tarjeta stat nd">
+                <p class="stat-titulo">VRS</p>
+                <p class="stat-valor">N/D</p>
+                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            </article>
+            <article class="tarjeta stat nd">
+                <p class="stat-titulo">VST</p>
+                <p class="stat-valor">N/D</p>
+                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            </article>
+            <article class="tarjeta stat nd">
+                <p class="stat-titulo">VRT</p>
+                <p class="stat-valor">N/D</p>
+                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            </article>
+        </section>
+    </main>
+</div>
+
+<script src="/script.js"></script>
+</body>
+</html>

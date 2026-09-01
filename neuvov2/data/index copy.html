@@ -1,0 +1,1646 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Braindlab - Dashboard</title> 
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo...">
+  
+  <style>
+    :root {
+    --app-container: #f3f6fd;
+    --main-color: #2379bd;
+    --secondary-color: #4A4A4A;
+    --link-color: #2379bd;
+    --link-color-hover: #c3cff4;
+    --link-color-active: #fff;
+    --link-color-active-bg: #2379bd;
+    --projects-section: #fff;
+    --message-box-hover: #fafcff;
+    --message-box-border: #e9ebf0;
+    --more-list-bg: #fff;
+    --more-list-bg-hover: #f6fbff;
+    --more-list-shadow: rgba(209, 209, 209, 0.4);
+    --button-bg: #1f1c24;
+    --search-area-bg: #fff;
+    --star: #1ff1c2e;
+    --message-btn: #fff;
+  }
+  footer {
+    background-color: #f0f0f0; /* Color de fondo */
+    border-top: 2px solid white; /* Barrita blanca */
+    padding: 10px;
+    display: flex; /* Para alinear la versión a la derecha */
+    justify-content: space-between; /* Espacio entre el contenido y la versión */
+  }
+
+  .version {
+    margin-left: auto; /* Mueve la versión a la derecha */
+  }
+
+.p{
+  font-family: 'Courier New', Courier, monospace;
+}
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    /* align-items: center;*/ 
+    background: white;
+    box-shadow: 0 0 0 1px rgba(63, 63, 68, 0.05), 0 1px 3px 0 rgba(63, 63, 68, 0.15);
+    border-radius: 15px;
+    min-height: 40px;
+    padding: 20px;
+  }
+.section-header-incard {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px;
+  }
+.section-header h5 {
+    font-size: 18px;
+    line-height: 32px;
+    color: #5c5c5c;
+    font-weight: bold;
+    opacity: 0.9;
+    margin: 0;
+    font-family: sans-serif;
+}
+.hora {
+    font-weight: bold;
+    color: #545454;
+    font-size: 16px;
+    margin-right: 10px;
+    font-family: sans-serif;
+  }
+.online {
+    height: 20px;
+    width: 20px;
+    border-radius: 10px;
+    background: #ababab;
+}
+.flex-horizontal{
+    height: 40px;
+    display: flex;
+    align-items: center;
+}
+.box-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    color: var(--main-color);
+  }
+.bloque {
+    flex: 2;
+}
+.cards {  
+    padding-top: 20px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  .card {
+    background: white;
+    box-shadow: 0 0 0 1px rgba(63, 63, 68, 0.05), 0 1px 3px 0 rgba(63, 63, 68, 0.15);
+    border-radius: 20px;
+    padding: 1rem;
+    height: 4rem;
+    min-height: 130px;
+  }
+  /* The switch - the box around the slider */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+  }
+  .content-iot{
+    width: 100%;
+    text-align: center;
+  }
+  
+  /* Hide default HTML checkbox */
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  /* The slider */
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+  }
+  
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+  }
+  
+  input:checked + .slider {
+    background-color: #0cb517;
+  }
+  
+  input:focus + .slider {
+    box-shadow: 0 0 1px #0cb517;
+  }
+  
+  input:checked + .slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+  }
+  
+  /* Rounded sliders */
+  .slider.round {
+    border-radius: 34px;
+  }
+  
+  .slider.round:before {
+    border-radius: 50%;
+  }
+
+
+
+  /*gauge*/
+  .gauge {
+    position: relative;
+    border-radius: 50%/100% 100% 0 0;
+    background-color: var(--color, #a22);
+    overflow: hidden;
+}
+.gauge:before{
+    content: "";
+    display: block;
+    padding-top: 50%;   /* ratio of 2:1*/
+}
+.gauge .chart {
+  overflow: hidden;
+}
+.gauge .mask {
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  bottom: 0;
+  top: 40%;
+  background-color: #fff;
+  border-radius: 50%/100% 100% 0 0;
+}
+
+.gauge .percentage {
+    position:  absolute;
+    top: -1px;
+    left: -1px;
+    bottom: 0;
+    right: -1px;
+    background-color: var(--background, #aaa);
+    transform:rotate(var(--rotation)); 
+    transform-origin: bottom center; 
+    transition-duration: 600;
+}
+.gauge:hover {
+  --rotation: 100deg;
+}
+.gauge .value {
+  position:absolute; bottom:0%; left:0;   
+  width:100%; 
+  font-weight: bold;
+  text-align: center;
+}
+
+.gauge .min {
+  position:absolute; 
+  bottom:0; left:5%;   
+}
+.gauge .max {
+  position:absolute; 
+  bottom:0; right:5%;   
+ }
+
+ .status_in {
+    height: 50px;
+    width: 50px;
+    border-radius: 25px;
+    background: #bcbcbc;
+}
+.number_in{   
+    text-align: center;
+
+    font-size: 40px;
+    line-height: 32px;
+    color: #717171;
+    font-weight: bold;
+    font-family:  Arial;
+    
+}
+.cards2 {  
+  padding-top: 20px;
+  padding-bottom: 20px;
+  margin: 0 auto;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+}
+.card2 {
+    background: rgb(255, 255, 255);
+    border-radius: 20px;
+    padding: 1rem; 
+    padding-bottom: 30px;
+    margin-bottom: 10px;
+    box-shadow: 0 0 0 1px rgba(63, 63, 68, 0.05), 0 1px 3px 0 rgba(63, 63, 68, 0.15);
+  }
+
+
+  .text-input {
+    border: none;
+    flex: 1;
+    outline: none;
+    height: 100%;
+    padding: 0 20px;
+    font-size: 16px;
+    background-color: var(--search-area-bg);
+    color: var(--main-color);
+
+    width: 100%;  
+  }
+
+  .button-input {
+    border: none;
+    flex: 1;
+    outline: none;
+    height: 30px;
+    border-radius: 15px;
+    font-size: 16px;
+    background-color: #c00704;
+    color: white;
+    width: 30px; 
+  }
+  .button-input:hover {
+    background-color: rgb(141, 21, 21);
+  }
+  .button-input:active {
+    background-color: #c00704;
+  }
+  .text-preinput {
+    font-size: 14px;
+    color: #999797;
+    margin-left: 15px; 
+    margin-block-end: 0px;
+  }
+  .inputbuton{
+    border-radius: 10px;
+    background-color: var(--search-area-bg);
+    padding: 0 30px 0 30px;
+    margin-right: 10px;
+    margin-left: 10px;
+    height: 30px;
+    border-color: #e2e2e2;
+    border-style: solid;
+    border-width: 1px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    background: #2379bd;
+    color: white;
+    box-shadow: 0 0 0 1px rgba(63, 63, 68, 0.05), 0 1px 3px 0 rgba(63, 63, 68, 0.15);
+    overflow: hidden;
+  }
+  .inputbuton:hover {
+    background-color:#18659f;
+  }
+  .inputbuton:active {
+    background-color: #2379bd;
+  }
+  .text-wrapper {
+    border-radius: 10px;
+    background-color: var(--search-area-bg);
+    padding-right: 12px;
+    margin-right: 10px;
+    margin-left: 10px;
+    height: 30px;
+    border-color: #e2e2e2;
+    border-style: solid;
+    border-width: 1px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    color: var(--light-font);
+    box-shadow: 0 0 0 1px rgba(63, 63, 68, 0.05), 0 1px 3px 0 rgba(63, 63, 68, 0.15);
+    overflow: hidden;
+  }
+  
+
+  /* For desktop: */
+.col-1 {width: 8.33%;}
+.col-2 {width: 16.66%;}
+.col-3 {width: 25%;}
+.col-4 {width: 33.33%;}
+.col-5 {width: 41.66%;}
+.col-6 {width: 50%;}
+.col-7 {width: 58.33%;}
+.col-8 {width: 66.66%;}
+.col-9 {width: 75%;}
+.col-10 {width: 83.33%;}
+.col-11 {width: 91.66%;}
+.col-12 {width: 100%;}
+
+@media only screen and (max-width: 768px) {
+  /* For mobile phones: */
+  [class*="col-"] {
+    width: 100%;
+  }
+}
+
+.title-config{
+  font-weight: bold;
+  color: #898989;
+  font-size: 18px;
+}
+
+.app-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: "#f8f9fb";
+  transition: 0.2s;
+  /*max-width: 1800px; maximo-braindlab*/
+}
+.projects-section {
+  flex: 2;
+  background-color: #f8f9fb;
+  padding: 14px 14px 20px 14px;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.card span{
+  font-family: sans-serif;
+}
+.card p{
+  font-weight: bold;
+  font-family: sans-serif;
+}
+
+.date{
+  font-family: sans-serif;
+  margin-right: 15px;
+}
+
+
+/* tabla demo*/
+table {
+  border-collapse: collapse;
+  box-shadow: 0 0 0 1px #f1f0f0, 0 1px 3px 0 rgba(63, 63, 68, 0.15);
+  border-width: 1px;
+  border-radius: 20px;
+  font-family: sans-serif;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  width: 100%;
+  color: #767575;
+}
+
+caption {
+  caption-side: bottom;
+  padding: 10px;
+  font-weight: bold;
+}
+
+thead,
+tfoot {
+  background-color: rgb(255, 255, 255);
+}
+
+th,
+td {
+  border: 1px solid transparent;
+  padding: 8px 10px;
+}
+
+td:last-of-type {
+  text-align: center;
+}
+
+tbody > tr:nth-of-type(even) {
+  background-color: #eefbfc;
+}
+body {
+  margin: 0px;
+}
+
+tfoot th {
+  text-align: right;
+}
+
+tfoot td {
+  font-weight: bold;
+}
+
+
+ /* Estilos generales */
+ body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+
+ 
+ 
+
+.toast-hidden {
+  visibility: hidden;
+  min-width: 250px;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 4px;
+  padding: 16px;
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+
+.toast-visible { 
+  min-width: 250px;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 4px;
+  padding: 16px;
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  bottom: 30px; 
+  transform: translateX(-50%);
+}
+
+.toast-visible-error { 
+  min-width: 250px;
+  background-color: #9b0000;
+  color: #fff;
+  text-align: center;
+  border-radius: 4px;
+  padding: 16px;
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  bottom: 30px; 
+  transform: translateX(-50%);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 268px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .form-container {
+    padding: 1rem;
+  }
+  
+  button[type="submit"] {
+    width: 100%;
+  }
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #f0f2f5;
+}
+
+/* Contenedor principal */
+.app-container {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  min-height: 100vh;
+}
+
+/* Barra lateral */
+.sidebar {
+  background: #ffffff;
+  color: white;
+  padding: 1rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+/* Menú de navegación */
+.nav-menu {
+  margin-top: 2rem;
+}
+
+.nav-button {
+  display: block;
+  width: 100%;
+  padding: 1rem;
+  margin: 0.5rem 0;
+  background: none;
+  border: none;
+  color: #0169ae;
+  font-weight: bold;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.nav-button:hover,
+
+.nav-button.active {
+  background: #f0f0f0;
+}
+
+/* Contenido principal */
+.main-content {
+  padding: 1rem;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+/* Tarjetas */
+.card {
+  background: white;
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  margin-bottom: 1.5rem;
+  height: auto;
+}
+
+.card-content {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 1.5rem;
+  height: auto;
+}
+
+/* Formularios */
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+/* Botones */
+.btn {
+  padding: 0.8rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-primary {
+  background: #3498db;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2980b9;
+}
+
+/* Tablas */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.table th,
+.table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.table th {
+  background: #f8f9fa;
+  font-weight: 600;
+}
+
+/* Menú móvil */
+.hamburguesa {
+  display: none;
+  cursor: pointer;
+  padding: 0rem;
+}
+
+.hamburguesa div {
+  width: 25px;
+  height: 3px;
+  background: rgb(0, 127, 211);
+  margin: 4px 0;
+  transition: 0.3s;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-container {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    width: 100%;
+    height: auto;
+    display: none;
+  }
+
+  .sidebar.active {
+    display: block;
+  }
+
+  .hamburguesa {
+    display: block;
+    right: 1rem;
+    top: 1rem;
+    z-index: 1000;
+  }
+
+  .main-content {
+    margin-top: 10px;
+  }
+  .tabcontent {
+    height: auto;
+  }
+}
+
+.section-header-incard {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.title-config {
+  font-size: 1.8em; /* Aumenta el tamaño de la fuente */
+  margin-bottom: 15px; /* Añade margen inferior */
+  color: #333;
+}
+
+.flex-horizontal {
+  display: flex;
+  gap: 10px;
+}
+
+select, input[type="number"], input[type="datetime-local"] {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px; /* Borde redondeado */
+  font-size: 1em;
+  flex-grow: 1;
+}
+
+.inputbuton {
+  padding: 10px 15px;
+  background-color: #1b80e5; /* Color de fondo más suave */
+  color: #ffffff; /* Color del texto azul */
+  border: 1px solid #007bff; /* Borde azul */
+  border-radius: 4px; /* Borde redondeado */
+  cursor: pointer;
+  font-size: 1em;
+  width: fit-content; /* Ajusta el ancho al contenido */
+}
+
+.inputbuton:hover {
+  background-color: #126ec9; /* Color de fondo al pasar el ratón */
+}
+
+.inputs {
+  margin-top: 10px;
+}
+
+.calibration-controls {
+  /* Espacio para los controles de calibración */
+}
+
+.datetime-controls {
+  /* Espacio para los controles de fecha y hora */
+}
+
+#version {
+  font-size: 0.8em; /* Fuente más pequeña */
+  color: #777;
+  text-align: right; /* Alinea a la derecha */
+  margin-top: 20px; /* Añade margen superior */
+}
+    .modal {
+  display: none; /* Ocultar el modal por defecto */
+  position: fixed; /* Posición fija para que cubra toda la pantalla */
+  z-index: 1; /* Asegurar que esté encima del contenido */
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto; /* Habilitar scroll si el contenido es muy largo */
+  background-color: rgba(0, 0, 0, 0.4); /* Fondo semi-transparente */
+}
+
+.modal-contenido {
+  background-color: #fefefe;
+  margin: 15% auto; /* Centrar el modal */
+  padding: 20px;
+border: 1px solid #888;
+max-width: 300px;
+}
+
+.cerrar {
+color: #aaa;
+float: right;
+font-size: 28px;
+font-weight: bold;
+}
+
+.cerrar:hover,
+.cerrar:focus {
+  color: black;
+  text-decoration: none;
+  cursor: pointer;
+}
+   
+  /* Nuevos estilos para la barra superior */
+  .top-bar {
+    grid-column: 1 / -1;
+    background: #ffffff;
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .top-bar h1 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .fallas-aas {
+  font-family: sans-serif; /* Fuente similar a la de la imagen */
+  font-size: 16px; /* Tamaño de fuente */
+  line-height: 1.5; /* Espaciado entre líneas */
+}
+
+.fallas-aas ul {
+  list-style-type: disc; /* Viñetas tipo disco (círculo relleno) */
+  padding-left: 20px; /* Espacio para las viñetas */
+}
+
+.fallas-aas li {
+  margin-bottom: 5px; /* Espacio entre los elementos de la lista */
+}
+
+   
+</style>
+</head>
+<body>
+  <div id="toast"></div>
+  <div class="app-container">
+
+    <div class="top-bar">
+      <div class="logo">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="body_1" width="165" height="31" preserveAspectRatio="xMidYMid meet" zoomAndPan="magnify" version="1.0" contentScriptType="text/ecmascript" contentStyleType="text/css">
+  
+          <g transform="matrix(1.3333334 0 0 1.3333334 0 0)">
+            <a href="/">
+              <image x="0" y="0"  xlink:href="data:image/png;base64,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" preserveAspectRatio="none" width="123.75" height="23.25" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>
+            </a>    
+          </g>
+          </svg>
+      </div>
+      <div class="hamburguesa" id="hamburguesa">
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+    </div>
+
+    <!-- Menú lateral -->
+    <nav class="sidebar" id="sidebar"> 
+       
+      <div class="nav-menu" id="menu">
+        <button class="nav-button active" onclick="openCity(event, 'option1')">Inicio</button>
+        <button class="nav-button" onclick="openCity(event, 'option2')">Configuración</button>
+        <button class="nav-button" onclick="openCity(event, 'option3')">Calibracion</button>
+        <button class="nav-button" onclick="window.location.href='/alerts'">Logs</button>
+        <button class="nav-button" onclick="window.location.href='/history'">Historico</button>
+        <button class="nav-button" id="miBotonModal" >Fallas</button>
+      </div>
+
+    </nav>
+
+    <!-- Contenido principal -->
+    <main class="main-content">
+
+      <!-- Secciones -->
+      <section class="tabcontent active" id="option1">
+        <div class="card-content">
+          <div  class="section-header" >
+            <h5 id="name"></h5>
+            <div>
+              <div class="flex-horizontal">
+                <p class="date" id="date">-</p>
+                  <div class="online" id="online"></div>
+              </div>
+              <p id="t">Tiempo de actividad:</p>
+            </div>
+          </div>
+          <div id="dashboard_io"></div>
+          
+        </div>
+      </section> 
+
+      <section class="tabcontent" id="option3">
+          <div class="card2">
+            <div class="section-header-incard" >
+              <p class="title-config">Calibracion</p>
+              <p class="">Sensores</p>
+              <div class="flex-horizontal">
+                <select  id="nSelect-calibracion">
+                  <option value="0">T. Operación 1</option>
+                  <option value="1">T. Operación 2</option>
+                  <option value="2">T. Inyección 1</option>
+                  <option value="3">T. Inyección 2</option>
+                  <option value="6">Corriente AA1</option>
+                  <option value="7">Corriente AA2</option>
+                  <option value="9">Tension RS</option>
+                  <option value="10">Tension ST</option>
+                  <option value="11">Tension RT</option>
+                  
+              </select>
+              <input  type="number" id="calibracion-input" placeholder="Escribe aquí...">
+                
+              </div>
+              <button onclick='Calibracion()' class="inputbuton"> Calibrar</button>
+              <p class="">Fecha y Hora</p>
+              <input class="inputs" type="datetime-local"  id="fecha" name="name">
+              <button onclick='Fecha("20")' class="inputbuton"> Guardar Hora</button>
+
+            </div> 
+            
+          </div>
+      </section>
+      <section class="tabcontent" id="option4">
+        <div class="card2">
+          <div class="section-header-incard" >
+            <p class="title-config">Configuracion de entradas y salidas</p>
+            <div class="flex-horizontal">
+              <button onclick='Save_cambios2()' class="inputbuton"> Save</button>
+              <button onclick='Add_boton2()' class="inputbuton"> Add</button>
+            </div>
+          </div>
+          <table> 
+            <thead>
+              <tr>
+                <th scope="col">Nombre</th>
+                <th scope="col">Tipo</th>
+                <th scope="col">Subtipo</th>
+                <th scope="col">Status</th>
+                <th scope="col">Opcion</th>
+              </tr>
+            </thead>
+            <tbody id="setuo_io"></tbody>
+          </table>
+          
+        </div>
+      </section>
+
+      <section class="tabcontent" id="option2">
+        <div class="card2">
+          <div class="section-header-incard" >
+            <p class="title-config">Configuracion de gestor</p>
+            <div class="flex-horizontal">
+              <button onclick='Save_cambios2()' class="inputbuton"> Guardar</button>
+              <button onclick='Restart("0")' class="inputbuton"> Reiniciar</button>
+              <button onclick='Restart("2")' class="inputbuton"> Limpiar Fallas</button>
+            </div>
+          </div>
+          <div  id="config_io"></div>
+          
+        </div>
+    </section>
+    
+    <div>
+      <div class="version" id="version">version:</div>
+    </div>
+    </main>
+    <div id="miModal" class="modal">
+      <div class="modal-contenido">
+        <span class="cerrar">&times;</span> 
+        <h5>Fallas de AAs</h5>
+        <div id="contenidoModal" class="fallas-aas">Cargando...</div> 
+    </div>
+    </div>
+
+  </div> 
+  <script>
+    // Obtener elementos del DOM
+    const modal = document.getElementById("miModal");
+    const btn2 = document.getElementById("miBotonModal");
+    const span = document.getElementsByClassName("cerrar")[0];
+    const contenidoModal = document.getElementById("contenidoModal");
+
+    // Abrir modal y cargar datos
+    btn2.onclick = function() { 
+      modal.style.display = "block";
+      cargarCalibraciones();
+    }
+
+    // Cerrar modal
+    span.onclick = function() {
+      modal.style.display = "none";
+      contenidoModal.innerHTML = ""; // Limpiar contenido al cerrar
+    }
+
+    // Cerrar modal al hacer clic fuera del contenido
+    window.onclick = function(event) {
+      if (event.target == modal) {
+        modal.style.display = "none";
+        contenidoModal.innerHTML = ""; // Limpiar contenido al cerrar
+      }
+    }
+
+    // Función para cargar datos de /calibrations.json
+    function cargarCalibraciones() {
+      //mostrarDatos([1,1,0,0]);return;
+      fetch('/calibrations.json')
+        .then(response => response.json())
+        .then(data => {
+          // Procesar los datos y mostrarlos en el modal
+          console.log(data);
+          mostrarDatos(data.fails);
+        })
+        .catch(error => {
+          contenidoModal.innerHTML = "<p>Error al cargar datos.</p>";
+          console.error("Error:", error);
+        });
+    }
+
+    // Función para mostrar los datos en el modal
+    function mostrarDatos(data) {
+      // Formatear los datos como HTML (puedes ajustar esto según la estructura de tus datos)
+      let html = "<ul>";
+      console.log(data);
+      n=1;
+      data.forEach(item => {
+        console.log(item);
+        if(n<3) html += `<li>${"Falla en AA"+n}: ${item}</li>`;
+        n=n+1; // Ajusta esto según tus datos 
+      });
+      html += "</ul>";
+      contenidoModal.innerHTML = html;
+    }
+
+    
+const sidebar = document.getElementById('sidebar');
+const hamburguesa = document.getElementById('hamburguesa');
+
+hamburguesa.addEventListener('click', () => {
+  sidebar.classList.toggle('active');
+});
+
+// Funcionalidad de pestañas
+function showTab(tabId) {
+  document.querySelectorAll('.tabcontent').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  
+  document.querySelectorAll('.nav-button').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  document.getElementById(tabId).classList.add('active');
+  event.currentTarget.classList.add('active');
+  
+  if (window.innerWidth <= 768) {
+    sidebar.classList.remove('active');
+  }
+}
+
+
+const ip_ss="" 
+let data = new Object();
+let delay=4000;
+let btn=0;
+let offline=false;
+var cnt=5;
+let click=false;
+let intermitente=true
+
+
+var config_data={}
+
+function monitoreo(r){
+  WhSAG(r.i1,"i1");
+  WhSAG(r.i2,"i2");
+  WhSAG(r.i3,"i3");
+  WhSAG(r.i4,"i4");
+  WhSAG(r.i5,"i5");
+  WhSAG(r.i6,"i6");
+  
+  Wh2(r.i7,"i7");
+  Wh2(r.i8,"i8");
+
+  Wh3(r.i9,"i9");
+
+  WhSAG(r.i10,"i10");
+  WhSAG(r.i11,"i11");
+  //WhSAG(r.i12,"i12");
+  WhSAG(r.i13,"i13");
+  WhSAG(r.i14,"i14");
+  WhSAG(r.i15,"i15");
+  
+  Wh2SAG(r.o1,"o1");
+  Wh2SAG(r.o2,"o2");
+  Wh2SAG(r.o5,"o5");
+  Wh2SAG(r.o4,"o4");
+  r.t?document.getElementById("t").innerHTML = getTimeOffline(parseInt(r.t)):null;  
+  DateFecha(r.d,"date");
+  Version(r.v,"version");
+}
+
+function Wh(d,id){d?document.getElementById(id).innerHTML = d:document.getElementById(id).innerHTML = 0;}
+
+function WhSAG(d,id){
+  const clave = 1;
+  var doc=document.getElementById(id);
+  var gauge=document.getElementById("gauge"+id);
+  d?doc.innerHTML=(d==-1?"error  --":d) :doc.innerHTML = 0;
+  (d && d!=-1)?gauge.style.setProperty('--rotation', (2*d)+'deg'):null;
+}
+
+function En(d,id){d?document.getElementById(id).innerHTML = (parseInt(d)/3600).toFixed(2):document.getElementById(id).innerHTML = 0;}
+//Leed AA on-off
+function Wh2(d,id){
+  if(d=="1" || d=="0"){
+      document.getElementById(id).innerHTML = d?"ON":"OFF";
+      document.getElementById("c"+id).style.background  = d=="1"?"red":"#a4a4a4";
+  }
+}
+
+function Wh3(d,id){
+  
+  document.getElementById(id).innerHTML = d?d:"--";
+      
+}
+
+function Wh2SAG(d,id){
+  if(d=="1" || d=="0"){
+      document.getElementById(id).innerHTML = d?"ON":"OFF";
+      document.getElementById("hw"+id).checked = (d=="1"?true:false);
+      //document.getElementById(id+"C").style.background  = d=="1"?"green":"red";
+  }
+}
+
+function Version(d,id){
+  d?document.getElementById(id).innerHTML = "version firmware: "+d.toFixed(1):"--";
+}
+ 
+
+function DateFecha(d, id) {
+  const date = new Date(d * 1000); // Convertir el timestamp a milisegundos
+
+  // Opciones para formatear la fecha en español
+  const options = {
+    weekday: 'long', // Día de la semana (ej: "viernes")
+    year: 'numeric', // Año (ej: "2023")
+    month: 'long',   // Mes (ej: "enero")
+    day: 'numeric',  // Día del mes (ej: "20")
+    hour: 'numeric', // Hora (ej: "22")
+    minute: 'numeric', // Minutos (ej: "04")
+    second: 'numeric', // Segundos (ej: "42")
+    hour12: true, // Usar formato de 12 horas (opcional)
+  };
+
+  // Formatear la fecha en español
+  const formatter = new Intl.DateTimeFormat('es-PE', options);
+  const fechaFormateada = formatter.format(date);
+
+  // Mostrar la fecha en el elemento HTML
+  document.getElementById(id).innerHTML = fechaFormateada;
+}
+
+function PressButton(id){
+  const data=!document.getElementById("hwo"+id).checked?1:0;
+  fetch(ip_ss+"/api/data", {
+    method: 'POST',
+    body: JSON.stringify({button:id,data:data}),
+    headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => mostrarToast("Control "+(data?"activado":"desactivado")))
+    .catch(error => {
+      errorToast("Error en la solicitud");
+    })
+    ;
+      //document.getElementById(id+"C").style.background  = d=="1"?"green":"red";
+  
+}
+function Calibracion() {
+  var botton = document.getElementById("nSelect-calibracion").value;
+  var data = document.getElementById("calibracion-input").value;
+
+  let floatValue = parseFloat(data);
+  fetch(ip_ss+"/api/set", {
+    method: 'POST',
+    body: JSON.stringify({button:botton,data:parseInt(floatValue*100)}),
+    headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => mostrarToast("Seteo de dato  correctamente"))
+    .catch(error => {
+      errorToast("Error en la solicitud");
+    })
+    ;
+
+  // Aquí puedes agregar el código para enviar los valores a tu ESP32 o realizar otras acciones
+}
+
+function Fecha(id){
+  const s=document.getElementById("fecha").value
+    var dt = new Date(s)
+    console.log(dt.getTime())
+
+  fetch(ip_ss+"/api/set", {
+    method: 'POST',
+    body: JSON.stringify({button:id,data:dt/1000}),
+    headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => mostrarToast("Fecha cambiada correctamente"))
+    .catch(error => {
+      errorToast("Error en la solicitud");
+    })
+    ;
+      //document.getElementById(id+"C").style.background  = d=="1"?"green":"red";
+  
+}
+
+function Restart(button){
+  fetch(ip_ss+"/api/restart", {
+    method: 'POST',
+    body: JSON.stringify({button,data:"0"}),
+    headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => mostrarToast("Reiniciando..",3000))
+    .catch(error => {
+      errorToast("Error en la solicitud");
+    })
+    ;
+      //document.getElementById(id+"C").style.background  = d=="1"?"green":"red";
+  
+}
+
+function mostrarToast(mensaje, duracion = 1000) {
+    const toast = document.getElementById('toast');
+    toast.textContent = mensaje;
+    toast.className = 'toast-visible';
+
+    // Ocultar después de la duración
+    setTimeout(() => {
+        toast.className = 'toast-hidden';
+    }, duracion);
+}
+
+function errorToast(mensaje, duracion = 1000) {
+  const toast = document.getElementById('toast');
+  toast.textContent = mensaje;
+  toast.className = 'toast-visible-error';
+
+  // Ocultar después de la duración
+  setTimeout(() => {
+      toast.className = 'toast-hidden';
+  }, duracion);
+}
+
+setInterval(function(){
+  switch (btn){
+      case 0:
+          if(cnt==5){
+              cnt=0
+              // monitoreo(dat)
+              fetch(ip_ss+"/monitoreo", {
+                  method: 'GET',
+                  //mode: "no-cors", // no-cors, *cors, same-origin
+                  headers: {'Content-Type': 'application/json'}
+                  })
+                  .then(response => response.json())
+                  .then(response => {offline=false;monitoreo(response)})
+                  .catch(error => {
+                    offline=true;
+                  })
+                  ;
+              }
+          cnt=cnt+1
+          break;
+      case 1:
+          if(click){
+              fetch(ip_ss+"/params", {
+                  method: 'GET',
+                  //mode: "no-cors", // no-cors, *cors, same-origin
+                  headers: {'Content-Type': 'application/json'}
+                  })
+                  .then(response => response.json())
+                  .then(response => params(response));
+              click=false
+          }
+          break;
+      case 2:
+          console.log("el boton es 2");
+          break;
+      case 3:
+          if(click){
+              fetch(ip_ss+"/params", {
+                  method: 'GET',
+                  //mode: "no-cors", // no-cors, *cors, same-origin
+                  headers: {'Content-Type': 'application/json'}
+                  })
+                  .then(response => response.json())
+                  .then(response => params(response));
+              click=false
+          }
+          break;
+      case 4:
+          if(cnt==10){
+              cnt=0
+              fetch(ip_ss+"/energia", {
+                  method: 'GET',
+                  //mode: "no-cors", // no-cors, *cors, same-origin
+                  headers: {'Content-Type': 'application/json'}
+                  })
+                  .then(response => response.json())
+                  .then(response => modbus(response));
+          }
+          cnt=cnt+1
+          break;
+      default:
+          //console.log("nunguno");
+  }
+
+}, 500);
+
+setInterval(function(){
+  let color=offline?"#ff9800":"#0cb517"
+  const s = new Date();
+  if(s.getSeconds()%2==0){color=offline?"#cb3f13":"#027209"}
+  document.getElementById("online").style.background = color;
+}, 1000);
+
+function openCity(evt, cityName) {
+  var i, tabcontent, tablinks;
+  tabcontent = document.getElementsByClassName("tabcontent");
+  for (i = 0; i < tabcontent.length; i++) {
+    tabcontent[i].style.display = "none";
+  }
+  tablinks = document.getElementsByClassName("tablinks");
+  for (i = 0; i < tablinks.length; i++) {
+    tablinks[i].className = tablinks[i].className.replace(" active", "");
+  }
+  document.getElementById(cityName).style.display = "block";
+  evt.currentTarget.className += " active";
+}
+
+function toggleMenu() {
+  const menu = document.querySelector('.menu');
+  menu.classList.toggle('active');
+}
+
+var objeto_monitoreo=[
+  {nm:"Piloto ColdSmart Gilat 2024",stp:0,tp:0,en:true,u:"°C"},
+
+  {nm:"AA 1",stp:4,tp:1,en:true,u:"°C"},
+  {nm:"AA 2",stp:4,tp:2,en:true,u:"°C"},
+  {nm:"BPS ",stp:4,tp:5,en:true,u:"°C"},
+  {nm:"AT",stp:4,tp:4,en:true,u:"°C"},
+
+  {nm:"T. Operación 1",c:"#1d7a91",stp:1,tp:1,en:true,u:"°C"},
+  {nm:"T. Operación 2",c:"#ff5722",stp:1,tp:2,en:true,u:"°C"},
+  {nm:"T. Inyección 1",c:"#ad3724",stp:1,tp:3,en:true,u:"°C"},
+  {nm:"T. Inyección 2",c:"#9c27b6",stp:1,tp:4,en:true,u:"°C"},
+  {nm:"H. Gestor",c:"#0b3682",stp:1,tp:5,en:true,u:"%"},
+  {nm:"T. Gestor",c:"#38ba3c",stp:1,tp:6,en:true,u:"°C"},
+
+  {nm:"High Temp.",stp:2,tp:7,en:true,u:"°C"},
+  {nm:"Bypass",stp:2,tp:8,en:false,u:"°C"},
+  {nm:"Secuencia",stp:3,tp:9,en:true,u:""},
+
+  {nm:"Corriente AA1",c:"#d4002b",stp:1,tp:10,en:true,u:"A"},
+  {nm:"Corriente AA2",c:"#0c0980",stp:1,tp:11,en:true,u:"A"},
+  //{nm:"IT",c:"#343a40",stp:1,tp:12,en:false,u:"A"},
+  {nm:"VRS",c:"#d4002b",stp:1,tp:13,en:true,u:"V"},
+  {nm:"VST",c:"#0c0980",stp:1,tp:14,en:true,u:"V"},
+  {nm:"VRT",c:"#343a40",stp:1,tp:15,en:true,u:"V"},
+]
+
+  //{s1,s1,s1,s1,}    °C es unicad de centigrados
+
+function Sensor(n){
+  if (n.stp==1){
+    return (`
+      <div class="card">
+          <span>`+n.nm+`</span> 
+          
+          <div style="display: flex;">
+          <p><b id="i`+n.tp+`"> -- </b></p><p>`+n.u+`</p>
+          </div> 
+          <div id="gaugei`+n.tp+`" class="gauge" style="width: 120px; --rotation:0deg; --color:`+n.c+`; --background:#e9ecef;">
+            <div class="percentage"></div>
+            <div class="mask"></div>
+            <span class="value">.</span>
+          </div> 
+      </div>`)
+  }
+  else if (n.stp==2){
+    return (`
+      <div class="card">
+          <span>`+n.nm+`</span> 
+          <p id="i`+n.tp+`"> -- </p>
+          <div class="content-iot">
+            <div class="status_in" id="ci`+n.tp+`"></div>
+          </div>
+      </div>`)
+  }
+  else if (n.stp==3){
+    return (`
+      <div class="card">
+        <span>`+n.nm+`</span>  
+        <div class="content-iot">
+          <p class="number_in" id="i`+n.tp+`"> - </p>
+        </div>
+      </div>  `)
+  }
+  else if (n.stp==4)
+    return (`
+    <div class="card">
+      <span>`+n.nm+`</span> 
+      <p id="o`+n.tp+`"> -- </p>
+      <div class="content-iot">
+        <label class="switch"   onclick="PressButton('`+n.tp+`')" >
+          <input type="checkbox" id="hwo`+n.tp+`" disabled>
+          <span class="slider round"></span>
+           
+        </label>
+      </div>
+    </div>`)
+  else return (``)
+}
+
+function subtyoe(n,subtype,k){
+  if(n>=1  && n<=4)return(`<select  class="text-input" value ="`+subtype+`" id="config_subtype`+k+`" >
+      <option `+(subtype==1?"selected": "")+` value="1">PT100</option>
+      <option `+(subtype==2?"selected": "")+` value="2">ANIEGO</option>
+      <option `+(subtype==3?"selected": "")+` value="3">INPUT_1</option>
+      <option `+(subtype==4?"selected": "")+` value="4">INPUT_0</option>
+  </select>`)
+  else if(n>=5  && n<=9)return  (`<select class="text-input" value ="`+subtype+`"  id="config_subtype`+k+`">
+          <option `+(subtype==1?"selected": "")+` value="1">T_D</option>
+          <option `+(subtype==2?"selected": "")+` value="2">H_H</option>
+          <option `+(subtype==3?"selected": "")+` value="3">INPUT_1</option>
+          <option `+(subtype==4?"selected": "")+` value="4">INPUT_0</option>
+      </select>`)
+      else if(n>=51  && n<=54)return  (`<select class="text-input" value ="`+subtype+`"  id="config_subtype`+k+`">
+      <option `+(subtype==1?"selected": "")+` value="1">ALARMA/ON</option>
+      <option `+(subtype==2?"selected": "")+` value="2">ALARMA/Off</option>
+      <option `+(subtype==3?"selected": "")+` value="3">ARRANQUE/ON</option>
+      <option `+(subtype==4?"selected": "")+` value="4">ARRANQUE/Off</option>
+  </select>`)
+  else return  (`<select  class="text-input" value ="1" id="config_subtype`+k+`" hidden>
+  <option `+(subtype==1?"selected": "")+` value>PT100</option>
+</select>`)
+}
+
+function Tabla(n,k){
+  return (`
+  <tr>
+      <th scope="row"><div class="text-wrapper"><input class="text-input"  id="config_name`+k+`" value="`+n.nm+`"></th>
+      <td><div class="text-wrapper"><select class="text-input" name="Control" id="config_hw`+k+`"  `+(n.tp==0?"hidden":"")+` value="`+n.tp+`" onchange="change_subtype('`+k+`')" >
+          <option `+(n.tp==1?"selected": "")+` value="1">In 1</option>
+          <option `+(n.tp==2?"selected": "")+` value="2">In 2</option>
+          <option `+(n.tp==3?"selected": "")+` value="3">In 3</option>
+          <option `+(n.tp==4?"selected": "")+` value="4">In 4</option>
+          <option `+(n.tp==5?"selected": "")+` value="5">In 5</option>
+          <option `+(n.tp==6?"selected": "")+` value="6">In 6</option>
+          <option `+(n.tp==7?"selected": "")+` value="7">In 7</option>
+          <option `+(n.tp==8?"selected": "")+` value="8">In 8</option>
+          <option `+(n.tp==9?"selected": "")+` value="9">In 9</option>
+          <option `+(n.tp==51?"selected": "")+` value="51">Out 1</option>
+          <option `+(n.tp==52?"selected": "")+` value="52">Out 2</option>
+          <option `+(n.tp==53?"selected": "")+` value="53">Out 3</option>
+          <option `+(n.tp==54?"selected": "")+` value="54">Out 4</option>
+      </select></div></td>
+      <td><div class="text-wrapper">`+subtyoe(n.tp,n.stp,k)+`</div></td>
+      <td><div class=" "><input class="text-input" type="checkbox" id="config_enabled`+k+`" `+(n.en?"checked":"")+` ></div></td>
+      <td><button class="button-input" onclick='Delete_control2(`+k+`)' class="inputbuton"> x</button></td>
+  </tr>`)
+}
+
+function DashboardGet(data){
+  console.log(data)
+  objeto_monitoreo=data.slice()
+  let html=``;
+  let html2=``;
+  data.map(function(item,k) {
+      html=html+Sensor(item);
+      html2=html2+Tabla(item,(k+1));
+
+  })
+  var capa = document.getElementById('dashboard_io');
+  capa.setAttribute('class', 'cards');
+  capa.innerHTML = html;
+
+  // entradas y salides momento stop
+  //var capa2 = document.getElementById('setuo_io');
+  //capa2.setAttribute('class', '');
+  //capa2.innerHTML = html2;
+
+  console.log("DashboardGet")
+  openCity(event, 'option1')
+  
+}
+
+function TablaConfig(name,value,k){
+  return (`
+  <tr>
+      <th scope="row">
+        <div>
+          <p class="">`+name+`</p>
+        </div>
+      </th>
+      <th >
+        <div class="text-wrapper">
+          <input class="text-input"  id="`+k+`" value="`+value+`">
+        </div>
+      </th>
+  </tr>`)
+}
+
+function DashboardConfig(data){
+  let html2=``;
+  
+  html2=html2+TablaConfig("IP",data.ip.join("."),"ip");
+  html2=html2+TablaConfig("GATEWAY",data.gateway.join("."),"gateway");
+  html2=html2+TablaConfig("SUBNET",data.subnet.join("."),"subnet");
+  html2=html2+TablaConfig("MAC",data.mac.join(":"),"mac");
+  var capa2 = document.getElementById('config_io');
+  capa2.setAttribute('class', '');
+  capa2.innerHTML = generarTable(html2,"Configuracion de red")
+
+  html2=""; 
+  html2=html2+TablaConfig("Comunidad SNMP",data.snmpcommunity,"snmpcommunity"); 
+  html2=html2+TablaConfig("Nombre del equipo",data.device,"device");  
+  //html2=html2+TablaConfig("Puerto SNMP",data.snmpport,"snmpport"); 
+  capa2.innerHTML = capa2.innerHTML+generarTable(html2,"Configuracion snmp")
+
+  html2=""; 
+  html2=html2+TablaConfig("Setpoint Minimo",data.setpoints[0],"setpoints1"); 
+  html2=html2+TablaConfig("Setpoint Maximo",data.setpoints[1],"setpoints2"); 
+  html2=html2+TablaConfig("Setpoint AT",data.setpoints[2],"setpoints3"); 
+  html2=html2+TablaConfig("Setpoint BPS",data.setpoints[3],"setpoints4");  
+  //html2=html2+TablaConfig("Seciencia actual",data.setpoints[3],"setpoints4");   
+  capa2.innerHTML = capa2.innerHTML+generarTable(html2,"Configuracion gestor")
+  
+
+  data.device?document.getElementById("name").innerHTML = data.device:"Equipo Coldsmart";  
+  
+  
+}
+function getTimeOffline(s) {
+  var h = Math.floor(s / 3600);
+  if(h!=0) h = (h < 10)? '' + h+ 'h': h+ 'h';
+  var m = Math.floor((s / 60) % 60);
+  if(m!=0) m = (m < 10)? '' + m + 'm': m + 'm';
+  var S = Math.floor((s) % 60);
+  S = (S < 10)? '' + S +'s': S+'s';
+  return 'Tiempo de actividad: '+ (h?h:'')+' '+(m?m:'')+' '+(S?S:'');
+}
+function generarTable(data,name){
+  return `
+      <table><thead><tr><th>`+name+`</th> </tr> </thead><tbody>`+data+`</tbody> </table>`;
+}
+
+ConfigGet();
+
+DashboardGet(objeto_monitoreo);
+
+function Add_form(id){
+  let inputElement = document.getElementById(id).value;
+  config_data[id]=inputElement;
+  //console.log(id,inputElement)
+}
+
+function Add_form2(id){
+  let inputElement = document.getElementById(id).value;
+  let ipArrayNumber = inputElement.split(".").map(elemento => parseInt(elemento));
+  config_data[id]=ipArrayNumber;
+  //console.log(id,ipArrayNumber)
+}
+
+function Save_cambios2(){
+  Add_form("snmpcommunity");
+  Add_form("device");
+  // Add_form("snmpport"); 
+  Add_form2("ip");
+  Add_form2("gateway");
+  Add_form2("subnet");
+
+  let set1 = parseFloat(document.getElementById("setpoints1").value);
+  let set2 = parseFloat(document.getElementById("setpoints2").value);
+  let set3 = parseFloat(document.getElementById("setpoints3").value);
+  let set4 = parseFloat(document.getElementById("setpoints4").value);
+  config_data["setpoints"]=[set1,set2,set3,set4];
+  console.log(config_data);
+  fetch(ip_ss+"/config", {
+    method: 'POST',
+    body: JSON.stringify(config_data),
+    headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => mostrarToast("datos guardados correctamente"))
+    .catch(error => {
+      errorToast("Error en la solicitud");
+    })
+    ;
+  
+}
+
+function ConfigGet(){
+  //alert("aqui")
+  fetch(ip_ss+"/config.json", {
+    method: 'GET',
+    //mode: "no-cors", // no-cors, *cors, same-origin
+    headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => response.json())
+    .then(response => {console.log(response);config_data=response;DashboardConfig(config_data);});
+  
+}
+  </script> 
+</body>
+</html>

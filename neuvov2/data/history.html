@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subir Firmware</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 90%; /* Asegura que el contenedor ocupe el 90% del ancho disponible */
+            max-width: 1000px; /* Agrega un ancho máximo para evitar que se expanda demasiado */
+        }
+
+        .grafica-container {
+            width: 100%; /* Asegura que el contenedor de la gráfica ocupe el 100% del ancho del .container */
+        }
+
+        .body-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin-top: 30px;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 90%;
+        }
+
+        input[type="file"] {
+            margin: 15px 0;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .top-bar {
+            background: #ffffff;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .top-bar h1 {
+            font-size: 1.5rem;
+            margin: 0;
+        }
+
+        #status {
+            margin-top: 20px;
+            min-height: 20px;
+            font-weight: bold;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 5px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .response-box {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            white-space: pre-wrap;
+        }
+
+        #alertasTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        #alertasTable th, #alertasTable td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        #alertasTable th {
+            background-color: #f2f2f2;
+            color: #0056b3;
+            font-weight: bold;
+        }
+
+        #alertasTable tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+      <div class="logo">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="body_1" width="165" height="31" preserveAspectRatio="xMidYMid meet" zoomAndPan="magnify" version="1.0" contentScriptType="text/ecmascript" contentStyleType="text/css">
+  
+          <g transform="matrix(1.3333334 0 0 1.3333334 0 0)">
+            <a href="/">
+              <image x="0" y="0"  xlink:href="data:image/png;base64,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" preserveAspectRatio="none" width="123.75" height="23.25" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>
+            </a>
+            </g>
+          </svg>
+      </div>
+    </div>
+    <div class="body-content">
+        <div class="container">
+          <h2> Historial de datos </h2>
+          <div class="grafica-container">
+            <label for="nSelect">Seleccionar valor  a visualizar:</label>
+            <select id="nSelect">
+                <option value="4">Temperatura 1</option>
+                <option value="5">Temperatura 2</option>
+                <option value="6">Temperatura 3</option>
+                <option value="7" selected>Temperatura 4</option>
+                <option value="8">Temperatura sec</option>
+                <option value="9">Humedad sec</option>
+                <option value="13">Tension RS</option>
+                <option value="14">Tension ST</option>
+                <option value="15">Tension RT</option>
+                <option value="16">Corriente R</option>
+                <option value="17">Corriente S</option>
+                <option value="18">Corriente T</option>
+            </select>
+            
+        </div>
+        <canvas id="miGrafica"></canvas>
+        </div>
+    </div>
+    <script>
+      let response=null
+      document.getElementById('nSelect').addEventListener('change', actualizarGrafica);
+
+      async function obtenerDatosGrafica(n) {
+          try {
+            if(response==null){
+             response = await fetch('/history.csv');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+              }
+                const csvData = await response.text();
+                const lineas = csvData.split('\n');
+              const resultados = [];
+
+              lineas.forEach(linea => {
+                  const partes = linea.split('|');
+                  if (partes.length > n) {
+                      resultados.push(partes[n]);
+                  }
+              });
+
+              return resultados;
+          } catch (error) {
+              console.error('Error al obtener los datos:', error);
+              return []; // Retornar un arreglo vacío en caso de error
+          }
+      }
+
+      const canvas = document.getElementById('miGrafica');
+      const ctx = canvas.getContext('2d');
+      let anchoPunto = 0;
+      let maximoDato = 0;
+      let minimoDato = 0;
+
+      function dibujarGrafica(datos) {
+          canvas.width = canvas.offsetWidth;
+          canvas.height = 400;  
+          
+          anchoPunto = canvas.width / (datos.length - 1);
+          maximoDato = Math.max(...datos);
+          minimoDato = Math.min(...datos);
+
+          if (maximoDato === minimoDato) {
+              maximoDato = minimoDato + 1; // Evitar división por cero
+          }
+
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Dibuja los ejes X e Y
+          ctx.beginPath();
+          ctx.moveTo(50, canvas.height - 50); // Inicio del eje X
+          ctx.lineTo(canvas.width - 20, canvas.height - 50); // Fin del eje X
+          ctx.moveTo(50, canvas.height - 50); // Inicio del eje Y
+          ctx.lineTo(50, 20); // Fin del eje Y
+          ctx.strokeStyle = 'black';
+          ctx.stroke();
+
+          // Agrega marcas de graduación y etiquetas de valor (eje Y)
+          const numMarcasY = 5; // Número de marcas en el eje Y
+          const espacioY = (canvas.height - 100) / numMarcasY;
+          const rangoY = maximoDato - minimoDato;
+          for (let i = 0; i <= numMarcasY; i++) {
+              const y = canvas.height - 50 - i * espacioY;
+              const valorY = minimoDato + (i / numMarcasY) * rangoY;
+              ctx.beginPath();
+              ctx.moveTo(45, y);
+              ctx.lineTo(55, y);
+              ctx.stroke();
+              ctx.fillText(valorY.toFixed(2), 10, y + 5);
+          }
+
+          // Agrega marcas de graduación y etiquetas de valor (eje X)
+          const numMarcasX = datos.length - 1;
+          const espacioX = (canvas.width - 100) / numMarcasX;
+          for (let i = 0; i <= numMarcasX; i++) {
+              const x = 50 + i * espacioX;
+              ctx.beginPath();
+              ctx.moveTo(x, canvas.height - 45);
+              ctx.lineTo(x, canvas.height - 55);
+              ctx.stroke();
+              ctx.fillText(i, x - 5, canvas.height - 20);
+          }
+
+          // Dibuja la gráfica de curvas
+          ctx.beginPath();
+          datos.forEach((dato, index) => {
+              const x = 50 + index * anchoPunto;
+              const y = canvas.height - 50 - ((dato - minimoDato) / (maximoDato - minimoDato)) * (canvas.height - 100);
+
+              if (index === 0) {
+                  ctx.moveTo(x, y);
+              } else {
+                  const anteriorX = 50 + (index - 1) * anchoPunto;
+                  const anteriorY = canvas.height - 50 - ((datos[index - 1] - minimoDato) / (maximoDato - minimoDato)) * (canvas.height - 100);
+                  const controlX1 = (anteriorX + x) / 2;
+                  const controlY1 = anteriorY;
+                  const controlX2 = (anteriorX + x) / 2;
+                  const controlY2 = y;
+                  ctx.bezierCurveTo(controlX1, controlY1, controlX2, controlY2, x, y);
+              }
+          });
+
+          ctx.strokeStyle = 'blue';
+          ctx.stroke();
+      }
+
+      async function actualizarGrafica() {
+          const n = parseInt(document.getElementById('nSelect').value);
+          const datosGrafica = await obtenerDatosGrafica(n);
+          dibujarGrafica(datosGrafica.map(Number));
+      }
+
+      actualizarGrafica();
+      window.addEventListener('resize', actualizarGrafica);
+  </script>
+</body>
+</html>

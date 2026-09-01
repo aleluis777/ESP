@@ -1,0 +1,9 @@
+## IDF Component Manager Manifest File
+dependencies:
+  espressif/cjson:
+    version: '>=1.7.0,<2.0.0'
+  espressif/ethernet_init:
+    version: ^1.3.0
+  esp-idf-lib/ds1307: '*'
+  esp-idf-lib/dht: '*'
+  esp-idf-lib/ads111x: '*'
