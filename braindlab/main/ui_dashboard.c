@@ -99,9 +99,9 @@ static void crear_barra_superior(lv_obj_t *parent)
     lv_obj_set_flex_align(grupo_estado, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(grupo_estado, 6, 0);
 
-    ui.led_estado_sistema = crear_led(grupo_estado, COLOR_VERDE, 10);
+    ui.led_estado_sistema = crear_led(grupo_estado, COLOR_GRIS_APAGADO, 10);
     ui.lbl_estado_sistema = lv_label_create(grupo_estado);
-    lv_label_set_text(ui.lbl_estado_sistema, "Sistema OK");
+    lv_label_set_text(ui.lbl_estado_sistema, "Esperando datos...");
     lv_obj_set_style_text_color(ui.lbl_estado_sistema, COLOR_TEXTO_PRINC, 0);
 
     // Grupo derecho: hora + fecha
@@ -113,11 +113,11 @@ static void crear_barra_superior(lv_obj_t *parent)
     lv_obj_set_style_pad_column(grupo_fecha_hora, 18, 0);
 
     ui.lbl_hora = lv_label_create(grupo_fecha_hora);
-    lv_label_set_text(ui.lbl_hora, "10:30:45");
+    lv_label_set_text(ui.lbl_hora, "--:--:--");
     lv_obj_set_style_text_color(ui.lbl_hora, COLOR_TEXTO_PRINC, 0);
 
     ui.lbl_fecha = lv_label_create(grupo_fecha_hora);
-    lv_label_set_text(ui.lbl_fecha, "10/05/2025");
+    lv_label_set_text(ui.lbl_fecha, "--/--/----");
     lv_obj_set_style_text_color(ui.lbl_fecha, COLOR_TEXTO_PRINC, 0);
 }
 
@@ -155,15 +155,15 @@ static void detener_anim_viento(ui_dash_aire_t *aire)
     }
 }
 
-// Boton ON/OFF: alterna el estado y prende/apaga el efecto de viento +
-// atenua el icono del equipo. Es un toggle solo visual (no hay dato real
-// de encendido todavia, ver comentario en ui_dashboard.h).
-static void toggle_power_cb(lv_event_t *e)
+// Aplica el estado ON/OFF (colores, icono, viento animado) -- compartido
+// entre el toggle visual del boton y ui_dashboard_aire_set_encendido() (esta
+// ultima la usa uart_braindlab.c para aplicar el estado real que llega por
+// UART, ver ui_dashboard.h).
+void ui_dashboard_aire_set_encendido(ui_dash_aire_t *aire, bool encendido)
 {
-    ui_dash_aire_t *aire = (ui_dash_aire_t *)lv_event_get_user_data(e);
-    aire->encendido = !aire->encendido;
+    aire->encendido = encendido;
 
-    if (aire->encendido) {
+    if (encendido) {
         lv_obj_set_style_bg_color(aire->btn_power, COLOR_VERDE, 0);
         lv_label_set_text(aire->lbl_btn_power, LV_SYMBOL_POWER " ON");
         lv_obj_set_style_bg_color(aire->led_estado, COLOR_VERDE, 0);
@@ -179,6 +179,17 @@ static void toggle_power_cb(lv_event_t *e)
         lv_obj_set_style_image_opa(aire->img_unidad, LV_OPA_50, 0);
         detener_anim_viento(aire);
     }
+}
+
+// Boton ON/OFF: alterna el estado visualmente de inmediato (respuesta
+// rapida al toque); uart_braindlab.c se encarga de mandar el pedido real por
+// UART (ver braindlab.c, donde se registra el callback que llama a
+// uart_braindlab_enviar_control_aire()) y de corregir la vista si la
+// automatica termina pisando el pedido (llega en el proximo ESTADO_UPDATE).
+static void toggle_power_cb(lv_event_t *e)
+{
+    ui_dash_aire_t *aire = (ui_dash_aire_t *)lv_event_get_user_data(e);
+    ui_dashboard_aire_set_encendido(aire, !aire->encendido);
 }
 
 static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numero,
@@ -281,15 +292,15 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     // Boton ON/OFF
     aire->btn_power = lv_button_create(card);
     lv_obj_set_size(aire->btn_power, LV_PCT(100), 32);
-    lv_obj_set_style_bg_color(aire->btn_power, COLOR_VERDE, 0);
     lv_obj_set_style_radius(aire->btn_power, 6, 0);
     aire->lbl_btn_power = lv_label_create(aire->btn_power);
-    lv_label_set_text(aire->lbl_btn_power, LV_SYMBOL_POWER " ON");
     lv_obj_center(aire->lbl_btn_power);
 
-    // Arranca encendido: viento animado desde el primer dibujado.
-    aire->encendido = true;
-    iniciar_anim_viento(aire);
+    // Arranca APAGADO/gris -- no hay dato real todavia (recien llega con el
+    // primer ESTADO_UPDATE por UART, ver uart_braindlab.c). Antes arrancaba
+    // "encendido" a proposito visualmente, pero eso mostraba un estado
+    // inventado antes de tener el dato real.
+    ui_dashboard_aire_set_encendido(aire, false);
     lv_obj_add_event_cb(aire->btn_power, toggle_power_cb, LV_EVENT_CLICKED, aire);
 }
 
@@ -302,10 +313,14 @@ static void crear_fila_aires(lv_obj_t *parent)
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila, 10, 0);
 
-    crear_tarjeta_aire(fila, &ui.aires[0], 1, "Oficina 1", "24.0", "24.0", "Auto");
-    crear_tarjeta_aire(fila, &ui.aires[1], 2, "Oficina 2", "23.0", "23.0", "Auto");
-    crear_tarjeta_aire(fila, &ui.aires[2], 3, "Sala Reuniones", "22.0", "22.0", "Auto");
-    crear_tarjeta_aire(fila, &ui.aires[3], 4, "Servidor", "20.0", "20.0", "Auto");
+    // "temp"/"set"/"velocidad" quedan en "--" -- no hay dato real de setpoint
+    // ni velocidad por unidad en el protocolo (solo ON/OFF, ver
+    // uart_braindlab.c), asi que nunca se van a actualizar solos. Mostrar un
+    // numero fijo ahi seria un dato inventado.
+    crear_tarjeta_aire(fila, &ui.aires[0], 1, "Aire 1", "--", "--", "--");
+    crear_tarjeta_aire(fila, &ui.aires[1], 2, "Aire 2", "--", "--", "--");
+    crear_tarjeta_aire(fila, &ui.aires[2], 3, "Aire 3", "--", "--", "--");
+    crear_tarjeta_aire(fila, &ui.aires[3], 4, "Aire 4", "--", "--", "--");
 }
 
 // ---------- Columna izquierda ----------
@@ -370,10 +385,10 @@ static void crear_panel_sensores(lv_obj_t *parent)
     lv_obj_set_flex_flow(fila2, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila2, 8, 0);
 
-    crear_tarjeta_sensor(fila1, &ui.sensores[0], "T1 Oficina 1", "23.6\xC2\xB0" "C");
-    crear_tarjeta_sensor(fila1, &ui.sensores[1], "T2 Oficina 2", "22.8\xC2\xB0" "C");
-    crear_tarjeta_sensor(fila2, &ui.sensores[2], "T3 Sala Reuniones", "21.7\xC2\xB0" "C");
-    crear_tarjeta_sensor(fila2, &ui.sensores[3], "T4 Servidor", "19.8\xC2\xB0" "C");
+    crear_tarjeta_sensor(fila1, &ui.sensores[0], "T1", "--");
+    crear_tarjeta_sensor(fila1, &ui.sensores[1], "T2", "--");
+    crear_tarjeta_sensor(fila2, &ui.sensores[2], "T3", "--");
+    crear_tarjeta_sensor(fila2, &ui.sensores[3], "T4", "--");
 }
 
 static void crear_panel_humedad(lv_obj_t *parent)
@@ -387,14 +402,14 @@ static void crear_panel_humedad(lv_obj_t *parent)
     lv_obj_set_flex_align(card, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     ui.lbl_humedad = lv_label_create(card);
-    lv_label_set_text(ui.lbl_humedad, "55 %RH");
+    lv_label_set_text(ui.lbl_humedad, "-- %RH");
     lv_obj_set_style_text_color(ui.lbl_humedad, COLOR_VALOR_AZUL, 0);
     lv_obj_set_style_text_font(ui.lbl_humedad, &lv_font_montserrat_24, 0);
 }
 
 // ---------- Alarmas activas ----------
 
-static void crear_fila_alarma(lv_obj_t *parent, const char *codigo, const char *desc, lv_color_t color)
+static lv_obj_t *crear_fila_alarma(lv_obj_t *parent, const char *codigo, const char *desc, lv_color_t color)
 {
     lv_obj_t *fila = lv_obj_create(parent);
     lv_obj_set_style_bg_color(fila, lv_color_hex(0x1A1420), 0);
@@ -436,6 +451,8 @@ static void crear_fila_alarma(lv_obj_t *parent, const char *codigo, const char *
     lv_obj_t *lbl_chevron = lv_label_create(fila);
     lv_label_set_text(lbl_chevron, LV_SYMBOL_RIGHT);
     lv_obj_set_style_text_color(lbl_chevron, COLOR_TEXTO_SEC, 0);
+
+    return fila;
 }
 
 static void crear_panel_alarmas(lv_obj_t *parent)
@@ -451,8 +468,12 @@ static void crear_panel_alarmas(lv_obj_t *parent)
     lv_obj_set_flex_flow(ui.cont_alarmas, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(ui.cont_alarmas, 8, 0);
 
-    crear_fila_alarma(ui.cont_alarmas, "AT", "Alta Temperatura", COLOR_ROJO);
-    crear_fila_alarma(ui.cont_alarmas, "BPS", "Bypass de Aires", COLOR_NARANJA);
+    ui.fila_alarma_at  = crear_fila_alarma(ui.cont_alarmas, "AT", "Alta Temperatura", COLOR_ROJO);
+    ui.fila_alarma_bps = crear_fila_alarma(ui.cont_alarmas, "BPS", "Bypass de Aires", COLOR_NARANJA);
+    // Arrancan ocultas -- uart_braindlab.c las muestra segun el estado real
+    // (alarma_at/bypass_activo) que llegue por UART.
+    lv_obj_add_flag(ui.fila_alarma_at, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui.fila_alarma_bps, LV_OBJ_FLAG_HIDDEN);
 }
 
 // ---------- Columna derecha ----------

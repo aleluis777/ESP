@@ -30,14 +30,19 @@ esp_err_t salidas_init(void)
 
     gpio_reset_pin(PIN_BP_S);
     gpio_set_direction(PIN_BP_S, GPIO_MODE_OUTPUT);
-    gpio_set_level(PIN_BP_S, 1); // bypass no solicitado (activo en bajo)
+    // HIGH = bypass activo (logica invertida a proposito, fail-safe -- ver
+    // salidas_braindlab.h). Arranca en este estado hasta que
+    // tarea_climatizacion haga su primera vuelta y lo corrija segun la
+    // temperatura real; es la misma ventana de "fail-safe hasta que el
+    // control tome la posta" que ya existe en el resto del sistema.
+    gpio_set_level(PIN_BP_S, 1);
 
     // Solo entrada, sin pull interno disponible en este GPIO -- el pull-up
     // externo (R26, 100K) ya esta en la placa (HARDWARE.md §7.2).
     gpio_reset_pin(PIN_BPS_STATUS);
     gpio_set_direction(PIN_BPS_STATUS, GPIO_MODE_INPUT);
 
-    ESP_LOGI(TAG, "Salidas inicializadas: AA1-4=LOW, OUT_AT=LOW, BP_S=HIGH (sin bypass)");
+    ESP_LOGI(TAG, "Salidas inicializadas: AA1-4=LOW, OUT_AT=LOW, BP_S=HIGH (bypass fail-safe activo hasta la 1ra vuelta de control)");
     return ESP_OK;
 }
 
@@ -57,12 +62,14 @@ void salidas_set_alarma_at(bool activa)
 
 void salidas_set_bypass_solicitado(bool solicitado)
 {
-    // Activo en BAJO: pedir bypass = nivel 0.
-    gpio_set_level(PIN_BP_S, solicitado ? 0 : 1);
+    // Logica invertida a proposito (fail-safe, confirmado contra el
+    // esquematico) -- ver salidas_braindlab.h: HIGH = bypass activo.
+    gpio_set_level(PIN_BP_S, solicitado ? 1 : 0);
 }
 
 bool salidas_leer_bypass_activo(void)
 {
-    // Activo en BAJO.
-    return gpio_get_level(PIN_BPS_STATUS) == 0;
+    // Logica invertida a proposito, igual que BP_S -- HIGH = bypass
+    // fisicamente activo.
+    return gpio_get_level(PIN_BPS_STATUS) == 1;
 }

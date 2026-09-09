@@ -1,13 +1,12 @@
 # Etapa actual: config + salidas (reles) + maquina de estados de
-# climatizacion, sin sensores reales todavia (ver sensores_temp.c: modulo
-# simulado a proposito, ver comentario ahi) y sin red/servidor web/UART a la
-# pantalla/RS-485 -- eso se suma en los proximos pasos, ver PENDIENTES en el
-# README de este proyecto.
+# climatizacion + sensores reales (ADS1115 en sensores_temp.c, DS1307,
+# AM2301A) + red/servidor web + UART hacia la pantalla braindlab. Falta
+# RS-485 -- ver PENDIENTES en el README de este proyecto.
 idf_component_register(SRCS "app_main.c" "config_braindlab.c" "salidas_braindlab.c"
                              "climatizacion.c" "sensores_temp.c"
                              "red_eth.c" "servidor_web.c"
-                             "rtc_braindlab.c" "sensor_gestor.c"
-                       REQUIRES esp_driver_gpio spiffs esp_timer
+                             "rtc_braindlab.c" "sensor_gestor.c" "uart_pantalla.c"
+                       REQUIRES esp_driver_gpio esp_driver_uart spiffs esp_timer
                                 esp_eth esp_netif esp_event esp_http_server lwip
                                 app_update driver
                        INCLUDE_DIRS ".")

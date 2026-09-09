@@ -1,21 +1,23 @@
 // Esqueleto inicial de controlador_braindlab. Arma config + salidas (reles)
-// + la maquina de estados de climatizacion en un unico task, con lectura de
-// temperatura simulada (ver sensores_temp.c) hasta que el driver real del
-// ADS1115 este listo. Ethernet (W5500, red_eth.c) + servidor web
-// (servidor_web.c) ya estan conectados: sirven el sitio de ../web desde
-// SPIFFS "www" y publican el estado de climatizacion por WebSocket cada 2s
-// (mismo patron que controlador_labgeo) -- ver publicar_estado_ws() abajo.
-// RTC (DS1307, rtc_braindlab.c) y el sensor de gabinete (AM2301A,
-// sensor_gestor.c) ya estan leyendo de verdad -- fecha_hora/temp_gestor/
-// humedad_gestor en el JSON del WS son datos reales, no simulados.
+// + la maquina de estados de climatizacion en un unico task. Ethernet
+// (W5500, red_eth.c) + servidor web (servidor_web.c) ya estan conectados:
+// sirven el sitio de ../web desde SPIFFS "www" y publican el estado de
+// climatizacion por WebSocket cada 2s (mismo patron que controlador_labgeo)
+// -- ver publicar_estado_ws() abajo.
+// RTC (DS1307, rtc_braindlab.c), el sensor de gabinete (AM2301A,
+// sensor_gestor.c) y los 4 sensores de temperatura (ADS1115 "U2",
+// sensores_temp.c) ya estan leyendo de verdad -- fecha_hora/temp_gestor/
+// humedad_gestor/temperaturas en el JSON del WS son datos reales, no
+// simulados.
 //
 // PENDIENTE (no implementado todavia, ver conversacion / HARDWARE.md):
-//   - Lectura real de temperatura (sensores_temp.c, bloqueado por datos de
-//     hardware faltantes) -- ADS1115, falta el mapeo de canales.
 //   - MicroSD por SPI (comparte bus con el W5500) -- falta definir que pin
 //     sacrificar para su /CS, no queda ninguno libre.
-//   - UART hacia la pantalla braindlab (GPIO26=TX, GPIO25=RX, ver
-//     HARDWARE.md §14) -- protocolo todavia sin disenar.
+//   - UART hacia la pantalla braindlab (GPIO26=TX, GPIO39=RX -- GPIO25 quedo
+//     libre para el IRQ del W5500 en vez de esto, ver conversacion) ya
+//     implementado (uart_pantalla.c/protocolo_braindlab.h), mismo protocolo
+//     binario que controlador_labgeo<->blink pero con el payload propio de
+//     climatizacion. Falta escribir PROTOCOLO_UART_BRAINDLAB.md.
 //   - RS-485 / Modbus hacia el medidor de energia (GPIO33=TX, GPIO36=RX,
 //     GPIO32=EN_485) -- bloqueado por falta de modelo/mapa de registros del
 //     medidor.
@@ -42,6 +44,7 @@
 #include "servidor_web.h"
 #include "rtc_braindlab.h"
 #include "sensor_gestor.h"
+#include "uart_pantalla.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -59,6 +62,22 @@ static volatile bool s_bypass_manual_valor  = false;
 static volatile bool s_at_manual_activo = false;
 static volatile bool s_at_manual_valor  = false;
 
+// true si algun override manual (AA1-4, bypass o AT) esta vigente -- lo usan
+// publicar_estado_ws() (WS) y uart_pantalla_enviar_estado() (UART), mismo
+// dato por los dos canales.
+static bool hay_algun_override_manual(void)
+{
+    if (s_bypass_manual_activo || s_at_manual_activo) {
+        return true;
+    }
+    for (int i = 0; i < SALIDAS_NUM_AIRES; i++) {
+        if (s_aire_manual_activo[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Arma el mismo JSON que manda tarea_climatizacion por WS a cada vuelta del
 // loop (ver servidor_web.c) -- lo lee script.js en ../web/script.js.
 // 'salida_aplicada'/'bypass_aplicado' son los valores REALES que se
@@ -69,10 +88,7 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
                                 const bool salida_aplicada[4], bool bypass_aplicado, bool alarma_at_aplicada,
                                 const char *fecha_hora, bool gestor_ok, float temp_gestor, float humedad_gestor)
 {
-    bool modo_manual = s_bypass_manual_activo || s_at_manual_activo;
-    for (int i = 0; i < SALIDAS_NUM_AIRES && !modo_manual; i++) {
-        modo_manual = s_aire_manual_activo[i];
-    }
+    bool modo_manual = hay_algun_override_manual();
 
     char json[560];
     snprintf(json, sizeof(json),
@@ -154,8 +170,15 @@ static void tarea_climatizacion(void *arg)
 
         struct tm ahora = { 0 };
         char fecha_hora[24] = "----";
-        if (rtc_braindlab_leer(&ahora) == ESP_OK) {
+        bool rtc_ok = rtc_braindlab_leer(&ahora) == ESP_OK;
+        if (rtc_ok) {
             strftime(fecha_hora, sizeof(fecha_hora), "%Y-%m-%d %H:%M:%S", &ahora);
+        } else {
+            // Antes esto fallaba en silencio (rtc_braindlab_leer() solo
+            // devuelve el error, no loguea) -- a diferencia de
+            // sensores_temp_leer()/sensor_gestor_leer(), que si avisan cada
+            // vez que fallan. Se agrega el mismo criterio aca.
+            ESP_LOGW(TAG, "No se pudo leer el RTC -- se publica fecha_hora=\"----\"");
         }
 
         // Se cruzo un setpoint (cambio de ciclo) -- la automatica retoma el
@@ -183,6 +206,27 @@ static void tarea_climatizacion(void *arg)
 
         publicar_estado_ws(temperaturas, &estado, salida_aplicada, bypass_aplicado, alarma_at_aplicada,
                            fecha_hora, gestor_ok, temp_gestor, humedad_gestor);
+
+        // Mismo estado, pero por UART hacia la pantalla braindlab (ver
+        // uart_pantalla.c/protocolo_braindlab.h) -- anio=0 si no hay RTC
+        // disponible esta vuelta, mismo criterio que fecha_hora="----" arriba.
+        bool aire_manual_actual[SALIDAS_NUM_AIRES];
+        for (int i = 0; i < SALIDAS_NUM_AIRES; i++) {
+            aire_manual_actual[i] = s_aire_manual_activo[i];
+        }
+        uart_pantalla_enviar_estado(
+            (uint8_t)estado.ciclo, temperaturas, salida_aplicada, aire_manual_actual,
+            estado.indice_reserva, alarma_at_aplicada, s_at_manual_activo,
+            bypass_aplicado, s_bypass_manual_activo, salidas_leer_bypass_activo(),
+            hay_algun_override_manual(), red_eth_esta_conectado(),
+            gestor_ok, temp_gestor, humedad_gestor,
+            (uint32_t)(esp_timer_get_time() / 1000000LL),
+            rtc_ok ? (uint16_t)(ahora.tm_year + 1900) : 0,
+            rtc_ok ? (uint8_t)(ahora.tm_mon + 1) : 0,
+            rtc_ok ? (uint8_t)ahora.tm_mday : 0,
+            rtc_ok ? (uint8_t)ahora.tm_hour : 0,
+            rtc_ok ? (uint8_t)ahora.tm_min : 0,
+            rtc_ok ? (uint8_t)ahora.tm_sec : 0);
 
         if (red_eth_esta_conectado()) {
             ESP_LOGI(TAG, "Ethernet: conectado");
@@ -271,6 +315,27 @@ static void on_control_at(bool activa)
     ESP_LOGI(TAG, "control_at: OUT_AT forzado a mano a %s", activa ? "ON" : "OFF");
 }
 
+// POST /configurar_rtc: ajusta el DS1307. rtc_braindlab_ajustar() se
+// encarga de calcular tm_wday (dia de la semana) via mktime(), no hace
+// falta que este callback lo sepa.
+static void on_configurar_rtc(uint16_t anio, uint8_t mes, uint8_t dia, uint8_t hora, uint8_t minuto,
+                               uint8_t segundo)
+{
+    struct tm tiempo = {
+        .tm_year = anio - 1900,
+        .tm_mon = mes - 1,
+        .tm_mday = dia,
+        .tm_hour = hora,
+        .tm_min = minuto,
+        .tm_sec = segundo,
+    };
+
+    if (rtc_braindlab_ajustar(&tiempo) != ESP_OK) {
+        ESP_LOGE(TAG, "configurar_rtc: no se pudo ajustar el DS1307");
+    }
+    // El log de exito (con la fecha/hora aplicada) ya lo hace rtc_braindlab_ajustar().
+}
+
 // POST /control_automatico: cancela cualquier override vigente, la
 // automatica retoma el control de todo en el proximo ciclo.
 static void on_control_automatico(void)
@@ -321,8 +386,21 @@ void app_main(void)
         .on_control_bypass = on_control_bypass,
         .on_control_at = on_control_at,
         .on_control_automatico = on_control_automatico,
+        .on_configurar_rtc = on_configurar_rtc,
     };
     servidor_web_set_callbacks(web_cbs);
+
+    // Mismos callbacks que el servidor web -- la pantalla braindlab es un
+    // cliente mas del mismo mecanismo de override manual, solo que por UART
+    // en vez de HTTP (ver uart_pantalla.c/protocolo_braindlab.h).
+    uart_pantalla_callbacks_t uart_cbs = {
+        .on_control_aire = on_control_aire,
+        .on_control_bypass = on_control_bypass,
+        .on_control_at = on_control_at,
+        .on_control_automatico = on_control_automatico,
+    };
+    uart_pantalla_set_callbacks(uart_cbs);
+    uart_pantalla_init();
 
     // Red + servidor web al final: no bloquean el arranque de la
     // climatizacion (esa tarea ya esta corriendo arriba) ni dependen de

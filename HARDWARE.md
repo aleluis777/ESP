@@ -551,23 +551,23 @@ siguiendo el mismo esquema físico que `blink` ↔ `controlador_labgeo`
 | Señal | GPIO | Net | Dirección |
 |---|---|---|---|
 | TX (hacia RX de la pantalla) | 26 | `P6` | OUT |
-| RX (desde TX de la pantalla) | 25 | `P2` | IN |
+| RX (desde TX de la pantalla) | 39 | `P1` | IN |
 
-**Por qué estos dos y no otros:** son los únicos GPIO del mapa de pines (§3)
-sin red poblada ni función asignada. `P1`/GPIO39 quedó descartado por ser
-solo-entrada (no sirve como TX). Los headers `P3`/`P4` (18 pines cada uno)
-quedaron descartados **por ahora** porque sus nets son ilegibles a la
-resolución con que se revisó el esquemático (§12) — no está confirmado que
-lleguen a un GPIO libre del ESP32. Si en el futuro se lee ese recorte y
-aparece un par de pines más apropiado, este es el punto a actualizar.
+**Actualizado:** el RX se movió de GPIO25 (`P2`) a GPIO39 (`P1`) — GPIO25
+quedó libre para el IRQ del W5500 en su lugar (mejor candidato ahí porque
+tiene pull-up interno, que ese pin open-drain necesita; GPIO39 no tiene
+pull-up interno pero como RX no le hace falta, solo necesita ser entrada).
+Ver conversación de reparto de pines y `red_eth.c`/`sdkconfig.defaults`
+(`CONFIG_ETHERNET_SPI_INT0_GPIO`).
 
-**Pendiente de definir:** el protocolo de comandos en sí (framing, CRC,
-comandos) — la base de `PROTOCOLO_UART.md` aplica igual (SOF 0xAA, CRC8,
-115200 8N1), pero el payload va a ser distinto: no hay diales ni celda de
-carga, sino 4 relés de salida (`AA1`–`AA4`), 4 sensores de temperatura NTC,
-un sensor de humedad, y (vía RS-485) posiblemente parámetros eléctricos de
-un medidor externo. Falta un documento `PROTOCOLO_UART_BRAINDLAB.md`
-equivalente.
+**Ya implementado:** protocolo binario propio (`protocolo_braindlab.h`,
+idéntico en `controlador_braindlab/main/` y `braindlab/main/`;
+`uart_pantalla.c` / `uart_braindlab.c`), mismo framing que
+`PROTOCOLO_UART.md` (SOF 0xAA, CRC8, 115200 8N1) pero con el payload propio
+de climatización (4 relés `AA1`–`AA4`, 4 NTC, humedad del AM2301A, alarma
+AT, bypass, hora del RTC). Ver `PROTOCOLO_UART_BRAINDLAB.md` para el
+detalle completo. Pendiente: parámetros eléctricos del medidor por RS-485
+(todavía no hay RS-485 implementado en el firmware).
 
 ---
 

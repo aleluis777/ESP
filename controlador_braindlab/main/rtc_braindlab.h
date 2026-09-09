@@ -26,6 +26,13 @@ esp_err_t rtc_braindlab_init(void);
 // si rtc_braindlab_init() no se llamo o fallo.
 esp_err_t rtc_braindlab_leer(struct tm *tiempo);
 
+// Ajusta la hora del DS1307 a 'tiempo' -- tm_year/tm_mon en la convencion
+// estandar de <time.h> (years since 1900, mes 0..11). tm_wday no hace falta
+// que venga seteado por quien llama: esta funcion lo recalcula con mktime()
+// antes de escribir, para no depender de que el que arma el struct tm se
+// acuerde de calcular el dia de la semana a mano.
+esp_err_t rtc_braindlab_ajustar(const struct tm *tiempo);
+
 #ifdef __cplusplus
 }
 #endif

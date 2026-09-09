@@ -10,7 +10,7 @@
   nav a:hover { color: var(--acento); }
   form.tarjeta { display: flex; flex-direction: column; gap: 0.6rem; }
   label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
-  input[type="text"], input[type="number"] {
+  input[type="text"], input[type="number"], input[type="datetime-local"] {
     background: rgba(148,163,184,0.08);
     border: 1px solid #334155;
     border-radius: 0.5rem;
@@ -56,6 +56,19 @@
         Por ahora solo se guarda en <code>config.json</code> -- todavia no se
         aplica en caliente al W5500, hace falta reiniciar el equipo con la
         IP fija actualizada en el firmware para que tome efecto.
+      </p>
+    </form>
+
+    <form class="tarjeta" id="form-rtc">
+      <h2>Reloj (RTC)</h2>
+      <label>Fecha y hora
+        <input type="datetime-local" id="rtc-fecha-hora" step="1" required>
+      </label>
+      <button class="guardar" type="submit">Guardar hora</button>
+      <p class="mensaje" id="rtc-mensaje"></p>
+      <p class="detalle">
+        Ajusta el DS1307 a este valor. Arranca precargado con la hora de este
+        navegador -- cambiala antes de guardar si no es la que corresponde.
       </p>
     </form>
 
@@ -117,6 +130,31 @@
           mostrarMensaje(mensaje, 'Guardado.', 'ok');
         })
         .catch(() => mostrarMensaje(mensaje, 'No se pudo guardar (revisar los valores).', 'error'));
+    });
+
+    // Precarga el input con la hora local de ESTE navegador (no la del
+    // equipo -- el usuario la puede cambiar antes de guardar si no es la
+    // hora correcta). datetime-local no acepta un Date directo, hay que
+    // formatearlo a mano en hora LOCAL (Date.toISOString() da UTC).
+    function ahoraLocalParaInput() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+             `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    document.getElementById('rtc-fecha-hora').value = ahoraLocalParaInput();
+
+    document.getElementById('form-rtc').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const mensaje = document.getElementById('rtc-mensaje');
+      const cuerpo = { fecha_hora: document.getElementById('rtc-fecha-hora').value };
+
+      fetch('/configurar_rtc', { method: 'POST', body: JSON.stringify(cuerpo) })
+        .then((r) => {
+          if (!r.ok) throw new Error();
+          mostrarMensaje(mensaje, 'Hora ajustada.', 'ok');
+        })
+        .catch(() => mostrarMensaje(mensaje, 'No se pudo ajustar (revisar el valor).', 'error'));
     });
 
     document.getElementById('form-climatizacion').addEventListener('submit', (ev) => {

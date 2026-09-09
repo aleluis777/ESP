@@ -57,7 +57,9 @@ typedef struct {
     lv_obj_t *lbl_humedad;  // "55 %RH"
 
     // ---- Alarmas activas ----
-    lv_obj_t *cont_alarmas;  // contenedor donde se listan (por ahora con 2 filas de ejemplo)
+    lv_obj_t *cont_alarmas;    // contenedor donde se listan
+    lv_obj_t *fila_alarma_at;  // fila "AT" -- se muestra/oculta segun alarma_at real
+    lv_obj_t *fila_alarma_bps; // fila "BPS" -- se muestra/oculta segun bypass_activo real
 
     // ---- Barra inferior de navegacion ----
     // Inicio / Graficas / Ajustes / Red / Fecha-Hora. "Graficas" abre la
@@ -78,6 +80,12 @@ typedef struct {
 // Debe llamarse dentro de lvgl_port_lock()/lvgl_port_unlock().
 // El puntero devuelto es estatico (vive mientras dure el programa), no hay que liberarlo.
 ui_dashboard_t *ui_dashboard_create(lv_obj_t *parent);
+
+// Aplica el estado ON/OFF real a una tarjeta de aire (colores, icono, viento
+// animado) -- misma logica visual que usaba el toggle interno del boton de
+// encendido, expuesta para que uart_braindlab.c la pueda aplicar cuando
+// llega el estado real por UART (ver protocolo_braindlab.h).
+void ui_dashboard_aire_set_encendido(ui_dash_aire_t *aire, bool encendido);
 
 #ifdef __cplusplus
 }

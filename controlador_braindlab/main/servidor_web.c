@@ -571,6 +571,58 @@ static const httpd_uri_t s_uri_control_bypass = {
     .uri = "/control_bypass", .method = HTTP_POST, .handler = control_bypass_handler,
 };
 
+// POST /configurar_rtc -- body JSON {"fecha_hora":"YYYY-MM-DDTHH:MM[:SS]"},
+// el formato que manda tal cual un <input type="datetime-local"> de HTML.
+// Se parsea a mano con sscanf en vez de traer una libreria de fechas --
+// formato fijo, no hace falta mas.
+static esp_err_t configurar_rtc_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char body[64];
+    int len = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+        return ESP_FAIL;
+    }
+    body[len] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    const cJSON *fecha_hora_item = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "fecha_hora") : NULL;
+
+    if (!cJSON_IsString(fecha_hora_item)) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta \"fecha_hora\" (string) en el body");
+        return ESP_FAIL;
+    }
+
+    int anio, mes, dia, hora, minuto, segundo = 0;
+    int leidos = sscanf(fecha_hora_item->valuestring, "%d-%d-%dT%d:%d:%d",
+                         &anio, &mes, &dia, &hora, &minuto, &segundo);
+
+    if (leidos < 5 || anio < 2000 || anio > 2099 || mes < 1 || mes > 12 || dia < 1 || dia > 31 ||
+        hora < 0 || hora > 23 || minuto < 0 || minuto > 59 || segundo < 0 || segundo > 59) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                             "\"fecha_hora\" invalida (esperado YYYY-MM-DDTHH:MM[:SS])");
+        return ESP_FAIL;
+    }
+
+    if (s_callbacks.on_configurar_rtc) {
+        s_callbacks.on_configurar_rtc((uint16_t)anio, (uint8_t)mes, (uint8_t)dia,
+                                       (uint8_t)hora, (uint8_t)minuto, (uint8_t)segundo);
+    }
+    cJSON_Delete(raiz);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_configurar_rtc = {
+    .uri = "/configurar_rtc", .method = HTTP_POST, .handler = configurar_rtc_handler,
+};
+
 // POST /control_at -- body JSON {"activa":bool}. Fuerza a mano OUT_AT hasta
 // que la automatica cruce a otro ciclo.
 static esp_err_t control_at_handler(httpd_req_t *req)
@@ -750,7 +802,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), margen para la pagina de archivos cargando varios recursos
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 22; // 20 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 23; // 21 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -775,6 +827,7 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_control_aire);
     httpd_register_uri_handler(s_servidor, &s_uri_control_bypass);
     httpd_register_uri_handler(s_servidor, &s_uri_control_at);
+    httpd_register_uri_handler(s_servidor, &s_uri_configurar_rtc);
     httpd_register_uri_handler(s_servidor, &s_uri_control_automatico);
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);

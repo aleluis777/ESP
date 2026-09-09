@@ -1,8 +1,8 @@
 // Implementacion real -- ver sensores_temp.h.
 //
 // Confirmado contra el esquematico (conversacion): el ADS1115 "U2" tiene su
-// pin ADDR puenteado a 3V3 (R8 poblada de 0 ohm, R9 sin poblar) => direccion
-// I2C 0x49 (ADS111X_ADDR_VCC). Sus 4 canales de entrada:
+// pin ADDR puenteado a SDA => direccion I2C 0x4A (ADS111X_ADDR_SDA). Sus 4
+// canales de entrada:
 //
 //   AIN0 = A5 = T1
 //   AIN1 = A6 = T2
@@ -27,7 +27,7 @@
 
 static const char *TAG = "SENSORES_TEMP";
 
-#define ADS1115_ADDR ADS111X_ADDR_VCC   // ADDR->3V3 (R8 poblada), confirmado
+#define ADS1115_ADDR ADS111X_ADDR_SDA   // ADDR->SDA, confirmado
 #define ADS1115_GAIN ADS111X_GAIN_4V096 // +-4.096V -- cubre 0-3.3V del divisor con margen
 
 #define NTC_R_FIJA_OHM  10000.0f // R15-R18

@@ -64,6 +64,15 @@ typedef void (*servidor_web_cb_control_at_t)(bool activa);
 // de todo en el proximo ciclo.
 typedef void (*servidor_web_cb_control_automatico_t)(void);
 
+// Llego POST /configurar_rtc con {"fecha_hora":"YYYY-MM-DDTHH:MM"} o
+// {"fecha_hora":"YYYY-MM-DDTHH:MM:SS"} -- formato que manda tal cual un
+// <input type="datetime-local"> de HTML sin convertir nada del lado del
+// navegador. Pide ajustar el DS1307 a esa fecha/hora. 'segundo' viene en 0
+// si el body no lo incluia (el input datetime-local normalmente no manda
+// segundos).
+typedef void (*servidor_web_cb_configurar_rtc_t)(uint16_t anio, uint8_t mes, uint8_t dia,
+                                                  uint8_t hora, uint8_t minuto, uint8_t segundo);
+
 typedef struct {
     servidor_web_cb_configurar_red_t on_configurar_red;                       // llego POST /configurar_red
     servidor_web_cb_configurar_climatizacion_t on_configurar_climatizacion;   // llego POST /configurar_climatizacion
@@ -71,6 +80,7 @@ typedef struct {
     servidor_web_cb_control_bypass_t on_control_bypass;                       // llego POST /control_bypass
     servidor_web_cb_control_at_t on_control_at;                               // llego POST /control_at
     servidor_web_cb_control_automatico_t on_control_automatico;               // llego POST /control_automatico
+    servidor_web_cb_configurar_rtc_t on_configurar_rtc;                       // llego POST /configurar_rtc
 } servidor_web_callbacks_t;
 
 // Registrar ANTES de llamar a servidor_web_init(), mismo criterio que

@@ -1,3 +1,4 @@
+#include <time.h>
 #include "rtc_braindlab.h"
 #include "ds1307.h"
 #include "i2cdev.h"
@@ -50,4 +51,29 @@ esp_err_t rtc_braindlab_leer(struct tm *tiempo)
         return ESP_ERR_INVALID_STATE;
     }
     return ds1307_get_time(&s_rtc, tiempo);
+}
+
+esp_err_t rtc_braindlab_ajustar(const struct tm *tiempo)
+{
+    if (!s_disponible) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // mktime() normaliza el struct completo (recalcula tm_wday/tm_yday a
+    // partir de year/mon/mday) -- se lo aplicamos a una copia para no exigir
+    // que quien llama sepa calcular el dia de la semana a mano. El time_t
+    // que devuelve no se usa para nada (no nos importa la conversion a
+    // epoch, solo el efecto colateral de normalizar los campos).
+    struct tm normalizado = *tiempo;
+    mktime(&normalizado);
+
+    esp_err_t err = ds1307_set_time(&s_rtc, &normalizado);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "RTC ajustado a %04d-%02d-%02d %02d:%02d:%02d",
+                 normalizado.tm_year + 1900, normalizado.tm_mon + 1, normalizado.tm_mday,
+                 normalizado.tm_hour, normalizado.tm_min, normalizado.tm_sec);
+    } else {
+        ESP_LOGE(TAG, "ds1307_set_time() fallo (%s)", esp_err_to_name(err));
+    }
+    return err;
 }

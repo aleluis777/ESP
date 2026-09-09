@@ -1,8 +1,8 @@
 #pragma once
 
 // Lectura real de los 4 sensores de temperatura (T1-T4, NTC 10K/Beta=3950)
-// via el ADS1115 "U2" (I2C, SDA=GPIO21 SCL=GPIO22, direccion 0x49 -- ADDR a
-// 3V3 -- ver HARDWARE.md §4.2 y la conversacion sobre el esquematico). U1
+// via el ADS1115 "U2" (I2C, SDA=GPIO21 SCL=GPIO22, direccion 0x4A -- ADDR a
+// SDA -- ver HARDWARE.md §4.2 y la conversacion sobre el esquematico). U1
 // (el segundo ADS1115 del esquematico) no se usa todavia.
 
 #include "esp_err.h"

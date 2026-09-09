@@ -57,3 +57,12 @@ CONFIG_LWIP_MAX_SOCKETS=16
 # podria congelar el control varios segundos. 150ms sigue siendo generoso
 # para un bus sano, pero acota bien el peor caso.
 CONFIG_I2CDEV_TIMEOUT=150
+
+# Prende los pull-up internos del ESP32 (~45k) en el bus I2C si nadie los
+# configuro a mano -- ni ds1307_init_desc() ni ads111x_init_desc() los
+# setean (dejan sda_pullup_en/scl_pullup_en en false). Sin pull-up (ni
+# interno ni externo en el modulo/breadboard) el bus queda flotando y da
+# errores como ESP_ERR_INVALID_RESPONSE en vez de un NACK limpio. Los
+# internos son debiles (mejor un pull-up externo de 4.7-10k si el modulo no
+# trae uno propio), pero sirven de red de seguridad para prototipar.
+CONFIG_I2CDEV_AUTO_ENABLE_PULLUPS=y
