@@ -33,6 +33,23 @@ typedef struct {
     char mascara[16];
 } config_red_t;
 
+// Calibracion de un solo punto por sensor: se suma esta constante a la
+// lectura cruda antes de usarla en cualquier lado (WS, UART, climatizacion).
+// Se calcula a mano comparando contra un termometro/higrometro de
+// referencia: constante = valor_real - valor_leido (ej. referencia=25.0,
+// leido=27.5 => constante=-2.5). Arranca en 0.0 (sin corregir) hasta que se
+// calibre. t1..t4 son los 4 NTC analogicos (ADS1115, ver sensores_temp.c);
+// temp_gestor/humedad_gestor son el AM2301A digital del gabinete (ver
+// sensor_gestor.c).
+typedef struct {
+    float t1;
+    float t2;
+    float t3;
+    float t4;
+    float temp_gestor;
+    float humedad_gestor;
+} config_calibracion_t;
+
 // Monta la particion SPIFFS "www". Idempotente.
 esp_err_t config_braindlab_init(void);
 
@@ -41,6 +58,9 @@ esp_err_t config_braindlab_guardar_climatizacion(const config_climatizacion_t *c
 
 void      config_braindlab_cargar_red(config_red_t *cfg);
 esp_err_t config_braindlab_guardar_red(const config_red_t *cfg);
+
+void      config_braindlab_cargar_calibracion(config_calibracion_t *cfg);
+esp_err_t config_braindlab_guardar_calibracion(const config_calibracion_t *cfg);
 
 #ifdef __cplusplus
 }

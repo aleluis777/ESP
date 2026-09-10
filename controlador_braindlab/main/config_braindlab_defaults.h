@@ -45,3 +45,10 @@
 #define RED_IP_DEFAULT      "192.168.5.95"
 #define RED_GATEWAY_DEFAULT "192.168.5.1"
 #define RED_MASCARA_DEFAULT "255.255.255.0"
+
+// ---------------------------------------------------------------------------
+// Calibracion (ver config_calibracion_t) -- todas arrancan en 0.0 (sin
+// corregir) hasta que se calibre a mano contra un instrumento de referencia.
+// ---------------------------------------------------------------------------
+
+#define CALIBRACION_DEFAULT (0.0f)

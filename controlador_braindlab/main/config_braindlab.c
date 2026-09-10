@@ -214,3 +214,56 @@ esp_err_t config_braindlab_guardar_red(const config_red_t *cfg)
     }
     return err;
 }
+
+// ---------------------------------------------------------------------------
+// Seccion "calibracion"
+// ---------------------------------------------------------------------------
+
+void config_braindlab_cargar_calibracion(config_calibracion_t *cfg)
+{
+    cfg->t1             = CALIBRACION_DEFAULT;
+    cfg->t2             = CALIBRACION_DEFAULT;
+    cfg->t3             = CALIBRACION_DEFAULT;
+    cfg->t4             = CALIBRACION_DEFAULT;
+    cfg->temp_gestor    = CALIBRACION_DEFAULT;
+    cfg->humedad_gestor = CALIBRACION_DEFAULT;
+
+    cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
+
+    const cJSON *calib = cJSON_GetObjectItemCaseSensitive(raiz, "calibracion");
+    if (cJSON_IsObject(calib)) {
+        cfg->t1             = leer_campo_num(calib, "t1", CALIBRACION_DEFAULT);
+        cfg->t2             = leer_campo_num(calib, "t2", CALIBRACION_DEFAULT);
+        cfg->t3             = leer_campo_num(calib, "t3", CALIBRACION_DEFAULT);
+        cfg->t4             = leer_campo_num(calib, "t4", CALIBRACION_DEFAULT);
+        cfg->temp_gestor    = leer_campo_num(calib, "temp_gestor", CALIBRACION_DEFAULT);
+        cfg->humedad_gestor = leer_campo_num(calib, "humedad_gestor", CALIBRACION_DEFAULT);
+    }
+
+    cJSON_Delete(raiz);
+    ESP_LOGI(TAG, "Calibracion cargada: t1=%+.2f t2=%+.2f t3=%+.2f t4=%+.2f temp_gestor=%+.2f humedad_gestor=%+.2f",
+             cfg->t1, cfg->t2, cfg->t3, cfg->t4, cfg->temp_gestor, cfg->humedad_gestor);
+}
+
+esp_err_t config_braindlab_guardar_calibracion(const config_calibracion_t *cfg)
+{
+    cJSON *raiz = cargar_json_archivo(RUTA_CONFIG); // conserva "climatizacion"/"red"
+
+    cJSON_DeleteItemFromObject(raiz, "calibracion");
+    cJSON *calib = cJSON_CreateObject();
+    cJSON_AddNumberToObject(calib, "t1", cfg->t1);
+    cJSON_AddNumberToObject(calib, "t2", cfg->t2);
+    cJSON_AddNumberToObject(calib, "t3", cfg->t3);
+    cJSON_AddNumberToObject(calib, "t4", cfg->t4);
+    cJSON_AddNumberToObject(calib, "temp_gestor", cfg->temp_gestor);
+    cJSON_AddNumberToObject(calib, "humedad_gestor", cfg->humedad_gestor);
+    cJSON_AddItemToObject(raiz, "calibracion", calib);
+
+    esp_err_t err = guardar_json_archivo(raiz);
+    cJSON_Delete(raiz);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Calibracion guardada en %s", RUTA_CONFIG);
+    }
+    return err;
+}

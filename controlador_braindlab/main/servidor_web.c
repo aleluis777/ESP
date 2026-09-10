@@ -679,6 +679,45 @@ static const httpd_uri_t s_uri_control_automatico = {
     .uri = "/control_automatico", .method = HTTP_POST, .handler = control_automatico_handler,
 };
 
+// POST /calibrar_sensor -- body JSON {"sensor":"t1|t2|t3|t4|temp_gestor|
+// humedad_gestor","valor_referencia":N}. Ver servidor_web_cb_calibrar_sensor_t.
+static esp_err_t calibrar_sensor_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char body[96];
+    int len = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+        return ESP_FAIL;
+    }
+    body[len] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    const cJSON *sensor_item     = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "sensor") : NULL;
+    const cJSON *referencia_item = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "valor_referencia") : NULL;
+
+    if (!cJSON_IsString(sensor_item) || !cJSON_IsNumber(referencia_item)) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                             "faltan \"sensor\" (string) o \"valor_referencia\" (numero) en el body");
+        return ESP_FAIL;
+    }
+
+    if (s_callbacks.on_calibrar_sensor) {
+        s_callbacks.on_calibrar_sensor(sensor_item->valuestring, (float)referencia_item->valuedouble);
+    }
+    cJSON_Delete(raiz);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_calibrar_sensor = {
+    .uri = "/calibrar_sensor", .method = HTTP_POST, .handler = calibrar_sensor_handler,
+};
+
 // POST /ota -- sube un firmware nuevo (el .bin que genera "idf.py build") y
 // lo escribe en la particion OTA que NO esta corriendo ahora (ota_0/ota_1,
 // ver partitions.csv), streameado en pedazos con esp_ota_write(). Si
@@ -802,7 +841,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), margen para la pagina de archivos cargando varios recursos
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 23; // 21 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 24; // 22 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -829,6 +868,7 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_control_at);
     httpd_register_uri_handler(s_servidor, &s_uri_configurar_rtc);
     httpd_register_uri_handler(s_servidor, &s_uri_control_automatico);
+    httpd_register_uri_handler(s_servidor, &s_uri_calibrar_sensor);
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
 

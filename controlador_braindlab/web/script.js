@@ -264,8 +264,18 @@ function pintar(datos) {
 
     if (typeof t[0] === "number") { actualizarGauge("op1", t[0]); actualizarChispaGrande("op1", "op1"); }
     if (typeof t[1] === "number") { actualizarGauge("op2", t[1]); actualizarChispaGrande("op2", "op2"); }
-    if (typeof t[2] === "number") { document.getElementById("iny1-valor").textContent = t[2].toFixed(1) + " °C"; actualizarChispaChica("iny1", "iny1"); }
-    if (typeof t[3] === "number") { document.getElementById("iny2-valor").textContent = t[3].toFixed(1) + " °C"; actualizarChispaChica("iny2", "iny2"); }
+    if (typeof t[2] === "number") {
+        actualizarGauge("iny1", t[2]);
+        actualizarChispaGrande("iny1", "iny1");
+        document.getElementById("iny1-mini-valor").textContent = t[2].toFixed(1) + " °C";
+        actualizarChispaChica("iny1-mini", "iny1");
+    }
+    if (typeof t[3] === "number") {
+        actualizarGauge("iny2", t[3]);
+        actualizarChispaGrande("iny2", "iny2");
+        document.getElementById("iny2-mini-valor").textContent = t[3].toFixed(1) + " °C";
+        actualizarChispaChica("iny2-mini", "iny2");
+    }
     actualizarSensoresDiagrama(t);
 
     if (datos.gestor_ok) {

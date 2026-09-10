@@ -67,6 +67,34 @@
                 <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
             </article>
 
+            <article class="tarjeta tarjeta-gauge" data-color="iny1">
+                <header><i class="icono-metrica">&#127777;</i> T. Inyeccion 1</header>
+                <p class="valor-metrica" id="iny1-valor">-- &deg;C</p>
+                <svg class="gauge" viewBox="0 0 200 110" aria-hidden="true">
+                    <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <path class="gauge-valor" id="iny1-arco" pathLength="100" stroke-dasharray="0 100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <circle class="gauge-marcador" id="iny1-marcador" cx="20" cy="100" r="5"/>
+                </svg>
+                <svg class="chispa" id="iny1-chispa" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline id="iny1-linea"/>
+                </svg>
+                <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
+            </article>
+
+            <article class="tarjeta tarjeta-gauge" data-color="iny2">
+                <header><i class="icono-metrica">&#127777;</i> T. Inyeccion 2</header>
+                <p class="valor-metrica" id="iny2-valor">-- &deg;C</p>
+                <svg class="gauge" viewBox="0 0 200 110" aria-hidden="true">
+                    <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <path class="gauge-valor" id="iny2-arco" pathLength="100" stroke-dasharray="0 100" d="M20,100 A80,80 0 1 1 180,100"/>
+                    <circle class="gauge-marcador" id="iny2-marcador" cx="20" cy="100" r="5"/>
+                </svg>
+                <svg class="chispa" id="iny2-chispa" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline id="iny2-linea"/>
+                </svg>
+                <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
+            </article>
+
             <article class="tarjeta tarjeta-gauge" id="tarjeta-gestor-t" data-color="gestor-t">
                 <header><i class="icono-metrica">&#127777;</i> T. Gestor</header>
                 <p class="valor-metrica" id="gestor-t-valor">N/D</p>
@@ -156,13 +184,13 @@
         <section class="fila-inferior">
             <article class="tarjeta stat" data-color="iny1">
                 <p class="stat-titulo">T. Inyeccion 1</p>
-                <p class="stat-valor" id="iny1-valor">-- &deg;C</p>
-                <svg class="chispa-chica" id="iny1-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny1-linea"/></svg>
+                <p class="stat-valor" id="iny1-mini-valor">-- &deg;C</p>
+                <svg class="chispa-chica" id="iny1-mini-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny1-mini-linea"/></svg>
             </article>
             <article class="tarjeta stat" data-color="iny2">
                 <p class="stat-titulo">T. Inyeccion 2</p>
-                <p class="stat-valor" id="iny2-valor">-- &deg;C</p>
-                <svg class="chispa-chica" id="iny2-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny2-linea"/></svg>
+                <p class="stat-valor" id="iny2-mini-valor">-- &deg;C</p>
+                <svg class="chispa-chica" id="iny2-mini-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny2-mini-linea"/></svg>
             </article>
             <article class="tarjeta stat nd">
                 <p class="stat-titulo">Corriente AA1</p>
