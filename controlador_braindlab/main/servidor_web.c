@@ -718,6 +718,27 @@ static const httpd_uri_t s_uri_calibrar_sensor = {
     .uri = "/calibrar_sensor", .method = HTTP_POST, .handler = calibrar_sensor_handler,
 };
 
+// POST /reiniciar -- sin body. Reinicia el equipo ya (esp_restart()), para
+// que tome efecto cualquier config que solo se aplica al arrancar (red,
+// climatizacion, etc -- ver /configurar_red, /configurar_climatizacion). No
+// necesita callback a app_main.c, es infraestructura pura -- mismo
+// esp_restart() que ya usa /ota al final de un firmware aplicado con exito.
+static esp_err_t reiniciar_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true,\"mensaje\":\"reiniciando\"}");
+
+    vTaskDelay(pdMS_TO_TICKS(500)); // le da tiempo a la respuesta de salir antes de reiniciar, mismo criterio que /ota
+    esp_restart();
+    return ESP_OK; // no se llega aca
+}
+
+static const httpd_uri_t s_uri_reiniciar = {
+    .uri = "/reiniciar", .method = HTTP_POST, .handler = reiniciar_handler,
+};
+
 // POST /ota -- sube un firmware nuevo (el .bin que genera "idf.py build") y
 // lo escribe en la particion OTA que NO esta corriendo ahora (ota_0/ota_1,
 // ver partitions.csv), streameado en pedazos con esp_ota_write(). Si
@@ -841,7 +862,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), margen para la pagina de archivos cargando varios recursos
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 24; // 22 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 25; // 23 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -869,6 +890,7 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_configurar_rtc);
     httpd_register_uri_handler(s_servidor, &s_uri_control_automatico);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_sensor);
+    httpd_register_uri_handler(s_servidor, &s_uri_reiniciar);
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
 

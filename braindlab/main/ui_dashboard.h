@@ -54,12 +54,28 @@ typedef struct {
 
     // ---- Sensores ambientales ----
     ui_dash_sensor_t sensores[UI_DASH_NUM_SENSORES];
-    lv_obj_t *lbl_humedad;  // "55 %RH"
+    lv_obj_t *lbl_humedad;      // "55 %RH"
+    lv_obj_t *lbl_temp_gestor;  // "28.0°C" -- temperatura del gabinete (AM2301A)
 
     // ---- Alarmas activas ----
     lv_obj_t *cont_alarmas;    // contenedor donde se listan
     lv_obj_t *fila_alarma_at;  // fila "AT" -- se muestra/oculta segun alarma_at real
     lv_obj_t *fila_alarma_bps; // fila "BPS" -- se muestra/oculta segun bypass_activo real
+
+    // ---- Controles Bypass / AT ----
+    // Mismo patron que los botones de aire (ui_dash_aire_t.btn_power): el
+    // toggle visual es inmediato al toque (ver toggle_bypass_cb/toggle_at_cb
+    // en ui_dashboard.c), el pedido real se manda por UART aparte (ver
+    // braindlab.c) y uart_braindlab.c corrige la vista con el estado real
+    // que llega en el proximo ESTADO_UPDATE (bypass_solicitado/alarma_at,
+    // los mismos campos "ya mezclados con lo automatico" que usa
+    // salida_aire para AA1-4).
+    lv_obj_t *btn_bypass;
+    lv_obj_t *lbl_btn_bypass;
+    bool      bypass_activo;
+    lv_obj_t *btn_at;
+    lv_obj_t *lbl_btn_at;
+    bool      at_activo;
 
     // ---- Barra inferior de navegacion ----
     // Inicio / Graficas / Ajustes / Red / Fecha-Hora. "Graficas" abre la
@@ -86,6 +102,11 @@ ui_dashboard_t *ui_dashboard_create(lv_obj_t *parent);
 // encendido, expuesta para que uart_braindlab.c la pueda aplicar cuando
 // llega el estado real por UART (ver protocolo_braindlab.h).
 void ui_dashboard_aire_set_encendido(ui_dash_aire_t *aire, bool encendido);
+
+// Mismo criterio que ui_dashboard_aire_set_encendido() pero para los
+// botones de Bypass y AT (un solo boton cada uno, no hace falta indice).
+void ui_dashboard_bypass_set_activo(ui_dashboard_t *ui, bool activo);
+void ui_dashboard_at_set_activo(ui_dashboard_t *ui, bool activo);
 
 #ifdef __cplusplus
 }

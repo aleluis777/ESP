@@ -59,6 +59,20 @@ static void enviar_control_aire_cb(lv_event_t *e)
     uart_braindlab_enviar_control_aire((uint8_t)indice, ui->aires[indice].encendido);
 }
 
+// Mismo criterio que enviar_control_aire_cb: el toggle visual ya corrio
+// (toggle_bypass_cb/toggle_at_cb en ui_dashboard.c, registrados ANTES que
+// esto), asi que ui->bypass_activo/ui->at_activo ya tienen el valor nuevo
+// para cuando esto se ejecuta.
+static void enviar_control_bypass_cb(lv_event_t *e)
+{
+    uart_braindlab_enviar_control_bypass(ui->bypass_activo);
+}
+
+static void enviar_control_at_cb(lv_event_t *e)
+{
+    uart_braindlab_enviar_control_at(ui->at_activo);
+}
+
 void app_main(void)
 {
     // ---------- 1. Panel RGB ----------
@@ -165,11 +179,16 @@ void app_main(void)
                                  (void *)(intptr_t)i);
         }
 
+        // Igual que arriba: un callback mas encima del toggle visual que ya
+        // registra ui_dashboard.c, este manda el pedido real por UART.
+        lv_obj_add_event_cb(ui->btn_bypass, enviar_control_bypass_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(ui->btn_at, enviar_control_at_cb, LV_EVENT_CLICKED, NULL);
+
         lvgl_port_unlock();
     }
 
     // ---------- 5. Enlace UART con controlador_braindlab ----------
     uart_braindlab_init(ui);
 
-    ESP_LOGI(TAG, "UI lista (solo vista, sin logica de comunicacion todavia)");
+    ESP_LOGI(TAG, "UI lista, UART con controlador_braindlab activo");
 }

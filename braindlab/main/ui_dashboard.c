@@ -199,7 +199,9 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     lv_obj_t *card = crear_tarjeta_base(parent);
     lv_obj_set_flex_grow(card, 1);
     lv_obj_set_height(card, LV_PCT(100));
-    lv_obj_set_style_pad_row(card, 6, 0);
+    lv_obj_set_style_pad_row(card, 2, 0);   // comprimido, ver conversacion -- todo mas pegado (header, set/vel, boton)
+    lv_obj_set_style_pad_top(card, 6, 0);   // menos aire arriba de "Aire N"
+    lv_obj_set_style_pad_bottom(card, 6, 0); // menos aire debajo del boton
 
     // Cabecera: numero + nombre + led de estado
     lv_obj_t *fila_header = lv_obj_create(card);
@@ -233,7 +235,15 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     lv_obj_set_style_radius(caja_icono, 8, 0);
     lv_obj_set_style_border_width(caja_icono, 0, 0);
     lv_obj_set_width(caja_icono, LV_PCT(100));
-    lv_obj_set_height(caja_icono, 62);
+    // Alto flexible (no fijo): el icono es puramente decorativo, asi que es
+    // el que se achica solo si a la tarjeta le falta espacio -- todo lo
+    // demas (header/temp/set-vel/boton) es funcional y tiene que entrar
+    // siempre. Antes tenia altura fija (46px) y el BOTON de encendido (el
+    // ultimo hijo) era el que quedaba cortado/invisible cuando la tarjeta
+    // resultaba un poco mas chica de lo calculado -- ver conversacion.
+    lv_obj_set_flex_grow(caja_icono, 1);
+    lv_obj_set_style_max_height(caja_icono, 40, 0); // comprimido, ver conversacion
+    lv_obj_set_style_min_height(caja_icono, 18, 0);
     lv_obj_clear_flag(caja_icono, LV_OBJ_FLAG_SCROLLABLE);
 
     aire->img_unidad = lv_image_create(caja_icono);
@@ -268,30 +278,26 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     lv_label_set_text(lbl_grado, "\xC2\xB0" "C");
     lv_obj_set_style_text_color(lbl_grado, COLOR_VALOR_AZUL, 0);
 
-    // Setpoint
-    lv_obj_t *lbl_set_prefijo = lv_label_create(card);
+    // Setpoint + velocidad en UNA sola fila (antes eran 2 filas separadas --
+    // no entraban, ver comentario de pad_row arriba).
+    lv_obj_t *fila_set_vel = lv_obj_create(card);
+    lv_obj_remove_style_all(fila_set_vel);
+    lv_obj_set_width(fila_set_vel, LV_PCT(100));
+    lv_obj_set_flex_flow(fila_set_vel, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila_set_vel, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *lbl_set_prefijo = lv_label_create(fila_set_vel);
     lv_obj_set_style_text_color(lbl_set_prefijo, COLOR_TEXTO_SEC, 0);
     aire->lbl_set = lbl_set_prefijo;
     lv_label_set_text_fmt(aire->lbl_set, "Set: %s\xC2\xB0" "C", set);
 
-    // Velocidad
-    lv_obj_t *fila_vel = lv_obj_create(card);
-    lv_obj_remove_style_all(fila_vel);
-    lv_obj_set_width(fila_vel, LV_PCT(100));
-    lv_obj_set_flex_flow(fila_vel, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(fila_vel, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *lbl_vel_titulo = lv_label_create(fila_vel);
-    lv_label_set_text(lbl_vel_titulo, LV_SYMBOL_LOOP " Velocidad");
-    lv_obj_set_style_text_color(lbl_vel_titulo, COLOR_TEXTO_SEC, 0);
-
-    aire->lbl_velocidad = lv_label_create(fila_vel);
+    aire->lbl_velocidad = lv_label_create(fila_set_vel);
     lv_label_set_text(aire->lbl_velocidad, velocidad);
     lv_obj_set_style_text_color(aire->lbl_velocidad, COLOR_TEXTO_PRINC, 0);
 
     // Boton ON/OFF
     aire->btn_power = lv_button_create(card);
-    lv_obj_set_size(aire->btn_power, LV_PCT(100), 32);
+    lv_obj_set_size(aire->btn_power, LV_PCT(100), 24); // comprimido, ver conversacion
     lv_obj_set_style_radius(aire->btn_power, 6, 0);
     aire->lbl_btn_power = lv_label_create(aire->btn_power);
     lv_obj_center(aire->lbl_btn_power);
@@ -368,8 +374,8 @@ static void crear_panel_sensores(lv_obj_t *parent)
     lv_obj_remove_style_all(grid);
     lv_obj_set_width(grid, LV_PCT(100));
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(grid, 8, 0);
-    lv_obj_set_height(grid, 150);
+    lv_obj_set_style_pad_row(grid, 6, 0);
+    lv_obj_set_height(grid, 110); // comprimido, ver conversacion (T1-T4 no necesitan tanto alto, solo un numero chico)
 
     lv_obj_t *fila1 = lv_obj_create(grid);
     lv_obj_remove_style_all(fila1);
@@ -391,20 +397,43 @@ static void crear_panel_sensores(lv_obj_t *parent)
     crear_tarjeta_sensor(fila2, &ui.sensores[3], "T4", "--");
 }
 
-static void crear_panel_humedad(lv_obj_t *parent)
+// Una columna "titulo chico + valor grande" -- helper compartido por
+// temperatura y humedad del gabinete, mismo par de labels en los dos casos.
+static lv_obj_t *crear_columna_valor(lv_obj_t *parent, const char *titulo, const char *valor_inicial)
 {
-    lv_obj_t *titulo = crear_titulo_seccion(parent, "HUMEDAD RELATIVA");
+    lv_obj_t *col = lv_obj_create(parent);
+    lv_obj_remove_style_all(col);
+    lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *lbl_titulo = lv_label_create(col);
+    lv_label_set_text(lbl_titulo, titulo);
+    lv_obj_set_style_text_color(lbl_titulo, COLOR_TEXTO_SEC, 0);
+
+    lv_obj_t *lbl_valor = lv_label_create(col);
+    lv_label_set_text(lbl_valor, valor_inicial);
+    lv_obj_set_style_text_color(lbl_valor, COLOR_VALOR_AZUL, 0);
+    lv_obj_set_style_text_font(lbl_valor, &lv_font_montserrat_24, 0);
+
+    return lbl_valor;
+}
+
+// Temperatura + humedad del gabinete (AM2301A, ver sensor_gestor.c en
+// controlador_braindlab) -- antes esta tarjeta solo mostraba humedad, la
+// temperatura llegaba por UART pero no tenia widget propio.
+static void crear_panel_gabinete(lv_obj_t *parent)
+{
+    lv_obj_t *titulo = crear_titulo_seccion(parent, "GABINETE");
     lv_obj_set_width(titulo, LV_PCT(100));
 
     lv_obj_t *card = crear_tarjeta_base(parent);
     lv_obj_set_width(card, LV_PCT(100));
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    ui.lbl_humedad = lv_label_create(card);
-    lv_label_set_text(ui.lbl_humedad, "-- %RH");
-    lv_obj_set_style_text_color(ui.lbl_humedad, COLOR_VALOR_AZUL, 0);
-    lv_obj_set_style_text_font(ui.lbl_humedad, &lv_font_montserrat_24, 0);
+    ui.lbl_temp_gestor = crear_columna_valor(card, "Temp.", "--\xC2\xB0" "C");
+    ui.lbl_humedad = crear_columna_valor(card, "Humedad", "-- %RH");
 }
 
 // ---------- Alarmas activas ----------
@@ -476,6 +505,82 @@ static void crear_panel_alarmas(lv_obj_t *parent)
     lv_obj_add_flag(ui.fila_alarma_bps, LV_OBJ_FLAG_HIDDEN);
 }
 
+// ---------- Controles Bypass / AT ----------
+//
+// Mismo patron que el boton de encendido de cada aire (toggle_power_cb +
+// ui_dashboard_aire_set_encendido()): el toque cambia el color/texto de
+// inmediato (respuesta rapida), y quien registra el callback que manda el
+// pedido real por UART es braindlab.c (uart_braindlab_enviar_control_bypass/
+// _at()) -- registrado DESPUES de este, mismo motivo que con los aires (para
+// que lea el valor ya actualizado). uart_braindlab.c corrige la vista con el
+// estado real (bypass_solicitado/alarma_at) en el proximo ESTADO_UPDATE.
+// Distintos de fila_alarma_at/fila_alarma_bps (arriba): esas son
+// indicadores de solo lectura que aparecen/desaparecen segun haya alarma de
+// verdad, estos son botones fijos siempre visibles para forzar el pedido a
+// mano.
+
+void ui_dashboard_bypass_set_activo(ui_dashboard_t *dash, bool activo)
+{
+    dash->bypass_activo = activo;
+    lv_obj_set_style_bg_color(dash->btn_bypass, activo ? COLOR_NARANJA : COLOR_GRIS_APAGADO, 0);
+    lv_label_set_text_fmt(dash->lbl_btn_bypass, "Bypass " LV_SYMBOL_POWER " %s", activo ? "ON" : "OFF");
+}
+
+void ui_dashboard_at_set_activo(ui_dashboard_t *dash, bool activo)
+{
+    dash->at_activo = activo;
+    lv_obj_set_style_bg_color(dash->btn_at, activo ? COLOR_ROJO : COLOR_GRIS_APAGADO, 0);
+    lv_label_set_text_fmt(dash->lbl_btn_at, "AT " LV_SYMBOL_POWER " %s", activo ? "ON" : "OFF");
+}
+
+static void toggle_bypass_cb(lv_event_t *e)
+{
+    ui_dashboard_bypass_set_activo(&ui, !ui.bypass_activo);
+}
+
+static void toggle_at_cb(lv_event_t *e)
+{
+    ui_dashboard_at_set_activo(&ui, !ui.at_activo);
+}
+
+static lv_obj_t *crear_boton_control(lv_obj_t *parent, lv_obj_t **out_lbl)
+{
+    lv_obj_t *btn = lv_button_create(parent);
+    lv_obj_set_flex_grow(btn, 1);
+    lv_obj_set_height(btn, 30); // comprimido -- la columna derecha no tenia lugar para este panel entero, ver conversacion
+    lv_obj_set_style_radius(btn, 6, 0);
+
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_obj_center(lbl);
+    *out_lbl = lbl;
+
+    return btn;
+}
+
+static void crear_panel_controles(lv_obj_t *parent)
+{
+    lv_obj_t *titulo = crear_titulo_seccion(parent, "CONTROLES");
+    lv_obj_set_width(titulo, LV_PCT(100));
+
+    lv_obj_t *fila = lv_obj_create(parent);
+    lv_obj_remove_style_all(fila);
+    lv_obj_set_width(fila, LV_PCT(100));
+    lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(fila, 8, 0);
+
+    ui.btn_bypass = crear_boton_control(fila, &ui.lbl_btn_bypass);
+    ui.btn_at     = crear_boton_control(fila, &ui.lbl_btn_at);
+
+    // Arrancan OFF/gris -- no hay dato real todavia (llega con el primer
+    // ESTADO_UPDATE), mismo criterio que ui_dashboard_aire_set_encendido()
+    // en crear_tarjeta_aire().
+    ui_dashboard_bypass_set_activo(&ui, false);
+    ui_dashboard_at_set_activo(&ui, false);
+
+    lv_obj_add_event_cb(ui.btn_bypass, toggle_bypass_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(ui.btn_at, toggle_at_cb, LV_EVENT_CLICKED, NULL);
+}
+
 // ---------- Columna derecha ----------
 
 static void crear_columna_derecha(lv_obj_t *parent)
@@ -484,10 +589,11 @@ static void crear_columna_derecha(lv_obj_t *parent)
     lv_obj_remove_style_all(col);
     lv_obj_set_size(col, ANCHO_COL_DERECHA, LV_PCT(100));
     lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(col, 8, 0);
+    lv_obj_set_style_pad_row(col, 4, 0); // comprimido, ver conversacion (4 paneles ahora, antes eran 3)
 
     crear_panel_sensores(col);
-    crear_panel_humedad(col);
+    crear_panel_gabinete(col);
+    crear_panel_controles(col);
     crear_panel_alarmas(col);
 }
 

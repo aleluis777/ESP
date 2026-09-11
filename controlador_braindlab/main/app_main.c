@@ -24,9 +24,6 @@
 //   - Rotacion semanal de la reserva (climatizacion_rotar_reserva() no se
 //     llama todavia desde ningun lado) -- ya hay RTC disponible para
 //     disparar esto, falta la logica de "cambio de semana".
-//   - Aplicar de verdad la config de red guardada (config_braindlab_guardar_red())
-//     al W5500 -- red_eth_init() todavia usa la IP fija de
-//     config_braindlab_defaults.h, igual que controlador_labgeo.
 
 #include <stdio.h>
 #include <string.h>

@@ -32,6 +32,7 @@
     padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; align-self: flex-start; margin-top: 0.25rem;
   }
   button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
+  button.guardar.peligro { background: var(--alerta); color: #fff; }
   .mensaje { font-size: 0.85rem; min-height: 1.1em; }
   .mensaje.ok { color: var(--ok); }
   .mensaje.error { color: var(--alerta); }
@@ -61,9 +62,9 @@
       <button class="guardar" type="submit">Guardar red</button>
       <p class="mensaje" id="red-mensaje"></p>
       <p class="detalle">
-        Por ahora solo se guarda en <code>config.json</code> -- todavia no se
-        aplica en caliente al W5500, hace falta reiniciar el equipo con la
-        IP fija actualizada en el firmware para que tome efecto.
+        Se guarda en <code>config.json</code> -- el equipo la lee y la aplica
+        al W5500 recien al arrancar, no en caliente. Reiniciar el equipo
+        despues de guardar para que tome efecto.
       </p>
     </form>
 
@@ -135,6 +136,18 @@
         la correccion se note en las lecturas.
       </p>
     </form>
+
+    <section class="tarjeta">
+      <h2>Reiniciar equipo</h2>
+      <button class="guardar peligro" type="button" id="btn-reiniciar">Reiniciar ahora</button>
+      <p class="mensaje" id="reiniciar-mensaje"></p>
+      <p class="detalle">
+        Reinicia el controlador ya mismo. Usalo despues de guardar Red o
+        Climatizacion para que tomen efecto (esos dos no se aplican en
+        caliente) -- el equipo queda sin responder unos segundos mientras
+        arranca de nuevo.
+      </p>
+    </section>
   </main>
 
   <script>
@@ -146,6 +159,28 @@
       el.textContent = texto;
       el.className = 'mensaje ' + clase;
     }
+
+    // Precarga el formulario de Red con lo que ya esta guardado en
+    // config.json (mismo archivo que lee/escribe /configurar_red, ver
+    // config_braindlab.c) -- asi el input muestra la IP real en vez de
+    // quedar vacio con solo el placeholder de ejemplo. Usa /descargar (el
+    // mismo endpoint que ya usa /files.html para bajar cualquier archivo de
+    // /www), no hace falta un endpoint nuevo. Si config.json todavia no
+    // existe (nunca se guardo nada) o no tiene seccion "red" -- primer
+    // arranque del equipo, por ejemplo -- se deja el placeholder como esta,
+    // no es un error.
+    function precargarRed() {
+      fetch('/descargar?nombre=config.json')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((datos) => {
+          if (!datos || !datos.red) return;
+          if (datos.red.ip) document.getElementById('red-ip').value = datos.red.ip;
+          if (datos.red.gateway) document.getElementById('red-gateway').value = datos.red.gateway;
+          if (datos.red.mascara) document.getElementById('red-mascara').value = datos.red.mascara;
+        })
+        .catch(() => {}); // config.json no existe todavia -- se deja el placeholder
+    }
+    precargarRed();
 
     document.getElementById('form-red').addEventListener('submit', (ev) => {
       ev.preventDefault();
@@ -224,6 +259,19 @@
           mostrarMensaje(mensaje, 'Calibrado. Reiniciar el equipo para que se note.', 'ok');
         })
         .catch(() => mostrarMensaje(mensaje, 'No se pudo calibrar (revisar el valor).', 'error'));
+    });
+
+    document.getElementById('btn-reiniciar').addEventListener('click', () => {
+      const mensaje = document.getElementById('reiniciar-mensaje');
+      if (!confirm('¿Reiniciar el equipo ahora? Va a quedar sin responder unos segundos.')) return;
+
+      fetch('/reiniciar', { method: 'POST' })
+        // El equipo se reinicia apenas manda la respuesta -- la conexion se
+        // puede cortar antes de que el navegador la reciba entera, eso NO
+        // es un error real (mismo criterio que /ota), asi que .catch()
+        // tambien cuenta como "OK, ya esta reiniciando".
+        .then(() => mostrarMensaje(mensaje, 'Reiniciando...', 'ok'))
+        .catch(() => mostrarMensaje(mensaje, 'Reiniciando...', 'ok'));
     });
   </script>
 </body>

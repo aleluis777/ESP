@@ -95,7 +95,9 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     uint8_t bitmask_salida    = p[9];
     uint8_t indice_reserva    = p[11];
     bool alarma_at            = p[12] != 0;
+    bool bypass_solicitado    = p[14] != 0;
     bool bypass_activo        = p[16] != 0;
+    int16_t temp_gestor_decimas = braindlab_leer_i16(&p[20]);
     int16_t humedad_decimas   = braindlab_leer_i16(&p[22]);
     uint16_t anio             = braindlab_leer_u16(&p[28]);
     uint8_t mes = p[30], dia = p[31], hora = p[32], minuto = p[33], segundo = p[34];
@@ -117,10 +119,20 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
         lv_label_set_text(s_ui->sensores[i].lbl_valor, texto);
     }
 
-    // ---- Humedad del gabinete ----
+    // ---- Temperatura y humedad del gabinete ----
+    char texto_temp_gestor[16];
+    formatear_decimas(texto_temp_gestor, sizeof(texto_temp_gestor), temp_gestor_decimas, "\xC2\xB0" "C");
+    lv_label_set_text(s_ui->lbl_temp_gestor, texto_temp_gestor);
+
     char texto_hum[16];
     formatear_decimas(texto_hum, sizeof(texto_hum), humedad_decimas, " %RH");
     lv_label_set_text(s_ui->lbl_humedad, texto_hum);
+
+    // ---- Controles Bypass / AT (resincroniza el boton con el estado real
+    // ya aplicado -- por si la automatica lo cambio, o por si el pedido
+    // manual que mando esta pantalla ya se aplico) ----
+    ui_dashboard_bypass_set_activo(s_ui, bypass_solicitado);
+    ui_dashboard_at_set_activo(s_ui, alarma_at);
 
     // ---- Estado del sistema (barra superior) ----
     if (alarma_at) {
