@@ -206,7 +206,7 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     // Cabecera: numero + nombre + led de estado
     lv_obj_t *fila_header = lv_obj_create(card);
     lv_obj_remove_style_all(fila_header);
-    lv_obj_set_width(fila_header, LV_PCT(100));
+    lv_obj_set_size(fila_header, LV_PCT(100), LV_SIZE_CONTENT); // sin alto explicito LVGL le da ~130px y "Aire N" queda a media tarjeta
     lv_obj_set_flex_flow(fila_header, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(fila_header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -242,13 +242,12 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     // ultimo hijo) era el que quedaba cortado/invisible cuando la tarjeta
     // resultaba un poco mas chica de lo calculado -- ver conversacion.
     lv_obj_set_flex_grow(caja_icono, 1);
-    lv_obj_set_style_max_height(caja_icono, 40, 0); // comprimido, ver conversacion
-    lv_obj_set_style_min_height(caja_icono, 18, 0);
+    lv_obj_set_style_min_height(caja_icono, 40, 0);
     lv_obj_clear_flag(caja_icono, LV_OBJ_FLAG_SCROLLABLE);
 
     aire->img_unidad = lv_image_create(caja_icono);
     lv_image_set_src(aire->img_unidad, &air_conditioner);
-    lv_obj_align(aire->img_unidad, LV_ALIGN_TOP_MID, 0, 2);
+    lv_obj_align(aire->img_unidad, LV_ALIGN_CENTER, 0, -4);
 
     for (int i = 0; i < UI_DASH_NUM_VIENTO; i++) {
         lv_obj_t *franja = lv_obj_create(caja_icono);
@@ -282,7 +281,7 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     // no entraban, ver comentario de pad_row arriba).
     lv_obj_t *fila_set_vel = lv_obj_create(card);
     lv_obj_remove_style_all(fila_set_vel);
-    lv_obj_set_width(fila_set_vel, LV_PCT(100));
+    lv_obj_set_size(fila_set_vel, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(fila_set_vel, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(fila_set_vel, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -448,7 +447,7 @@ static lv_obj_t *crear_fila_alarma(lv_obj_t *parent, const char *codigo, const c
     lv_obj_set_style_border_color(fila, color, 0);
     lv_obj_set_style_pad_all(fila, 8, 0);
     lv_obj_clear_flag(fila, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_width(fila, LV_PCT(100));
+    lv_obj_set_size(fila, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(fila, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(fila, 8, 0);
@@ -564,7 +563,7 @@ static void crear_panel_controles(lv_obj_t *parent)
 
     lv_obj_t *fila = lv_obj_create(parent);
     lv_obj_remove_style_all(fila);
-    lv_obj_set_width(fila, LV_PCT(100));
+    lv_obj_set_size(fila, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila, 8, 0);
 

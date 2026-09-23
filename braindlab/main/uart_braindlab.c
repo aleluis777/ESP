@@ -103,7 +103,22 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     uint8_t mes = p[30], dia = p[31], hora = p[32], minuto = p[33], segundo = p[34];
     (void) indice_reserva; // sin widget propio en el dashboard todavia
 
+    // Print de TODO lo que llego (una linea por trama), antes de tocar LVGL.
+    // Las decimas se muestran como entero crudo (235 = 23.5) para ver
+    // exactamente lo que mando el controlador.
+    ESP_LOGI(TAG, "<- ESTADO_UPDATE len=%u | ciclo=%u T1..T4=%d,%d,%d,%d (dec) salida=0x%02X manual=0x%02X reserva=%u "
+                  "at=%u at_man=%u bps_sol=%u bps_man=%u bps_act=%u modo_man=%u eth=%u gestor_ok=%u "
+                  "T_gestor=%d HR=%d (dec) uptime=%lus fecha=%04u-%02u-%02u %02u:%02u:%02u",
+             (unsigned)len, (unsigned)ciclo,
+             (int)temps_decimas[0], (int)temps_decimas[1], (int)temps_decimas[2], (int)temps_decimas[3],
+             (unsigned)bitmask_salida, (unsigned)p[10], (unsigned)indice_reserva,
+             (unsigned)alarma_at, (unsigned)p[13], (unsigned)bypass_solicitado, (unsigned)p[15],
+             (unsigned)bypass_activo, (unsigned)p[17], (unsigned)p[18], (unsigned)p[19],
+             (int)temp_gestor_decimas, (int)humedad_decimas, (unsigned long)braindlab_leer_u32(&p[24]),
+             (unsigned)anio, (unsigned)mes, (unsigned)dia, (unsigned)hora, (unsigned)minuto, (unsigned)segundo);
+
     if (!lvgl_port_lock(0)) {
+        ESP_LOGW(TAG, "No se pudo tomar el lock de LVGL, trama recibida pero no aplicada a la UI");
         return;
     }
 
@@ -168,8 +183,6 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     }
 
     lvgl_port_unlock();
-
-    ESP_LOGD(TAG, "<- ESTADO_UPDATE ciclo=%u salida=0x%X", (unsigned)ciclo, (unsigned)bitmask_salida);
 }
 
 static void procesar_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
@@ -196,11 +209,26 @@ static void uart_rx_task(void *arg)
     uint8_t hdr_payload[3 + BRAINDLAB_MAX_PAYLOAD];
     uint16_t len = 0, idx = 0;
     uint8_t b;
+    TickType_t ultimo_rx = xTaskGetTickCount();
+    TickType_t ultimo_aviso = ultimo_rx;
+
+    ESP_LOGI(TAG, "Tarea RX lista, esperando tramas en UART_NUM_%d (RX=GPIO%d)",
+             BRAINDLAB_UART_PORT, BRAINDLAB_UART_RX_PIN);
 
     while (1) {
         if (uart_read_bytes(BRAINDLAB_UART_PORT, &b, 1, pdMS_TO_TICKS(200)) != 1) {
+            // Sin bytes: avisa cada 5 s para saber que el enlace esta mudo
+            // (cable/pines/GND/baud) y no solo que "no se ve nada".
+            TickType_t ahora = xTaskGetTickCount();
+            if ((ahora - ultimo_aviso) >= pdMS_TO_TICKS(5000)) {
+                ESP_LOGW(TAG, "Sin bytes del controlador hace %lu ms (revisar TX/RX cruzados, GND, baud %d)",
+                         (unsigned long)((ahora - ultimo_rx) * portTICK_PERIOD_MS), BRAINDLAB_UART_BAUD);
+                ultimo_aviso = ahora;
+            }
             continue;
         }
+        ultimo_rx = xTaskGetTickCount();
+        ultimo_aviso = ultimo_rx;
 
         switch (estado) {
         case ST_SOF:
@@ -239,7 +267,9 @@ static void uart_rx_task(void *arg)
             if (crc_calc == b) {
                 procesar_frame(hdr_payload[0], &hdr_payload[3], len);
             } else {
-                ESP_LOGW(TAG, "CRC invalido, trama descartada");
+                ESP_LOGW(TAG, "CRC invalido (calculado=0x%02X recibido=0x%02X cmd=0x%02X len=%u), trama descartada",
+                         (unsigned)crc_calc, (unsigned)b, (unsigned)hdr_payload[0], (unsigned)len);
+                ESP_LOG_BUFFER_HEX(TAG, hdr_payload, 3 + len);
             }
             estado = ST_SOF;
             break;

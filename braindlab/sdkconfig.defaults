@@ -14,3 +14,12 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_LV_FONT_MONTSERRAT_24=y
+
+# Panel RGB con framebuffer en PSRAM: a veces el DMA no alcanza a leer a tiempo
+# (el CPU compite por la PSRAM al redibujar) y la imagen se corre a un lado
+# ("efecto pelicula antigua"). RESTART_IN_VSYNC reinicia el DMA en cada
+# vblank para que el corrimiento dure como maximo un cuadro; el resto reduce
+# la contencion (CPU mas rapido, linea de cache de 64B para rafagas de PSRAM).
+CONFIG_LCD_RGB_RESTART_IN_VSYNC=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y

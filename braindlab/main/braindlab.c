@@ -102,6 +102,11 @@ void app_main(void)
             .vsync_pulse_width = 3,
         },
         .flags.fb_in_psram = true,
+        // El DMA lee de dos buffers chicos en SRAM interna (que el CPU rellena
+        // desde el framebuffer en PSRAM) en vez de leer la PSRAM directo:
+        // evita que la imagen se corra a un lado cuando el CPU compite por la
+        // PSRAM al redibujar. 10 lineas por bounce buffer x 2.
+        .bounce_buffer_size_px = LCD_H_RES * 10,
     };
     esp_lcd_panel_handle_t panel = NULL;
     ESP_ERROR_CHECK(esp_lcd_new_rgb_panel(&panel_config, &panel));
@@ -146,11 +151,11 @@ void app_main(void)
 
     lvgl_port_display_cfg_t disp_cfg = {
         .panel_handle = panel,
-        .buffer_size = LCD_H_RES * 100,
+        .buffer_size = LCD_H_RES * 30,
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
         .color_format = LV_COLOR_FORMAT_RGB565,
-        .flags = { .buff_dma = false, .buff_spiram = true },
+        .flags = { .buff_dma = true, .buff_spiram = false }, // buffer de dibujo en SRAM interna, no en PSRAM
     };
     lvgl_port_display_rgb_cfg_t rgb_cfg = {
         .flags = { .bb_mode = false, .avoid_tearing = false },
