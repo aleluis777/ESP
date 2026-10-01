@@ -42,6 +42,7 @@
 #include "rtc_braindlab.h"
 #include "sensor_gestor.h"
 #include "uart_pantalla.h"
+#include "snmp_braindlab.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -197,7 +198,7 @@ static void tarea_climatizacion(void *arg)
     bool gestor_ok = false;
 
     while (1) {
-        sensores_temp_leer(temperaturas_crudas, sin_calibrar);
+        bool sensores_temp_ok = sensores_temp_leer(temperaturas_crudas, sin_calibrar) == ESP_OK;
         for (int i = 0; i < 4; i++) {
             s_ultimas_temperaturas_crudas[i] = temperaturas_crudas[i];
             temperaturas[i] = temperaturas_crudas[i] + s_calib_ntc[i];
@@ -274,6 +275,38 @@ static void tarea_climatizacion(void *arg)
             rtc_ok ? (uint8_t)ahora.tm_hour : 0,
             rtc_ok ? (uint8_t)ahora.tm_min : 0,
             rtc_ok ? (uint8_t)ahora.tm_sec : 0);
+
+        // Misma foto para el agente SNMP (GET) -- ademas detecta ahi los
+        // eventos que generan traps (ver snmp_braindlab.c). No bloquea.
+        snmp_braindlab_estado_t estado_snmp = {
+            .ciclo = (uint8_t)estado.ciclo,
+            .sensores_temp_ok = sensores_temp_ok,
+            .gestor_ok = gestor_ok,
+            .temp_gestor = temp_gestor,
+            .humedad_gestor = humedad_gestor,
+            .rtc_ok = rtc_ok,
+            .alarma_at = alarma_at_aplicada,
+            .at_manual = s_at_manual_activo,
+            .bypass_solicitado = bypass_aplicado,
+            .bypass_manual = s_bypass_manual_activo,
+            .bypass_activo = salidas_leer_bypass_activo(),
+            .modo_manual = hay_algun_override_manual(),
+            .indice_reserva = estado.indice_reserva,
+            .bypass_auto_habilitado = estado.bypass_auto_habilitado,
+            .cantidad_aires = cfg.cantidad_aires,
+            .temp_min = cfg.temp_min,
+            .temp_max = cfg.temp_max,
+            .temp_at = cfg.temp_at,
+            .temp_bypass = cfg.temp_bypass,
+            .calibracion = { s_calib_ntc[0], s_calib_ntc[1], s_calib_ntc[2], s_calib_ntc[3],
+                             s_calib_temp_gestor, s_calib_humedad_gestor },
+        };
+        for (int i = 0; i < 4; i++) {
+            estado_snmp.temperaturas[i] = temperaturas[i];
+            estado_snmp.salida_aire[i] = salida_aplicada[i];
+            estado_snmp.aire_manual[i] = aire_manual_actual[i];
+        }
+        snmp_braindlab_publicar_estado(&estado_snmp);
 
         if (red_eth_esta_conectado()) {
             ESP_LOGI(TAG, "Ethernet: conectado");
@@ -420,15 +453,16 @@ static void on_calibrar_sensor(const char *sensor, float valor_referencia)
     }
 
     float nueva_constante = valor_referencia - crudo;
+    uint8_t indice_sensor; // mismo orden que config_calibracion_t, para el trap SNMP
 
     config_calibracion_t calib;
     config_braindlab_cargar_calibracion(&calib); // conserva la calibracion de los demas sensores
-    if (strcmp(sensor, "t1") == 0)               { calib.t1 = nueva_constante; s_calib_ntc[0] = nueva_constante; }
-    else if (strcmp(sensor, "t2") == 0)          { calib.t2 = nueva_constante; s_calib_ntc[1] = nueva_constante; }
-    else if (strcmp(sensor, "t3") == 0)          { calib.t3 = nueva_constante; s_calib_ntc[2] = nueva_constante; }
-    else if (strcmp(sensor, "t4") == 0)          { calib.t4 = nueva_constante; s_calib_ntc[3] = nueva_constante; }
-    else if (strcmp(sensor, "temp_gestor") == 0) { calib.temp_gestor = nueva_constante; s_calib_temp_gestor = nueva_constante; }
-    else                                          { calib.humedad_gestor = nueva_constante; s_calib_humedad_gestor = nueva_constante; }
+    if (strcmp(sensor, "t1") == 0)               { calib.t1 = nueva_constante; s_calib_ntc[0] = nueva_constante; indice_sensor = 0; }
+    else if (strcmp(sensor, "t2") == 0)          { calib.t2 = nueva_constante; s_calib_ntc[1] = nueva_constante; indice_sensor = 1; }
+    else if (strcmp(sensor, "t3") == 0)          { calib.t3 = nueva_constante; s_calib_ntc[2] = nueva_constante; indice_sensor = 2; }
+    else if (strcmp(sensor, "t4") == 0)          { calib.t4 = nueva_constante; s_calib_ntc[3] = nueva_constante; indice_sensor = 3; }
+    else if (strcmp(sensor, "temp_gestor") == 0) { calib.temp_gestor = nueva_constante; s_calib_temp_gestor = nueva_constante; indice_sensor = 4; }
+    else                                          { calib.humedad_gestor = nueva_constante; s_calib_humedad_gestor = nueva_constante; indice_sensor = 5; }
 
     if (config_braindlab_guardar_calibracion(&calib) == ESP_OK) {
         ESP_LOGI(TAG, "calibrar_sensor: %s crudo=%.2f referencia=%.2f -> constante=%+.2f guardada y aplicada",
@@ -436,6 +470,7 @@ static void on_calibrar_sensor(const char *sensor, float valor_referencia)
     } else {
         ESP_LOGE(TAG, "calibrar_sensor: no se pudo guardar la nueva constante de %s (queda aplicada en RAM igual)", sensor);
     }
+    snmp_braindlab_notificar_calibracion(indice_sensor, nueva_constante);
 }
 
 void app_main(void)
@@ -507,6 +542,22 @@ void app_main(void)
             ESP_LOGI(TAG, "servidor_web_init() OK -- probar http://192.168.5.95/");
         } else {
             ESP_LOGE(TAG, "servidor_web_init() fallo (%s)", esp_err_to_name(err_web));
+        }
+
+        // SNMP: otro cliente mas, mismos callbacks que la web (un SET hace
+        // exactamente lo mismo que el POST equivalente). Independiente del
+        // servidor web: si uno falla, el otro sigue.
+        snmp_braindlab_callbacks_t snmp_cbs = {
+            .on_control_aire = on_control_aire,
+            .on_control_bypass = on_control_bypass,
+            .on_control_at = on_control_at,
+            .on_control_automatico = on_control_automatico,
+            .on_calibrar_sensor = on_calibrar_sensor,
+        };
+        snmp_braindlab_set_callbacks(snmp_cbs);
+        esp_err_t err_snmp = snmp_braindlab_init();
+        if (err_snmp != ESP_OK) {
+            ESP_LOGE(TAG, "snmp_braindlab_init() fallo (%s)", esp_err_to_name(err_snmp));
         }
     }
 

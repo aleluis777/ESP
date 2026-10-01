@@ -5,7 +5,10 @@
 // para no dejar el JSON a medio escribir si se corta la luz.
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "config_braindlab.h"
 #include "config_braindlab_defaults.h"
 #include "esp_spiffs.h"
@@ -16,8 +19,39 @@ static const char *TAG = "CONFIG_BRAINDLAB";
 #define RUTA_CONFIG     "/www/config.json"
 #define RUTA_CONFIG_TMP "/www/config.json.tmp"
 
+// Tamanio maximo de config.json que se lee. Con la seccion "snmp" el JSON
+// formateado (cJSON_Print, con tabs) ya ronda los 700 bytes: el buffer de
+// 768 que habia antes quedaba justo y cortaba el archivo en silencio (JSON
+// corrupto => TODAS las secciones vuelven a sus defaults). Va al heap y no
+// al stack porque se llama desde tareas con stack chico.
+#define CONFIG_MAX_BYTES 2048
+
+// Ver "Thread-safe" en config_braindlab.h. Se crea en config_braindlab_init().
+static SemaphoreHandle_t s_mutex = NULL;
+
+static void bloquear(void)
+{
+    if (s_mutex) {
+        xSemaphoreTake(s_mutex, portMAX_DELAY);
+    }
+}
+
+static void desbloquear(void)
+{
+    if (s_mutex) {
+        xSemaphoreGive(s_mutex);
+    }
+}
+
 esp_err_t config_braindlab_init(void)
 {
+    if (s_mutex == NULL) {
+        s_mutex = xSemaphoreCreateMutex();
+        if (s_mutex == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
     if (esp_spiffs_mounted("www")) {
         return ESP_OK;
     }
@@ -47,12 +81,21 @@ static cJSON *cargar_json_archivo(const char *ruta)
         return cJSON_CreateObject();
     }
 
-    char buf[768];
-    size_t leidos = fread(buf, 1, sizeof(buf) - 1, f);
+    char *buf = malloc(CONFIG_MAX_BYTES);
+    if (!buf) {
+        fclose(f);
+        ESP_LOGE(TAG, "Sin memoria para leer %s, se trata como vacio", ruta);
+        return cJSON_CreateObject();
+    }
+    size_t leidos = fread(buf, 1, CONFIG_MAX_BYTES - 1, f);
     fclose(f);
     buf[leidos] = '\0';
+    if (leidos == CONFIG_MAX_BYTES - 1) {
+        ESP_LOGW(TAG, "%s llena el buffer de lectura (%d bytes) -- probablemente cortado", ruta, CONFIG_MAX_BYTES);
+    }
 
     cJSON *raiz = cJSON_Parse(buf);
+    free(buf);
     if (!raiz) {
         ESP_LOGW(TAG, "%s invalido (JSON corrupto), se trata como vacio", ruta);
         return cJSON_CreateObject();
@@ -118,6 +161,7 @@ void config_braindlab_cargar_climatizacion(config_climatizacion_t *cfg)
     cfg->fails_max_bypass = FAILS_MAX_BYPASS_DEFAULT;
     cfg->rotar_reserva    = ROTAR_RESERVA_DEFAULT;
 
+    bloquear();
     cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
 
     const cJSON *clima = cJSON_GetObjectItemCaseSensitive(raiz, "climatizacion");
@@ -139,6 +183,7 @@ void config_braindlab_cargar_climatizacion(config_climatizacion_t *cfg)
     }
 
     cJSON_Delete(raiz);
+    desbloquear();
     ESP_LOGI(TAG, "Climatizacion cargada: N=%u tmin=%.2f tmax=%.2f at=%.2f bypass=%.2f fails_max=%u rotar=%d",
              cfg->cantidad_aires, cfg->temp_min, cfg->temp_max, cfg->temp_at, cfg->temp_bypass,
              cfg->fails_max_bypass, cfg->rotar_reserva);
@@ -146,6 +191,7 @@ void config_braindlab_cargar_climatizacion(config_climatizacion_t *cfg)
 
 esp_err_t config_braindlab_guardar_climatizacion(const config_climatizacion_t *cfg)
 {
+    bloquear();
     cJSON *raiz = cargar_json_archivo(RUTA_CONFIG); // conserva "red" y cualquier otra seccion
 
     cJSON_DeleteItemFromObject(raiz, "climatizacion");
@@ -161,6 +207,7 @@ esp_err_t config_braindlab_guardar_climatizacion(const config_climatizacion_t *c
 
     esp_err_t err = guardar_json_archivo(raiz);
     cJSON_Delete(raiz);
+    desbloquear();
 
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Climatizacion guardada en %s", RUTA_CONFIG);
@@ -174,6 +221,7 @@ esp_err_t config_braindlab_guardar_climatizacion(const config_climatizacion_t *c
 
 void config_braindlab_cargar_red(config_red_t *cfg)
 {
+    bloquear();
     cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
 
     const cJSON *red = cJSON_GetObjectItemCaseSensitive(raiz, "red");
@@ -191,11 +239,13 @@ void config_braindlab_cargar_red(config_red_t *cfg)
     }
 
     cJSON_Delete(raiz);
+    desbloquear();
     ESP_LOGI(TAG, "Configuracion de red cargada de %s", RUTA_CONFIG);
 }
 
 esp_err_t config_braindlab_guardar_red(const config_red_t *cfg)
 {
+    bloquear();
     cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
 
     cJSON_DeleteItemFromObject(raiz, "red");
@@ -207,6 +257,7 @@ esp_err_t config_braindlab_guardar_red(const config_red_t *cfg)
 
     esp_err_t err = guardar_json_archivo(raiz);
     cJSON_Delete(raiz);
+    desbloquear();
 
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Configuracion de red guardada en %s (ip=%s gw=%s mask=%s)",
@@ -228,6 +279,7 @@ void config_braindlab_cargar_calibracion(config_calibracion_t *cfg)
     cfg->temp_gestor    = CALIBRACION_DEFAULT;
     cfg->humedad_gestor = CALIBRACION_DEFAULT;
 
+    bloquear();
     cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
 
     const cJSON *calib = cJSON_GetObjectItemCaseSensitive(raiz, "calibracion");
@@ -241,12 +293,14 @@ void config_braindlab_cargar_calibracion(config_calibracion_t *cfg)
     }
 
     cJSON_Delete(raiz);
+    desbloquear();
     ESP_LOGI(TAG, "Calibracion cargada: t1=%+.2f t2=%+.2f t3=%+.2f t4=%+.2f temp_gestor=%+.2f humedad_gestor=%+.2f",
              cfg->t1, cfg->t2, cfg->t3, cfg->t4, cfg->temp_gestor, cfg->humedad_gestor);
 }
 
 esp_err_t config_braindlab_guardar_calibracion(const config_calibracion_t *cfg)
 {
+    bloquear();
     cJSON *raiz = cargar_json_archivo(RUTA_CONFIG); // conserva "climatizacion"/"red"
 
     cJSON_DeleteItemFromObject(raiz, "calibracion");
@@ -261,9 +315,73 @@ esp_err_t config_braindlab_guardar_calibracion(const config_calibracion_t *cfg)
 
     esp_err_t err = guardar_json_archivo(raiz);
     cJSON_Delete(raiz);
+    desbloquear();
 
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Calibracion guardada en %s", RUTA_CONFIG);
+    }
+    return err;
+}
+
+// ---------------------------------------------------------------------------
+// Seccion "snmp"
+// ---------------------------------------------------------------------------
+
+void config_braindlab_cargar_snmp(config_snmp_t *cfg)
+{
+    static const char *const claves_ip[CONFIG_SNMP_NUM_DESTINOS] = { "trap1_ip", "trap2_ip" };
+    static const char *const claves_hab[CONFIG_SNMP_NUM_DESTINOS] = { "trap1_habilitado", "trap2_habilitado" };
+
+    bloquear();
+    cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
+
+    // Sin seccion "snmp" se pasa NULL: cJSON_GetObjectItemCaseSensitive(NULL, ...)
+    // devuelve NULL y cada campo cae a su default.
+    const cJSON *snmp = cJSON_GetObjectItemCaseSensitive(raiz, "snmp");
+    if (!cJSON_IsObject(snmp)) {
+        snmp = NULL;
+    }
+    leer_campo_str(snmp, "community_lectura", cfg->community_lectura, sizeof(cfg->community_lectura),
+                   SNMP_COMMUNITY_LECTURA_DEFAULT);
+    leer_campo_str(snmp, "community_escritura", cfg->community_escritura, sizeof(cfg->community_escritura),
+                   SNMP_COMMUNITY_ESCRITURA_DEFAULT);
+    leer_campo_str(snmp, "community_trap", cfg->community_trap, sizeof(cfg->community_trap),
+                   SNMP_COMMUNITY_TRAP_DEFAULT);
+    for (int i = 0; i < CONFIG_SNMP_NUM_DESTINOS; i++) {
+        leer_campo_str(snmp, claves_ip[i], cfg->trap_ip[i], sizeof(cfg->trap_ip[i]), SNMP_TRAP_IP_DEFAULT);
+        const cJSON *hab = cJSON_GetObjectItemCaseSensitive(snmp, claves_hab[i]);
+        cfg->trap_habilitado[i] = cJSON_IsBool(hab) ? cJSON_IsTrue(hab) : SNMP_TRAP_HABILITADO_DEFAULT;
+    }
+
+    cJSON_Delete(raiz);
+    desbloquear();
+    ESP_LOGI(TAG, "SNMP cargado: trap1=%s (%s) trap2=%s (%s)",
+             cfg->trap_ip[0], cfg->trap_habilitado[0] ? "on" : "off",
+             cfg->trap_ip[1], cfg->trap_habilitado[1] ? "on" : "off");
+}
+
+esp_err_t config_braindlab_guardar_snmp(const config_snmp_t *cfg)
+{
+    bloquear();
+    cJSON *raiz = cargar_json_archivo(RUTA_CONFIG); // conserva las demas secciones
+
+    cJSON_DeleteItemFromObject(raiz, "snmp");
+    cJSON *snmp = cJSON_CreateObject();
+    cJSON_AddStringToObject(snmp, "community_lectura", cfg->community_lectura);
+    cJSON_AddStringToObject(snmp, "community_escritura", cfg->community_escritura);
+    cJSON_AddStringToObject(snmp, "community_trap", cfg->community_trap);
+    cJSON_AddStringToObject(snmp, "trap1_ip", cfg->trap_ip[0]);
+    cJSON_AddBoolToObject(snmp, "trap1_habilitado", cfg->trap_habilitado[0]);
+    cJSON_AddStringToObject(snmp, "trap2_ip", cfg->trap_ip[1]);
+    cJSON_AddBoolToObject(snmp, "trap2_habilitado", cfg->trap_habilitado[1]);
+    cJSON_AddItemToObject(raiz, "snmp", snmp);
+
+    esp_err_t err = guardar_json_archivo(raiz);
+    cJSON_Delete(raiz);
+    desbloquear();
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "SNMP guardado en %s", RUTA_CONFIG);
     }
     return err;
 }

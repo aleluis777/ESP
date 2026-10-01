@@ -6,9 +6,10 @@ idf_component_register(SRCS "app_main.c" "config_braindlab.c" "salidas_braindlab
                              "climatizacion.c" "sensores_temp.c"
                              "red_eth.c" "servidor_web.c"
                              "rtc_braindlab.c" "sensor_gestor.c" "uart_pantalla.c"
+                             "snmp_braindlab.c"
                        REQUIRES esp_driver_gpio esp_driver_uart spiffs esp_timer
                                 esp_eth esp_netif esp_event esp_http_server lwip
-                                app_update driver
+                                app_update driver snmp_lwip
                        INCLUDE_DIRS ".")
 
 # Empaqueta la carpeta ../web (index.html/style.css/script.js) como imagen

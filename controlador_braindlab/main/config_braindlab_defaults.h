@@ -52,3 +52,20 @@
 // ---------------------------------------------------------------------------
 
 #define CALIBRACION_DEFAULT (0.0f)
+
+// ---------------------------------------------------------------------------
+// SNMP (ver config_snmp_t / snmp_braindlab.c)
+// ---------------------------------------------------------------------------
+
+// OJO: "public"/"private" son las communities que prueba cualquier escaner
+// de red. La de lectura se deja estandar (solo expone datos); la de
+// escritura (que puede prender/apagar A/A y forzar el bypass) NO se deja en
+// "private" -- cambiarla en config.json antes de un despliegue real.
+#define SNMP_COMMUNITY_LECTURA_DEFAULT   "public"
+#define SNMP_COMMUNITY_ESCRITURA_DEFAULT "braindlab-rw"
+#define SNMP_COMMUNITY_TRAP_DEFAULT      "public"
+
+// Sin gestor configurado: los traps quedan apagados hasta que se cargue la
+// IP del gestor (config.json o SNMP SET sobre la rama .5 de BRAINDTIC-MIB).
+#define SNMP_TRAP_IP_DEFAULT         "0.0.0.0"
+#define SNMP_TRAP_HABILITADO_DEFAULT (false)

@@ -4,6 +4,13 @@
 // mismo patron que config_labgeo.c en controlador_labgeo: lectura con
 // defaults campo por campo, escritura atomica (tmp + rename), y cada
 // seccion se guarda sin pisar las demas.
+//
+// Thread-safe: todas las funciones cargar/guardar toman un mutex interno --
+// se llaman desde varias tareas (servidor HTTP, agente SNMP,
+// tarea_climatizacion) y cada guardar es un leer-modificar-escribir del
+// mismo archivo; sin el mutex, dos guardados simultaneos pueden pisarse y
+// perder la seccion que guardo el otro. Llamar config_braindlab_init() antes
+// que cualquier otra (crea el mutex).
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -50,6 +57,21 @@ typedef struct {
     float humedad_gestor;
 } config_calibracion_t;
 
+// Agente SNMP (ver snmp_braindlab.c). Las communities se aplican solo al
+// arrancar (no se pueden cambiar por SNMP a proposito: un SET mal hecho
+// dejaria al gestor sin acceso). Los destinos de trap si se pueden cambiar
+// en caliente por SNMP SET (rama .5 de BRAINDTIC-MIB). trap_ip="0.0.0.0" o
+// trap_habilitado=false = ese destino no recibe traps.
+#define CONFIG_SNMP_NUM_DESTINOS 2
+
+typedef struct {
+    char community_lectura[32];
+    char community_escritura[32];
+    char community_trap[32];
+    char trap_ip[CONFIG_SNMP_NUM_DESTINOS][16];
+    bool trap_habilitado[CONFIG_SNMP_NUM_DESTINOS];
+} config_snmp_t;
+
 // Monta la particion SPIFFS "www". Idempotente.
 esp_err_t config_braindlab_init(void);
 
@@ -61,6 +83,9 @@ esp_err_t config_braindlab_guardar_red(const config_red_t *cfg);
 
 void      config_braindlab_cargar_calibracion(config_calibracion_t *cfg);
 esp_err_t config_braindlab_guardar_calibracion(const config_calibracion_t *cfg);
+
+void      config_braindlab_cargar_snmp(config_snmp_t *cfg);
+esp_err_t config_braindlab_guardar_snmp(const config_snmp_t *cfg);
 
 #ifdef __cplusplus
 }
