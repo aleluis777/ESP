@@ -193,7 +193,7 @@ void app_main(void)
     }
 
     // ---------- 5. Enlace UART con controlador_braindlab ----------
-    uart_braindlab_init(ui);
+    uart_braindlab_init(ui, energia);
 
     ESP_LOGI(TAG, "UI lista, UART con controlador_braindlab activo");
 }

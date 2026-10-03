@@ -63,10 +63,10 @@ P1 (header) ── FUSE1 ── D1 (protección de polaridad) ── riel 4V
 | 4 | SENSOR_VP | 36 | `RX3` | RS-485 RX (desde RO del SP3485) | IN (solo entrada) | — |
 | 5 | SENSOR_VN | 39 | `P1` | **Reservado, sin uso previsto** | IN (solo entrada) | — |
 | 6 | IO34 | 34 | `BPS_STATUS` | Realimentación de bypass | IN (solo entrada) | **BAJO** |
-| 7 | IO35 | 35 | `RESET` | Pulsador `SW1` (pull-up `R10` 4K7) | IN (solo entrada) | **BAJO** |
+| 7 | IO35 | 35 | `RESET` | Pulsador `SW1` (pull-up `R10` 4K7) — **SIN USO: el firmware no lo lee** (ver §8.2) | IN (solo entrada) | **BAJO** |
 | 8 | IO32 | 32 | `EN_485` | DE + /RE del SP3485 | OUT | ALTO = TX |
 | 9 | IO33 | 33 | `TX3` | RS-485 TX (hacia DI del SP3485) | OUT | — |
-| 10 | IO25 | 25 | `P2` | **UART2 RX** — enlace serie hacia la pantalla braindlab (ver §14) | IN | — |
+| 10 | IO25 | 25 | `P2` | **IRQ del W5500 `U6`** (pin 5) — el firmware lo usa por interrupción (ver §4.1). Antes iba a ser el RX de la pantalla, que se movió a GPIO39 (§14) | IN | **BAJO** |
 | 11 | IO26 | 26 | `P6` | **UART2 TX** — enlace serie hacia la pantalla braindlab (ver §14). Antes iba al /CS de `U7`, que no se puebla (ver §4.1) | OUT | — |
 | 12 | IO27 | 27 | `HUM` | Sensor digital temp+humedad (1 hilo) | I/O | — |
 | 13 | IO14 | 14 | `BP_S` | Solicitud de bypass por software | OUT | **BAJO** |
@@ -76,7 +76,7 @@ P1 (header) ── FUSE1 ── D1 (protección de polaridad) ── riel 4V
 | 17–22 | SD0…CLK | 6–11 | — | **Flash interna del módulo. NO USAR.** | — | — |
 | 23 | IO15 | 15 | `P7` | **Buzzer `Z1` (vía Q12, `R25` 10K)** | OUT | ALTO |
 | 24 | IO2 | 2 | `AA2` | Relé simple U4 (vía Q2) + LED2 | OUT | ALTO |
-| 25 | IO0 | 0 | `BOOT0` | Strapping de arranque (pull-up `R2` 100k) + pin de `X1` | I/O | BAJO = bootloader |
+| 25 | IO0 | 0 | `BOOT0` | Strapping de arranque (pull-up `R2` 100k) + pin de `X1`. **Propuesto: /CS de la MicroSD** (pendiente de cablear) | I/O | BAJO = bootloader |
 | 26 | IO4 | 4 | `AA4` | Relé simple U9 (vía Q4) | OUT | ALTO |
 | 27 | IO16 | 16 | `AA3` | Relé simple U8 (vía Q3) | OUT | ALTO |
 | 28 | IO17 | 17 | `SS_TX` | **/CS del módulo W5500 `U6`** | OUT | **BAJO** |
@@ -105,7 +105,7 @@ P1 (header) ── FUSE1 ── D1 (protección de polaridad) ── riel 4V
 | 8 | `gnd` | `GND` | — |
 | 7 | `vcc` | `3V3` | — |
 | 6 | `rst` | `RST` | 5 |
-| 5 | `IRQ` | **sin conectar** | — |
+| 5 | `IRQ` | `P2` | 25 |
 | 4 | `ss` | `SS_TX` | 17 |
 | 3 | `nc` | sin conectar (pin no usado) | — |
 | 2 | `miso` | `SPI_MISO` | 19 |
@@ -142,7 +142,7 @@ P1 (header) ── FUSE1 ── D1 (protección de polaridad) ── riel 4V
 > - **Marcar `U7` como DNP en el BOM y en la variante de montaje de Altium**, para que no se cuele en una tirada futura.
 > - Si en algún momento se decide poblarlo, hace falta **añadir un pull-up de 10K en su `/CS` a 3V3** y volver a reservar GPIO26. Sin ese pull-up, un `/CS` flotante haría que la flash respondiera a la vez que el W5500 y corrompiera el tráfico Ethernet.
 >
-> **Sugerencia para una revisión del esquemático:** ahora que GPIO26 está libre y el pin 5 (`IRQ`) del módulo `U6` está sin conectar, ese es el destino natural. Llevar `IRQ` a GPIO26 permitiría abandonar el polling y manejar la Ethernet por interrupción. Los dos puntos están en la misma zona de la placa.
+> **Nota:** la sugerencia anterior de llevar `IRQ` a GPIO26 quedó obsoleta: GPIO26 es el TX hacia la pantalla (§14) y el `IRQ` ya va a GPIO25 (§4.1).
 
 **Notas para el firmware:**
 
@@ -156,11 +156,11 @@ P1 (header) ── FUSE1 ── D1 (protección de polaridad) ── riel 4V
 - Para resetear: pulso a BAJO de **mínimo 500 µs**, volver a ALTO, y **esperar ~50 ms** antes de la primera transacción SPI (el PLL interno necesita estabilizarse). Acceder antes devuelve basura.
 - GPIO5 tiene pull-up interno habilitado por defecto tras el reset del ESP32, así que el W5500 no queda en reset durante el arranque. Aun así, **conviene verificar si el módulo trae su propio pull-up en `rst`**; si no lo tiene, añadir uno de 10K externo.
 
-**IRQ del W5500 (pin 5) — confirmado SIN CONECTAR.** No hay línea de interrupción hacia el ESP32:
+**IRQ del W5500 (pin 5) — conectado a GPIO25 (verificado en la placa).** Versiones anteriores de este documento lo daban como sin conectar; era un error.
 
-- El driver Ethernet **debe funcionar por polling**. Ninguna librería que dependa de la interrupción va a servir sin modificarla.
-- En la práctica esto significa llamar a la rutina de sondeo del socket en el bucle principal a intervalo fijo. La latencia de recepción queda determinada por ese período, no por el evento.
-- Si en algún momento hace falta rendimiento o bajo consumo, el pin 5 es el punto donde habría que llevar un GPIO libre en una revisión futura.
+- El firmware usa la interrupción: `CONFIG_ETHERNET_SPI_INT0_GPIO=25` en `sdkconfig.defaults`. Antes iba por polling (`-1`, lectura SPI cada 10 ms).
+- `IRQ` es salida open-drain, **activa en BAJO**. GPIO25 tiene pull-up interno.
+- Con la MicroSD compartiendo el bus SPI, la interrupción evita que el polling ocupe el bus 100 veces por segundo.
 
 ### 4.2 I²C — dos periféricos
 
@@ -405,7 +405,9 @@ Conector con forma de USB usado como cabecera de programación. Nets: `GND`, `EN
 
 ### 8.2 Pulsador de reset `SW1`
 
-Pulsador a GND sobre el net `RESET` (GPIO35), con pull-up `R10` = 4K7 a 3V3. **Activo en BAJO.** Es una entrada de propósito general leída por firmware, **no** el reset del ESP32 (que sería `EN_ESP`).
+Pulsador a GND sobre el net `RESET` (GPIO35), con pull-up `R10` = 4K7 a 3V3. **Activo en BAJO.** Es una entrada de propósito general, **no** el reset del ESP32 (que sería `EN_ESP`).
+
+**Decisión: el pulsador `SW1` NO se usa.** El firmware no lee GPIO35 ni le asigna ninguna función. Al ser solo entrada, tampoco sirve para reasignarlo como salida (p. ej. /CS de la MicroSD).
 
 ### 8.3 Buzzer `Z1`
 
@@ -524,7 +526,7 @@ No admiten `OUTPUT` ni `INPUT_PULLUP`. `BPS_STATUS` tiene `R26` (100K) y `RESET`
 | Net | Origen | Estado |
 |---|---|---|
 | `P1` | GPIO39 | **Reservado, sin uso.** Su red RC no se puebla. Solo-entrada — descartado para la UART de la pantalla por eso mismo (ver §14). |
-| `P2` | GPIO25 | **Asignado: UART2 RX** hacia la pantalla braindlab (ver §14). Sigue colisionando de nombre con el designador del header `P2` (§6.1) — son cosas distintas, no confundir. |
+| `P2` | GPIO25 | **Asignado: IRQ del W5500** (ver §4.1). Sigue colisionando de nombre con el designador del header `P2` (§6.1) — son cosas distintas, no confundir. |
 | `P3`, `P4` (nets) | — | Aparecen en el bloque RC despoblado y en el header 2×2. **No llegan a ningún pin del ESP32.** |
 | `BP_H` | externo | Bypass por hardware. Falta ver de dónde viene (¿header `P3`/`P4`?). |
 | `S1` | colector Q5 | Posible net huérfano (ver §7.4). |

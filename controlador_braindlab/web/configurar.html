@@ -138,6 +138,18 @@
     </form>
 
     <section class="tarjeta">
+      <h2>Memoria SD</h2>
+      <button class="guardar peligro" type="button" id="btn-formatear-sd">Formatear SD</button>
+      <p class="mensaje" id="sd-mensaje"></p>
+      <p class="detalle">
+        Formatea la tarjeta MicroSD del controlador en FAT32. <strong>Borra todo
+        el historico guardado</strong> y no se puede deshacer. Sirve tambien para
+        tarjetas nuevas que vienen en exFAT (estado "Sin formato"). Puede tardar
+        unos segundos; mientras tanto el control de los aires sigue normal.
+      </p>
+    </section>
+
+    <section class="tarjeta">
       <h2>Reiniciar equipo</h2>
       <button class="guardar peligro" type="button" id="btn-reiniciar">Reiniciar ahora</button>
       <p class="mensaje" id="reiniciar-mensaje"></p>
@@ -199,17 +211,9 @@
         .catch(() => mostrarMensaje(mensaje, 'No se pudo guardar (revisar los valores).', 'error'));
     });
 
-    // Precarga el input con la hora local de ESTE navegador (no la del
-    // equipo -- el usuario la puede cambiar antes de guardar si no es la
-    // hora correcta). datetime-local no acepta un Date directo, hay que
-    // formatearlo a mano en hora LOCAL (Date.toISOString() da UTC).
-    function ahoraLocalParaInput() {
-      const d = new Date();
-      const pad = (n) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-             `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    }
-    document.getElementById('rtc-fecha-hora').value = ahoraLocalParaInput();
+    // La hora del RTC la pone SOLO el usuario, a mano: el input arranca
+    // vacio (nunca se precarga con la hora de la PC) y solo se manda al
+    // apretar "Guardar hora". Ningun otro lado del sistema ajusta el RTC.
 
     document.getElementById('form-rtc').addEventListener('submit', (ev) => {
       ev.preventDefault();
@@ -259,6 +263,34 @@
           mostrarMensaje(mensaje, 'Calibrado. Reiniciar el equipo para que se note.', 'ok');
         })
         .catch(() => mostrarMensaje(mensaje, 'No se pudo calibrar (revisar el valor).', 'error'));
+    });
+
+    // Formatear SD: dos confirmaciones (confirm + escribir FORMATEAR). El
+    // controlador vuelve a validar la palabra, asi que sin ella no borra nada.
+    document.getElementById('btn-formatear-sd').addEventListener('click', () => {
+      const mensaje = document.getElementById('sd-mensaje');
+      const boton = document.getElementById('btn-formatear-sd');
+      if (!confirm('Se va a BORRAR TODO el historico de la tarjeta SD. ¿Continuar?')) return;
+      const palabra = prompt('Para confirmar, escribir FORMATEAR (en mayusculas):');
+      if (palabra === null) return;
+      if (palabra !== 'FORMATEAR') {
+        mostrarMensaje(mensaje, 'Confirmacion incorrecta -- no se formateo nada.', 'error');
+        return;
+      }
+
+      boton.disabled = true;
+      mostrarMensaje(mensaje, 'Formateando... puede tardar unos segundos, no sacar la tarjeta.', 'ok');
+      fetch('/sd_formatear', { method: 'POST', body: JSON.stringify({ confirmacion: 'FORMATEAR' }) })
+        .then((r) => r.json().catch(() => ({})).then((d) => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => {
+          if (ok && d.ok) {
+            mostrarMensaje(mensaje, 'SD formateada correctamente.', 'ok');
+          } else {
+            mostrarMensaje(mensaje, 'No se pudo formatear: ' + (d.mensaje || 'error desconocido'), 'error');
+          }
+        })
+        .catch(() => mostrarMensaje(mensaje, 'Sin respuesta del controlador -- revisar el estado de la SD en el panel.', 'error'))
+        .finally(() => { boton.disabled = false; });
     });
 
     document.getElementById('btn-reiniciar').addEventListener('click', () => {

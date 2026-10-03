@@ -11,16 +11,19 @@
 // simulados.
 //
 // PENDIENTE (no implementado todavia, ver conversacion / HARDWARE.md):
-//   - MicroSD por SPI (comparte bus con el W5500) -- falta definir que pin
-//     sacrificar para su /CS, no queda ninguno libre.
+//   - MicroSD por SPI (comparte bus con el W5500, /CS=GPIO0) ya registra una
+//     fila por minuto en /sd/LOG/AAAA/MM/DD.CSV (registro_sd.c). Falta: los
+//     resumenes por hora/dia para graficar mes/anio y el endpoint para
+//     pedir los datos desde la web/pantalla.
 //   - UART hacia la pantalla braindlab (GPIO26=TX, GPIO39=RX -- GPIO25 quedo
 //     libre para el IRQ del W5500 en vez de esto, ver conversacion) ya
 //     implementado (uart_pantalla.c/protocolo_braindlab.h), mismo protocolo
 //     binario que controlador_labgeo<->blink pero con el payload propio de
 //     climatizacion. Falta escribir PROTOCOLO_UART_BRAINDLAB.md.
-//   - RS-485 / Modbus hacia el medidor de energia (GPIO33=TX, GPIO36=RX,
-//     GPIO32=EN_485) -- bloqueado por falta de modelo/mapa de registros del
-//     medidor.
+//   - RS-485 / Modbus hacia el medidor JSY-MK-333G (GPIO33=TX, GPIO36=RX,
+//     GPIO32=EN_485) ya implementado (modbus_braindlab.c): voltajes y
+//     corrientes R/S/T, van al WS, a la SD y a la pantalla por UART. Falta
+//     SNMP.
 //   - Rotacion semanal de la reserva (climatizacion_rotar_reserva() no se
 //     llama todavia desde ningun lado) -- ya hay RTC disponible para
 //     disparar esto, falta la logica de "cambio de semana".
@@ -42,7 +45,10 @@
 #include "rtc_braindlab.h"
 #include "sensor_gestor.h"
 #include "uart_pantalla.h"
+#include "protocolo_braindlab.h"
 #include "snmp_braindlab.h"
+#include "registro_sd.h"
+#include "modbus_braindlab.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -112,11 +118,12 @@ static bool hay_algun_override_manual(void)
 // esta pasando de verdad en el hardware.
 static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t *estado,
                                 const bool salida_aplicada[4], bool bypass_aplicado, bool alarma_at_aplicada,
-                                const char *fecha_hora, bool gestor_ok, float temp_gestor, float humedad_gestor)
+                                const char *fecha_hora, bool gestor_ok, float temp_gestor, float humedad_gestor,
+                                const modbus_lectura_t *energia, bool rtc_ok, bool rtc_detenido, bool adc_ok)
 {
     bool modo_manual = hay_algun_override_manual();
 
-    char json[560];
+    char json[800];
     snprintf(json, sizeof(json),
              "{\"ciclo\":%d,"
              "\"temperaturas\":[%.1f,%.1f,%.1f,%.1f],"
@@ -134,7 +141,14 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
              "\"fecha_hora\":\"%s\","
              "\"gestor_ok\":%s,"
              "\"temp_gestor\":%.1f,"
-             "\"humedad_gestor\":%.1f}",
+             "\"humedad_gestor\":%.1f,"
+             "\"energia_ok\":%s,"
+             "\"voltajes\":[%.1f,%.1f,%.1f],"
+             "\"corrientes\":[%.2f,%.2f,%.2f],"
+             "\"sd_estado\":%d,"
+             "\"rtc_ok\":%s,"
+             "\"rtc_detenido\":%s,"
+             "\"adc_ok\":%s}",
              (int)estado->ciclo,
              temperaturas[0], temperaturas[1], temperaturas[2], temperaturas[3],
              salida_aplicada[0] ? "true" : "false",
@@ -156,7 +170,14 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
              esp_timer_get_time() / 1000000LL,
              fecha_hora,
              gestor_ok ? "true" : "false",
-             temp_gestor, humedad_gestor);
+             temp_gestor, humedad_gestor,
+             energia->ok ? "true" : "false",
+             energia->voltajes[0], energia->voltajes[1], energia->voltajes[2],
+             energia->corrientes[0], energia->corrientes[1], energia->corrientes[2],
+             (int)registro_sd_estado(),
+             rtc_ok ? "true" : "false",
+             rtc_detenido ? "true" : "false",
+             adc_ok ? "true" : "false");
     servidor_web_enviar_ws(json);
 }
 
@@ -177,6 +198,7 @@ static void tarea_climatizacion(void *arg)
     clima_estado_t estado;
     climatizacion_iniciar(&estado);
     clima_ciclo_t ciclo_previo = estado.ciclo;
+    int ultimo_minuto_registrado = -1; // registro_sd: una fila por minuto
 
     // Crudas: por debajo de cualquier temp_min razonable -- si
     // sensores_temp_leer() fallara en la primerisima vuelta (antes de tener
@@ -252,8 +274,25 @@ static void tarea_climatizacion(void *arg)
         bool bypass_aplicado = s_bypass_manual_activo ? s_bypass_manual_valor : estado.bypass_solicitado;
         salidas_set_bypass_solicitado(bypass_aplicado);
 
+        // Ultima lectura del medidor -- copia inmediata, nunca espera al
+        // RS-485 (eso lo hace solo tarea_modbus, ver modbus_braindlab.h).
+        modbus_lectura_t energia;
+        modbus_braindlab_leer(&energia);
+
         publicar_estado_ws(temperaturas, &estado, salida_aplicada, bypass_aplicado, alarma_at_aplicada,
-                           fecha_hora, gestor_ok, temp_gestor, humedad_gestor);
+                           fecha_hora, gestor_ok, temp_gestor, humedad_gestor, &energia,
+                           rtc_ok, rtc_braindlab_detenido(), sensores_temp_ok);
+
+        // Estado de cada modulo en tiempo real, para la pantalla (bitmask,
+        // ver BRAINDLAB_FALLA_* en protocolo_braindlab.h). La web recibe lo
+        // mismo pero como campos sueltos en el JSON.
+        uint8_t fallas = 0;
+        if (!rtc_ok || rtc_braindlab_detenido())       fallas |= BRAINDLAB_FALLA_RTC;
+        if (!sensores_temp_ok)                         fallas |= BRAINDLAB_FALLA_ADC;
+        if (!gestor_ok)                                fallas |= BRAINDLAB_FALLA_GESTOR;
+        if (!red_eth_esta_conectado())                 fallas |= BRAINDLAB_FALLA_ETH;
+        if (!energia.ok)                               fallas |= BRAINDLAB_FALLA_MODBUS;
+        if (registro_sd_estado() != REGISTRO_SD_OK)    fallas |= BRAINDLAB_FALLA_SD;
 
         // Mismo estado, pero por UART hacia la pantalla braindlab (ver
         // uart_pantalla.c/protocolo_braindlab.h) -- anio=0 si no hay RTC
@@ -274,7 +313,9 @@ static void tarea_climatizacion(void *arg)
             rtc_ok ? (uint8_t)ahora.tm_mday : 0,
             rtc_ok ? (uint8_t)ahora.tm_hour : 0,
             rtc_ok ? (uint8_t)ahora.tm_min : 0,
-            rtc_ok ? (uint8_t)ahora.tm_sec : 0);
+            rtc_ok ? (uint8_t)ahora.tm_sec : 0,
+            energia.ok, energia.voltajes, energia.corrientes,
+            (uint8_t)registro_sd_estado(), fallas);
 
         // Misma foto para el agente SNMP (GET) -- ademas detecta ahi los
         // eventos que generan traps (ver snmp_braindlab.c). No bloquea.
@@ -307,6 +348,33 @@ static void tarea_climatizacion(void *arg)
             estado_snmp.aire_manual[i] = aire_manual_actual[i];
         }
         snmp_braindlab_publicar_estado(&estado_snmp);
+
+        // Historico en la MicroSD: una fila por minuto (el loop corre cada
+        // 2s, se registra la primera vuelta de cada minuto nuevo). Sin RTC
+        // no se registra -- no hay como saber en que archivo de dia va.
+        if (rtc_ok && ahora.tm_min != ultimo_minuto_registrado) {
+            ultimo_minuto_registrado = ahora.tm_min;
+            registro_sd_muestra_t muestra = {
+                .fecha_hora = ahora,
+                .sensores_temp_ok = sensores_temp_ok,
+                .temp_gestor = temp_gestor,
+                .humedad_gestor = humedad_gestor,
+                .gestor_ok = gestor_ok,
+                .alarma_at = alarma_at_aplicada,
+                .bypass_activo = salidas_leer_bypass_activo(),
+                .ciclo = (uint8_t)estado.ciclo,
+                .energia_ok = energia.ok,
+            };
+            for (int i = 0; i < 4; i++) {
+                muestra.temperaturas[i] = temperaturas[i];
+                muestra.salida_aire[i] = salida_aplicada[i];
+            }
+            for (int i = 0; i < MODBUS_NUM_FASES; i++) {
+                muestra.voltajes[i] = energia.voltajes[i];
+                muestra.corrientes[i] = energia.corrientes[i];
+            }
+            registro_sd_encolar(&muestra);
+        }
 
         if (red_eth_esta_conectado()) {
             ESP_LOGI(TAG, "Ethernet: conectado");
@@ -473,12 +541,20 @@ static void on_calibrar_sensor(const char *sensor, float valor_referencia)
     snmp_braindlab_notificar_calibracion(indice_sensor, nueva_constante);
 }
 
+// POST /sd_formatear (la confirmacion ya la valido servidor_web.c). 60 s
+// de margen: formatear una tarjeta grande por SPI tarda varios segundos.
+static esp_err_t on_formatear_sd(void)
+{
+    return registro_sd_formatear(60000);
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "controlador_braindlab -- esqueleto: config + salidas + climatizacion");
 
     ESP_ERROR_CHECK(config_braindlab_init());
     ESP_ERROR_CHECK(salidas_init());
+    salidas_buzzer_pitido(150); // pitido de arranque: el modulo prendio
 
     // No ESP_ERROR_CHECK -- ahora que lee de verdad el ADS1115 por I2C
     // (antes era simulado y siempre devolvia ESP_OK, un ESP_ERROR_CHECK aca
@@ -500,6 +576,22 @@ void app_main(void)
                  esp_err_to_name(err_rtc));
     }
 
+    // MicroSD: ANTES de red_eth_init() (inicializa el bus SPI compartido,
+    // ver registro_sd.h) y antes de tarea_climatizacion (que le encola las
+    // muestras). Sin tarjeta seguimos igual, el modulo reintenta solo.
+    esp_err_t err_sd = registro_sd_init();
+    if (err_sd != ESP_OK) {
+        ESP_LOGW(TAG, "registro_sd_init() fallo (%s) -- sigue sin SD, se reintenta cada minuto",
+                 esp_err_to_name(err_sd));
+    }
+
+    // Medidor de energia por RS-485: no espera al medidor, si no esta
+    // conectado la lectura queda en ok=false y tarea_modbus reintenta sola.
+    esp_err_t err_mb = modbus_braindlab_init();
+    if (err_mb != ESP_OK) {
+        ESP_LOGE(TAG, "modbus_braindlab_init() fallo (%s) -- sigue sin medidor", esp_err_to_name(err_mb));
+    }
+
     xTaskCreate(tarea_climatizacion, "tarea_climatizacion", 4096, NULL, 5, NULL);
 
     // Registrar los callbacks ANTES de levantar el servidor web, mismo
@@ -513,6 +605,7 @@ void app_main(void)
         .on_control_automatico = on_control_automatico,
         .on_configurar_rtc = on_configurar_rtc,
         .on_calibrar_sensor = on_calibrar_sensor,
+        .on_formatear_sd = on_formatear_sd,
     };
     servidor_web_set_callbacks(web_cbs);
 

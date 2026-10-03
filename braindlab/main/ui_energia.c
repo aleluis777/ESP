@@ -1,9 +1,11 @@
+#include <stdio.h>
 #include "ui_energia.h"
 
 // ---------------------------------------------------------------------
 // Vista "Parametros electricos": pantalla completa, separada del dashboard
 // de Inicio para que cada tarjeta tenga espacio real (ver ui_dashboard.c,
-// de donde se saco este bloque). Solo vista -- los valores son de ejemplo.
+// de donde se saco este bloque). Los valores los pinta uart_braindlab.c con
+// ui_energia_set_valores() cada vez que llega un ESTADO_UPDATE.
 // ---------------------------------------------------------------------
 
 #define COLOR_BG_ROOT        lv_color_hex(0x0A0E17)
@@ -108,13 +110,33 @@ ui_energia_t *ui_energia_create(lv_obj_t *parent)
     lv_obj_set_flex_flow(fila2, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila2, 14, 0);
 
-    ui.lbl_voltaje         = crear_tarjeta(fila1, "Voltaje L-N", "223.4 V", COLOR_TEXTO_PRINC);
-    ui.lbl_corriente       = crear_tarjeta(fila1, "Corriente Total", "12.6 A", COLOR_TEXTO_PRINC);
-    ui.lbl_potencia_activa = crear_tarjeta(fila1, "Potencia Activa", "2.81 kW", COLOR_VERDE);
-
-    ui.lbl_energia_hoy     = crear_tarjeta(fila2, "Energia Hoy", "18.6 kWh", COLOR_VALOR_AZUL);
-    ui.lbl_frecuencia      = crear_tarjeta(fila2, "Frecuencia", "60.0 Hz", COLOR_TEXTO_PRINC);
-    ui.lbl_factor_potencia = crear_tarjeta(fila2, "Factor Potencia", "0.92", COLOR_TEXTO_PRINC);
+    static const char *const fases[UI_ENERGIA_NUM_FASES] = { "R", "S", "T" };
+    for (int i = 0; i < UI_ENERGIA_NUM_FASES; i++) {
+        char titulo[16];
+        snprintf(titulo, sizeof(titulo), "Voltaje %s", fases[i]);
+        ui.lbl_voltaje[i] = crear_tarjeta(fila1, titulo, "-- V", COLOR_TEXTO_PRINC);
+    }
+    for (int i = 0; i < UI_ENERGIA_NUM_FASES; i++) {
+        char titulo[16];
+        snprintf(titulo, sizeof(titulo), "Corriente %s", fases[i]);
+        ui.lbl_corriente[i] = crear_tarjeta(fila2, titulo, "-- A", COLOR_VALOR_AZUL);
+    }
 
     return &ui;
+}
+
+void ui_energia_set_valores(ui_energia_t *u, bool ok,
+                            const uint16_t voltajes_decimas[UI_ENERGIA_NUM_FASES],
+                            const uint16_t corrientes_centesimas[UI_ENERGIA_NUM_FASES])
+{
+    for (int i = 0; i < UI_ENERGIA_NUM_FASES; i++) {
+        if (!ok) {
+            lv_label_set_text(u->lbl_voltaje[i], "-- V");
+            lv_label_set_text(u->lbl_corriente[i], "-- A");
+            continue;
+        }
+        unsigned v = voltajes_decimas[i], c = corrientes_centesimas[i];
+        lv_label_set_text_fmt(u->lbl_voltaje[i], "%u.%u V", v / 10, v % 10);
+        lv_label_set_text_fmt(u->lbl_corriente[i], "%u.%02u A", c / 100, c % 100);
+    }
 }

@@ -19,7 +19,7 @@
         <a class="nav-proximamente"><span class="nav-icono">&#9678;</span> Calibracion</a>
         <a href="/files.html"><span class="nav-icono">&#9776;</span> Archivos</a>
         <a href="/ota.html"><span class="nav-icono">&#8635;</span> Firmware (OTA)</a>
-        <a class="nav-proximamente"><span class="nav-icono">&#9650;</span> Historico</a>
+        <a href="/historico.html"><span class="nav-icono">&#9650;</span> Historico</a>
         <a class="nav-proximamente"><span class="nav-icono">&#9888;</span> Fallas</a>
     </nav>
 
@@ -192,30 +192,44 @@
                 <p class="stat-valor" id="iny2-mini-valor">-- &deg;C</p>
                 <svg class="chispa-chica" id="iny2-mini-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny2-mini-linea"/></svg>
             </article>
-            <article class="tarjeta stat nd">
-                <p class="stat-titulo">Corriente AA1</p>
-                <p class="stat-valor">N/D</p>
-                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            <article class="tarjeta stat nd" id="v-r-tarjeta">
+                <p class="stat-titulo">Voltaje R</p>
+                <p class="stat-valor" id="v-r-valor">N/D</p>
+                <p class="nd-nota" id="v-r-nota">Esperando medidor RS-485...</p>
             </article>
-            <article class="tarjeta stat nd">
-                <p class="stat-titulo">Corriente AA2</p>
-                <p class="stat-valor">N/D</p>
-                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            <article class="tarjeta stat nd" id="v-s-tarjeta">
+                <p class="stat-titulo">Voltaje S</p>
+                <p class="stat-valor" id="v-s-valor">N/D</p>
+                <p class="nd-nota" id="v-s-nota">Esperando medidor RS-485...</p>
             </article>
-            <article class="tarjeta stat nd">
-                <p class="stat-titulo">VRS</p>
-                <p class="stat-valor">N/D</p>
-                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            <article class="tarjeta stat nd" id="v-t-tarjeta">
+                <p class="stat-titulo">Voltaje T</p>
+                <p class="stat-valor" id="v-t-valor">N/D</p>
+                <p class="nd-nota" id="v-t-nota">Esperando medidor RS-485...</p>
             </article>
-            <article class="tarjeta stat nd">
-                <p class="stat-titulo">VST</p>
-                <p class="stat-valor">N/D</p>
-                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            <article class="tarjeta stat nd" id="i-r-tarjeta">
+                <p class="stat-titulo">Corriente R</p>
+                <p class="stat-valor" id="i-r-valor">N/D</p>
+                <p class="nd-nota" id="i-r-nota">Esperando medidor RS-485...</p>
             </article>
-            <article class="tarjeta stat nd">
-                <p class="stat-titulo">VRT</p>
-                <p class="stat-valor">N/D</p>
-                <p class="nd-nota">Medidor RS-485 sin implementar</p>
+            <article class="tarjeta stat nd" id="i-s-tarjeta">
+                <p class="stat-titulo">Corriente S</p>
+                <p class="stat-valor" id="i-s-valor">N/D</p>
+                <p class="nd-nota" id="i-s-nota">Esperando medidor RS-485...</p>
+            </article>
+            <article class="tarjeta stat nd" id="i-t-tarjeta">
+                <p class="stat-titulo">Corriente T</p>
+                <p class="stat-valor" id="i-t-valor">N/D</p>
+                <p class="nd-nota" id="i-t-nota">Esperando medidor RS-485...</p>
+            </article>
+            <article class="tarjeta stat" id="modulos-tarjeta">
+                <p class="stat-titulo">Estado de modulos</p>
+                <ul class="lista-modulos" id="lista-modulos"></ul>
+            </article>
+            <article class="tarjeta stat nd" id="sd-tarjeta">
+                <p class="stat-titulo">Memoria SD</p>
+                <p class="stat-valor" id="sd-valor">--</p>
+                <p class="nd-nota" id="sd-nota">Esperando estado...</p>
             </article>
         </section>
     </main>

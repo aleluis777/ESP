@@ -84,6 +84,12 @@ typedef void (*servidor_web_cb_configurar_rtc_t)(uint16_t anio, uint8_t mes, uin
 // es un puntero valido solo durante la llamada.
 typedef void (*servidor_web_cb_calibrar_sensor_t)(const char *sensor, float valor_referencia);
 
+// Llego POST /sd_formatear con {"confirmacion":"FORMATEAR"} (servidor_web.c
+// ya valido la confirmacion). Formatea la MicroSD -- borra todo el
+// historico. Bloquea hasta que termina; el esp_err_t que devuelve viaja al
+// navegador (ESP_ERR_NOT_FOUND = no hay tarjeta, ver registro_sd_formatear()).
+typedef esp_err_t (*servidor_web_cb_formatear_sd_t)(void);
+
 typedef struct {
     servidor_web_cb_configurar_red_t on_configurar_red;                       // llego POST /configurar_red
     servidor_web_cb_configurar_climatizacion_t on_configurar_climatizacion;   // llego POST /configurar_climatizacion
@@ -93,6 +99,7 @@ typedef struct {
     servidor_web_cb_control_automatico_t on_control_automatico;               // llego POST /control_automatico
     servidor_web_cb_configurar_rtc_t on_configurar_rtc;                       // llego POST /configurar_rtc
     servidor_web_cb_calibrar_sensor_t on_calibrar_sensor;                     // llego POST /calibrar_sensor
+    servidor_web_cb_formatear_sd_t on_formatear_sd;                           // llego POST /sd_formatear
 } servidor_web_callbacks_t;
 
 // Registrar ANTES de llamar a servidor_web_init(), mismo criterio que

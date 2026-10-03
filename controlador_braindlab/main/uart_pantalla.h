@@ -48,6 +48,11 @@ void uart_pantalla_init(void);
 // (float), esta funcion los convierte a decimas (i16) para el cable.
 // 'anio'=0 (con mes/dia/hora/minuto/segundo en 0) si no hay RTC disponible
 // esta vuelta -- mismo criterio que fecha_hora="----" en el JSON del WS.
+// Energia (medidor JSY-MK-333G): voltajes/corrientes R, S, T; si
+// energia_ok=false la pantalla muestra "--". 'sd_estado' es un
+// registro_sd_estado_t (0=OK, 1=sin tarjeta, 2=sin formato, 3=error
+// escritura). 'fallas' es el bitmask BRAINDLAB_FALLA_* de
+// protocolo_braindlab.h (0 = todos los modulos OK).
 void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
                                   const bool salida_aire[4], const bool aire_manual[4],
                                   uint8_t indice_reserva, bool alarma_at, bool alarma_at_manual,
@@ -56,7 +61,9 @@ void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
                                   bool gestor_ok, float temp_gestor, float humedad_gestor,
                                   uint32_t uptime_s,
                                   uint16_t anio, uint8_t mes, uint8_t dia,
-                                  uint8_t hora, uint8_t minuto, uint8_t segundo);
+                                  uint8_t hora, uint8_t minuto, uint8_t segundo,
+                                  bool energia_ok, const float voltajes[3], const float corrientes[3],
+                                  uint8_t sd_estado, uint8_t fallas);
 
 #ifdef __cplusplus
 }

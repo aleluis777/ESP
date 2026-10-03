@@ -3,7 +3,8 @@
 // Driver de las salidas digitales de la placa "Gestor de Aire Acondicionado"
 // (ver HARDWARE.md): 4 reles de A/A (AA1-AA4), la alarma de alta temperatura
 // (OUT_AT), la solicitud de bypass por software (BP_S) y su realimentacion
-// (BPS_STATUS). No incluye el buzzer ni el pulsador de reset todavia.
+// (BPS_STATUS), y el buzzer Z1. El pulsador de reset (SW1, GPIO35) no se
+// usa -- decision de diseno, no es un pendiente.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -46,6 +47,12 @@ void salidas_set_bypass_solicitado(bool solicitado);
 // confirmar leyendo BPS_STATUS". Devuelve true si el bypass esta
 // fisicamente activo.
 bool salidas_leer_bypass_activo(void);
+
+// Buzzer Z1 (GPIO15 via Q12, activo en ALTO -- HARDWARE.md §8.3). Buzzer
+// activo: basta con poner el pin en alto, no hace falta PWM. Bloquea al
+// task que lo llama durante 'duracion_ms' (usa vTaskDelay). Por ahora solo
+// se usa para el pitido de arranque desde app_main().
+void salidas_buzzer_pitido(uint32_t duracion_ms);
 
 #ifdef __cplusplus
 }

@@ -4,10 +4,10 @@
 // manejado "espressif/ethernet_init" (idf_component.yml).
 //
 // Diferencia clave con controlador_labgeo: en ESTA placa el pin IRQ del
-// W5500 (pin 5 del modulo U6) esta SIN CONECTAR (ver HARDWARE.md 4.1), asi
-// que el driver tiene que ir por POLLING -- eso ya esta resuelto en
-// sdkconfig.defaults con CONFIG_ETHERNET_SPI_INT0_GPIO=-1, este .c no tiene
-// que hacer nada especial al respecto, ethernet_init_all() lo lee solo.
+// W5500 (pin 5 del modulo U6) va a GPIO25, no a GPIO16 (ver HARDWARE.md
+// 4.1) -- eso ya esta resuelto en sdkconfig.defaults con
+// CONFIG_ETHERNET_SPI_INT0_GPIO=25, este .c no tiene que hacer nada
+// especial al respecto, ethernet_init_all() lo lee solo.
 // El resto de la config especifica (CS/RST/SCLK/MISO/MOSI) tambien vive en
 // sdkconfig.defaults (CONFIG_ETHERNET_SPI_*) -- si hay que tocar pines, es
 // ahi, no aca.
@@ -180,8 +180,8 @@ static void cargar_ip_info(void)
 // en vez de devolverlos, por eso mismo.
 static esp_err_t iniciar_hardware_eth(void)
 {
-    // El driver del W5500 instala su propio manejo de GPIO (aunque sea en
-    // modo polling) via el servicio de ISR de GPIO. Hay que instalarlo
+    // El driver del W5500 engancha su interrupcion (IRQ en GPIO25) via el
+    // servicio de ISR de GPIO. Hay que instalarlo
     // aca (no solo en red_eth_init()) porque ethernet_deinit_all() lo
     // desinstala al limpiar -- si esta tarea se llama de nuevo desde
     // tarea_vigilancia_eth() despues de un reinicio, hace falta reinstalarlo.
@@ -239,8 +239,8 @@ static esp_err_t iniciar_hardware_eth(void)
 // lleva mucho tiempo caido -- un corte de cable comun el propio driver ya
 // lo recupera solo (disparando ETHERNET_EVENT_CONNECTED de nuevo) sin
 // necesitar nada de esto; esta funcion es para cuando el chip mismo dejo de
-// responder por SPI (se cuelga de vez en cuando en modulos W5500 sin IRQ,
-// por polling).
+// responder por SPI (pasaba de vez en cuando cuando esta placa iba por
+// polling, sin IRQ -- se deja como red de seguridad).
 static void reiniciar_eth(void)
 {
     s_link_up = false; // evita que tarea_vigilancia_eth() lea un estado viejo mientras se reconstruye

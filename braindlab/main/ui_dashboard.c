@@ -437,7 +437,10 @@ static void crear_panel_gabinete(lv_obj_t *parent)
 
 // ---------- Alarmas activas ----------
 
-static lv_obj_t *crear_fila_alarma(lv_obj_t *parent, const char *codigo, const char *desc, lv_color_t color)
+// 'out_desc' (opcional, puede ser NULL): devuelve el label de la
+// descripcion, para las filas cuyo texto cambia segun el estado.
+static lv_obj_t *crear_fila_alarma(lv_obj_t *parent, const char *codigo, const char *desc, lv_color_t color,
+                                   lv_obj_t **out_desc)
 {
     lv_obj_t *fila = lv_obj_create(parent);
     lv_obj_set_style_bg_color(fila, lv_color_hex(0x1A1420), 0);
@@ -475,6 +478,9 @@ static lv_obj_t *crear_fila_alarma(lv_obj_t *parent, const char *codigo, const c
     lv_obj_t *lbl_desc = lv_label_create(col_texto);
     lv_label_set_text(lbl_desc, desc);
     lv_obj_set_style_text_color(lbl_desc, COLOR_TEXTO_SEC, 0);
+    if (out_desc) {
+        *out_desc = lbl_desc;
+    }
 
     lv_obj_t *lbl_chevron = lv_label_create(fila);
     lv_label_set_text(lbl_chevron, LV_SYMBOL_RIGHT);
@@ -496,12 +502,21 @@ static void crear_panel_alarmas(lv_obj_t *parent)
     lv_obj_set_flex_flow(ui.cont_alarmas, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(ui.cont_alarmas, 8, 0);
 
-    ui.fila_alarma_at  = crear_fila_alarma(ui.cont_alarmas, "AT", "Alta Temperatura", COLOR_ROJO);
-    ui.fila_alarma_bps = crear_fila_alarma(ui.cont_alarmas, "BPS", "Bypass de Aires", COLOR_NARANJA);
+    ui.fila_alarma_at  = crear_fila_alarma(ui.cont_alarmas, "AT", "Alta Temperatura", COLOR_ROJO, NULL);
+    ui.fila_alarma_bps = crear_fila_alarma(ui.cont_alarmas, "BPS", "Bypass de Aires", COLOR_NARANJA, NULL);
+    ui.fila_alarma_sd  = crear_fila_alarma(ui.cont_alarmas, "SD", "Falla tarjeta SD", COLOR_NARANJA,
+                                           &ui.lbl_alarma_sd);
+    ui.fila_alarma_mod = crear_fila_alarma(ui.cont_alarmas, "MOD", "Falla de modulos", COLOR_NARANJA,
+                                           &ui.lbl_alarma_mod);
+    ui.fila_alarma_com = crear_fila_alarma(ui.cont_alarmas, "COM", "Sin comunicacion con controlador",
+                                           COLOR_ROJO, NULL);
     // Arrancan ocultas -- uart_braindlab.c las muestra segun el estado real
     // (alarma_at/bypass_activo) que llegue por UART.
     lv_obj_add_flag(ui.fila_alarma_at, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(ui.fila_alarma_bps, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui.fila_alarma_sd, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui.fila_alarma_mod, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui.fila_alarma_com, LV_OBJ_FLAG_HIDDEN);
 }
 
 // ---------- Controles Bypass / AT ----------

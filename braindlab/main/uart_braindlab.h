@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "ui_dashboard.h"
+#include "ui_energia.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,9 +21,10 @@ extern "C" {
 // ESP32-S3 + LCD RGB 800x480 + tactil GT911 -- ver HARDWARE.md §14).
 
 // Inicializa el UART y lanza la tarea de recepcion, que va a ir aplicando
-// el estado recibido directamente sobre 'ui' (con el LVGL lock tomado).
-// Llamar una sola vez, despues de ui_dashboard_create().
-void uart_braindlab_init(ui_dashboard_t *ui);
+// el estado recibido directamente sobre 'ui' y 'energia' (con el LVGL lock
+// tomado). Llamar una sola vez, despues de ui_dashboard_create() y
+// ui_energia_create().
+void uart_braindlab_init(ui_dashboard_t *ui, ui_energia_t *energia);
 
 // ---------- Comandos hacia el controlador (Pantalla -> Controlador) ----------
 

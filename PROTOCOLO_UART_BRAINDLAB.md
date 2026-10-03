@@ -89,10 +89,23 @@ de WS/JSON. Temperaturas y humedad van como `i16` en **decimas** de unidad
 | 32     | 1      | hora                | u8   | 0..23 |
 | 33     | 1      | minuto              | u8   | 0..59 |
 | 34     | 1      | segundo             | u8   | 0..59 |
+| 35     | 1      | energia_ok          | u8   | bool, medidor RS-485 (JSY-MK-333G) respondiendo |
+| 36     | 6      | voltajes[3]         | u16 x3 | decimas de V, fases R, S, T |
+| 42     | 6      | corrientes[3]       | u16 x3 | centesimas de A, fases R, S, T |
+| 48     | 1      | sd_estado           | u8   | MicroSD: 0=OK, 1=sin tarjeta, 2=sin formato (no FAT32), 3=error de escritura, 4=formateando |
+| 49     | 1      | fallas              | u8   | bitmask, 1 = modulo con falla ahora: bit0 RTC, bit1 ADC (ADS1115), bit2 AM2301A, bit3 Ethernet sin link, bit4 medidor Modbus, bit5 SD (detalle en `sd_estado`) |
 
-Payload total: **35 bytes**. `anio=0` (con mes/dia/hora/minuto/segundo en 0)
+Payload total: **50 bytes**. `anio=0` (con mes/dia/hora/minuto/segundo en 0)
 significa "RTC no disponible", equivalente a `fecha_hora="----"` en el JSON
-del WS.
+del WS. `energia_ok=0` significa que el medidor no responde: ignorar
+voltajes/corrientes y mostrar "--".
+
+**Compatibilidad:** los campos de energia (offset 35 en adelante) se
+agregaron al final. Una pantalla con firmware viejo acepta cualquier
+`LEN >= 35` e ignora lo que sobra; la pantalla nueva lee la energia solo si
+`LEN >= 48`, `sd_estado` solo si `LEN >= 49` y `fallas` solo si `LEN >= 50`
+(`BRAINDLAB_ESTADO_UPDATE_LEN_V1` = 35, `BRAINDLAB_ESTADO_UPDATE_LEN` = 50
+en `protocolo_braindlab.h`).
 
 **Aplicado hoy en el dashboard** (`uart_braindlab.c`): `salida_aire` ->
 encendido/apagado + animacion de viento de cada tarjeta de aire;
@@ -100,7 +113,13 @@ encendido/apagado + animacion de viento de cada tarjeta de aire;
 `humedad_gestor` -> tarjeta de "HUMEDAD RELATIVA"; `alarma_at`/`ciclo` ->
 LED + texto de "Sistema OK/Bypass Activo/Alta Temperatura" y las filas de
 "ALARMAS ACTIVAS" (se muestran solo si `alarma_at`/`bypass_activo` estan
-realmente activos); `anio..segundo` -> hora/fecha de la barra superior.
+realmente activos); `anio..segundo` -> hora/fecha de la barra superior;
+`energia_ok`/`voltajes`/`corrientes` -> vista "PARAMETROS ELECTRICOS"
+(`ui_energia.c`, 6 tarjetas: Voltaje R/S/T y Corriente R/S/T);
+`sd_estado` != 0 -> fila "SD" en "ALARMAS ACTIVAS" con el motivo;
+`fallas` -> fila "MOD" con la lista de modulos caidos. Ademas la pantalla
+muestra la fila "COM" si no recibe un `ESTADO_UPDATE` valido en 6 s (el
+controlador no puede saber si la pantalla esta, el protocolo no tiene ACK).
 `temp_gestor`, `indice_reserva`, `modo_manual`, `eth_conectado`, `uptime_s`
 llegan pero todavia no tienen un widget propio en el dashboard.
 

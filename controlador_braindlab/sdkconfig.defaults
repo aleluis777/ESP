@@ -24,10 +24,11 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 # Ethernet: modulo W5500 por SPI. Mismos pines de bus que controlador_labgeo
 # (coincide con HARDWARE.md SS_TX=17, RST=5, SPI_SCK=18, SPI_MISO=19,
 # SPI_MOSI=23) -- pero OJO, esta placa NO es la misma que labgeo: el pin IRQ
-# del W5500 (pin 5 del modulo) esta SIN CONECTAR segun HARDWARE.md §4.1, asi
-# que el driver tiene que ir por POLLING (INT0_GPIO=-1). NO copiar el valor
-# de controlador_labgeo (GPIO16) -- en esta placa GPIO16 es el rele AA3
-# (HARDWARE.md §3), usarlo como IRQ del W5500 quemaria esa salida.
+# del W5500 (pin 5 del modulo) va a GPIO25 (verificado en la placa, ver
+# HARDWARE.md §4.1), asi que el driver va por INTERRUPCION, no por polling.
+# Ademas libera el bus SPI (compartido con la MicroSD) de la lectura cada
+# 10 ms que hacia el polling. NO copiar el valor de controlador_labgeo
+# (GPIO16) -- en esta placa GPIO16 es el rele AA3 (HARDWARE.md §3).
 CONFIG_ETHERNET_INTERNAL_SUPPORT=n
 CONFIG_ETHERNET_SPI_SUPPORT=y
 CONFIG_ETHERNET_SPI_DEV0_W5500=y
@@ -36,7 +37,7 @@ CONFIG_ETHERNET_SPI_SCLK_GPIO=18
 CONFIG_ETHERNET_SPI_MOSI_GPIO=23
 CONFIG_ETHERNET_SPI_MISO_GPIO=19
 CONFIG_ETHERNET_SPI_CS0_GPIO=17
-CONFIG_ETHERNET_SPI_INT0_GPIO=-1
+CONFIG_ETHERNET_SPI_INT0_GPIO=25
 CONFIG_ETHERNET_SPI_PHY_RST0_GPIO=5
 
 # WebSocket en esp_http_server (lo usa servidor_web.c para /ws) -- apagado

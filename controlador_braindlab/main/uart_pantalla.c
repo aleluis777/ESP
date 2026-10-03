@@ -54,6 +54,16 @@ static int16_t a_decimas(float valor)
     return (int16_t)escalado;
 }
 
+// Para magnitudes siempre positivas (voltaje, corriente): valor * escala en
+// u16, recortado a 0..65535.
+static uint16_t a_u16_escalado(float valor, float escala)
+{
+    float escalado = valor * escala;
+    if (escalado > 65535.0f) return 65535;
+    if (escalado < 0.0f) return 0;
+    return (uint16_t)(escalado + 0.5f);
+}
+
 void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
                                   const bool salida_aire[4], const bool aire_manual[4],
                                   uint8_t indice_reserva, bool alarma_at, bool alarma_at_manual,
@@ -62,7 +72,9 @@ void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
                                   bool gestor_ok, float temp_gestor, float humedad_gestor,
                                   uint32_t uptime_s,
                                   uint16_t anio, uint8_t mes, uint8_t dia,
-                                  uint8_t hora, uint8_t minuto, uint8_t segundo)
+                                  uint8_t hora, uint8_t minuto, uint8_t segundo,
+                                  bool energia_ok, const float voltajes[3], const float corrientes[3],
+                                  uint8_t sd_estado, uint8_t fallas)
 {
     uint8_t payload[BRAINDLAB_ESTADO_UPDATE_LEN];
     uint16_t idx = 0;
@@ -98,6 +110,16 @@ void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
     braindlab_put_u8(payload, &idx, hora);
     braindlab_put_u8(payload, &idx, minuto);
     braindlab_put_u8(payload, &idx, segundo);
+
+    braindlab_put_u8(payload, &idx, energia_ok ? 1 : 0);
+    for (int i = 0; i < 3; i++) {
+        braindlab_put_u16(payload, &idx, a_u16_escalado(voltajes[i], 10.0f));    // decimas de V
+    }
+    for (int i = 0; i < 3; i++) {
+        braindlab_put_u16(payload, &idx, a_u16_escalado(corrientes[i], 100.0f)); // centesimas de A
+    }
+    braindlab_put_u8(payload, &idx, sd_estado);
+    braindlab_put_u8(payload, &idx, fallas);
 
     enviar_frame(BRAINDLAB_CMD_ESTADO_UPDATE, payload, idx);
 }

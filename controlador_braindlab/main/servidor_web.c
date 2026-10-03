@@ -12,6 +12,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include "registro_sd.h"
 #include "servidor_web.h"
 #include "esp_http_server.h"
 #include "esp_spiffs.h"
@@ -128,6 +129,7 @@ static const archivo_estatico_t s_archivo_ota_html     = { "/www/ota.html", "tex
 static const archivo_estatico_t s_archivo_configurar_html = { "/www/configurar.html", "text/html" };
 static const archivo_estatico_t s_archivo_logo         = { "/www/logo.png", "image/png" };
 static const archivo_estatico_t s_archivo_files_html   = { "/www/files.html", "text/html" };
+static const archivo_estatico_t s_archivo_historico_html = { "/www/historico.html", "text/html" };
 
 // "/" y "/index.html" apuntan al mismo archivo -- asi entrar directo a la IP
 // del controlador ya muestra la pagina.
@@ -158,6 +160,10 @@ static const httpd_uri_t s_uri_configurar_html = {
 static const httpd_uri_t s_uri_logo = {
     .uri = "/logo.png", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_logo,
+};
+static const httpd_uri_t s_uri_historico_html = {
+    .uri = "/historico.html", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_historico_html,
 };
 static const httpd_uri_t s_uri_files_html = {
     .uri = "/files.html", .method = HTTP_GET,
@@ -718,6 +724,161 @@ static const httpd_uri_t s_uri_calibrar_sensor = {
     .uri = "/calibrar_sensor", .method = HTTP_POST, .handler = calibrar_sensor_handler,
 };
 
+// POST /sd_formatear -- body JSON {"confirmacion":"FORMATEAR"}. Formatea la
+// MicroSD (borra todo el historico). La palabra de confirmacion se valida
+// ACA tambien, no solo en el navegador: asi un POST suelto (un script, un
+// curl equivocado) no borra nada. Bloquea este task del servidor mientras
+// formatea (unos segundos) -- es una operacion rara y explicita.
+static esp_err_t sd_formatear_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char body[64];
+    int len = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+        return ESP_FAIL;
+    }
+    body[len] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    const cJSON *conf = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "confirmacion") : NULL;
+    bool confirmado = cJSON_IsString(conf) && strcmp(conf->valuestring, "FORMATEAR") == 0;
+    cJSON_Delete(raiz);
+    if (!confirmado) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta la confirmacion: {\"confirmacion\":\"FORMATEAR\"}");
+        return ESP_FAIL;
+    }
+    if (!s_callbacks.on_formatear_sd) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "formateo no disponible");
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = s_callbacks.on_formatear_sd();
+    httpd_resp_set_type(req, "application/json");
+    if (err == ESP_OK) {
+        httpd_resp_sendstr(req, "{\"ok\":true,\"mensaje\":\"SD formateada\"}");
+        return ESP_OK;
+    }
+    const char *motivo =
+        err == ESP_ERR_NOT_FOUND     ? "no hay tarjeta SD (o no responde)" :
+        err == ESP_ERR_INVALID_STATE ? "ya hay un formateo en curso" :
+        err == ESP_ERR_TIMEOUT       ? "el formateo tarda demasiado, revisar el estado en unos segundos" :
+                                       "fallo el formateo (tarjeta dañada o protegida?)";
+    char resp[160];
+    snprintf(resp, sizeof(resp), "{\"ok\":false,\"mensaje\":\"%s\"}", motivo);
+    httpd_resp_set_status(req, err == ESP_ERR_NOT_FOUND ? "404 Not Found" : "500 Internal Server Error");
+    httpd_resp_sendstr(req, resp);
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_sd_formatear = {
+    .uri = "/sd_formatear", .method = HTTP_POST, .handler = sd_formatear_handler,
+};
+
+// ---------- Historico (MicroSD, ver registro_sd.h) ----------
+
+// Lee un parametro entero de la query (?mes=2026-10 -> se parsea aparte).
+static bool leer_query(httpd_req_t *req, const char *clave, char *valor, size_t largo)
+{
+    char query[64];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        return false;
+    }
+    return httpd_query_key_value(query, clave, valor, largo) == ESP_OK;
+}
+
+// GET /api/historico/dias?mes=2026-10 -- dias con datos de ese mes, para
+// el calendario de historico.html:
+// {"mes":"2026-10","sd_ok":true,"dias":[{"dia":1,"kb":170},{"dia":2,"kb":85}]}
+// sd_ok=false si la SD no esta montada (la pagina avisa en vez de mostrar
+// un mes vacio que parezca "no hay datos").
+static esp_err_t historico_dias_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char mes_txt[12];
+    int anio = 0, mes = 0;
+    if (!leer_query(req, "mes", mes_txt, sizeof(mes_txt)) || sscanf(mes_txt, "%d-%d", &anio, &mes) != 2) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta ?mes=AAAA-MM");
+        return ESP_FAIL;
+    }
+
+    uint8_t dias[31];
+    uint32_t kb[31];
+    int n = registro_sd_dias_con_datos(anio, mes, dias, kb);
+
+    // 31 dias x ~20 bytes + cabecera, entra de sobra.
+    char resp[768];
+    int pos = snprintf(resp, sizeof(resp), "{\"mes\":\"%04d-%02d\",\"sd_ok\":%s,\"dias\":[",
+                       anio, mes, n >= 0 ? "true" : "false");
+    for (int i = 0; i < n; i++) {
+        pos += snprintf(resp + pos, sizeof(resp) - pos, "%s{\"dia\":%u,\"kb\":%lu}",
+                        i ? "," : "", dias[i], (unsigned long)kb[i]);
+    }
+    snprintf(resp + pos, sizeof(resp) - pos, "]}");
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, resp);
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_historico_dias = {
+    .uri = "/api/historico/dias", .method = HTTP_GET, .handler = historico_dias_handler,
+};
+
+// GET /api/historico/dia?fecha=2026-10-01 -- el CSV de ese dia tal cual
+// esta en la SD, en pedazos (no se carga entero en RAM, ~170 KB). El
+// navegador lo parsea y grafica: el ESP32 solo copia bytes. Con
+// &descargar=1 el navegador lo guarda como archivo en vez de mostrarlo.
+static esp_err_t historico_dia_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+
+    char fecha[16];
+    int anio = 0, mes = 0, dia = 0;
+    if (!leer_query(req, "fecha", fecha, sizeof(fecha)) || sscanf(fecha, "%d-%d-%d", &anio, &mes, &dia) != 3) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta ?fecha=AAAA-MM-DD");
+        return ESP_FAIL;
+    }
+
+    char ruta[48];
+    if (!registro_sd_ruta_dia(anio, mes, dia, ruta, sizeof(ruta))) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "SD no disponible o fecha invalida");
+        return ESP_FAIL;
+    }
+    FILE *f = fopen(ruta, "r");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no hay datos de ese dia");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "text/csv");
+    char descargar[4];
+    if (leer_query(req, "descargar", descargar, sizeof(descargar)) && descargar[0] == '1') {
+        char disp[64];
+        snprintf(disp, sizeof(disp), "attachment; filename=\"braindlab_%04d-%02d-%02d.csv\"", anio, mes, dia);
+        httpd_resp_set_hdr(req, "Content-Disposition", disp);
+    }
+
+    char buf[1024];
+    size_t leidos;
+    esp_err_t res = ESP_OK;
+    while ((leidos = fread(buf, 1, sizeof(buf), f)) > 0) {
+        if (httpd_resp_send_chunk(req, buf, leidos) != ESP_OK) {
+            res = ESP_FAIL;
+            break;
+        }
+    }
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return res;
+}
+
+static const httpd_uri_t s_uri_historico_dia = {
+    .uri = "/api/historico/dia", .method = HTTP_GET, .handler = historico_dia_handler,
+};
+
 // POST /reiniciar -- sin body. Reinicia el equipo ya (esp_restart()), para
 // que tome efecto cualquier config que solo se aplica al arrancar (red,
 // climatizacion, etc -- ver /configurar_red, /configurar_climatizacion). No
@@ -862,7 +1023,7 @@ esp_err_t servidor_web_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), margen para la pagina de archivos cargando varios recursos
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 25; // 23 rutas registradas, con un poco de margen
+    config.max_uri_handlers = 30; // 27 rutas registradas, con un poco de margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -891,6 +1052,10 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_control_automatico);
     httpd_register_uri_handler(s_servidor, &s_uri_calibrar_sensor);
     httpd_register_uri_handler(s_servidor, &s_uri_reiniciar);
+    httpd_register_uri_handler(s_servidor, &s_uri_sd_formatear);
+    httpd_register_uri_handler(s_servidor, &s_uri_historico_html);
+    httpd_register_uri_handler(s_servidor, &s_uri_historico_dias);
+    httpd_register_uri_handler(s_servidor, &s_uri_historico_dia);
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
 

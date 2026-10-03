@@ -330,3 +330,12 @@ main {
 .chispa-chica polyline { fill: none; stroke-width: 2; }
 .tarjeta.stat[data-color="iny1"] #iny1-mini-linea { stroke: var(--color-iny1); }
 .tarjeta.stat[data-color="iny2"] #iny2-mini-linea { stroke: var(--color-iny2); }
+
+/* Estado de modulos (tarjeta en fila-inferior): un punto verde/rojo por
+   modulo del controlador, en vivo desde el WS. */
+.lista-modulos { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 0.75rem; font-size: 0.8rem; }
+.lista-modulos li { display: flex; align-items: center; gap: 0.4rem; color: var(--texto-tenue); }
+.lista-modulos li::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--texto-tenue); flex: none; }
+.lista-modulos li.ok::before { background: var(--ok); }
+.lista-modulos li.falla { color: var(--texto); }
+.lista-modulos li.falla::before { background: var(--alerta); }

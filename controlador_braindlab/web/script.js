@@ -218,8 +218,16 @@ function actualizarEventos(datos) {
     if (datos.bypass_activo) {
         eventos.push({ clase: "warning", icono: "⇄", titulo: "Bypass fisico activo", detalle: "El A/A esta conectado directo, sin control." });
     }
-    if (!datos.eth_conectado) {
-        eventos.push({ clase: "warning", icono: "⚡", titulo: "Cable Ethernet desconectado", detalle: "Ultimo estado de link conocido: sin conexion." });
+    if (typeof datos.sd_estado === "number" && datos.sd_estado !== 0) {
+        const e = SD_ESTADOS[datos.sd_estado] || { valor: "Desconocido", nota: "" };
+        eventos.push({ clase: "warning", icono: "💾", titulo: "Memoria SD: " + e.valor, detalle: e.nota });
+    }
+    // Resto de los modulos (la SD ya se agrego arriba con su detalle).
+    for (const m of MODULOS) {
+        if (m.falla && m.ok(datos) === false) {
+            const detalle = typeof m.falla === "function" ? m.falla(datos) : m.falla;
+            eventos.push({ clase: "warning", icono: "⚡", titulo: "Falla: " + m.nombre, detalle });
+        }
     }
     if (eventos.length === 0) {
         eventos.push({ clase: "ok", icono: "✓", titulo: "Sin fallas criticas", detalle: "El sistema opera dentro de parametros normales." });
@@ -252,9 +260,77 @@ function formatearUptime(segundos) {
     return `Tiempo de actividad: ${h}h ${m}m ${s}s`;
 }
 
+// Medidor JSY-MK-333G por RS-485 (modbus_braindlab.c). Si el medidor no
+// responde (energia_ok=false) las tarjetas vuelven a N/D en vez de dejar
+// congelado el ultimo valor.
+function pintarEnergia(datos) {
+    const ok = !!datos.energia_ok;
+    const v = datos.voltajes || [];
+    const c = datos.corrientes || [];
+    const valores = [
+        ["v-r", v[0], 1, " V"],
+        ["v-s", v[1], 1, " V"],
+        ["v-t", v[2], 1, " V"],
+        ["i-r", c[0], 2, " A"],
+        ["i-s", c[1], 2, " A"],
+        ["i-t", c[2], 2, " A"],
+    ];
+    for (const [id, valor, decimales, unidad] of valores) {
+        const hay = ok && typeof valor === "number";
+        document.getElementById(id + "-valor").textContent = hay ? valor.toFixed(decimales) + unidad : "N/D";
+        document.getElementById(id + "-nota").textContent = hay ? "" : "Medidor RS-485 sin respuesta";
+        document.getElementById(id + "-tarjeta").classList.toggle("nd", !hay);
+    }
+}
+
+// Estado de la MicroSD del controlador (registro_sd.h): 0=OK, 1=sin
+// tarjeta, 2=sin formato, 3=error de escritura.
+const SD_ESTADOS = {
+    0: { valor: "OK", nota: "Guardando un registro por minuto" },
+    1: { valor: "Sin tarjeta", nota: "No hay tarjeta o no responde -- se reintenta cada minuto" },
+    2: { valor: "Sin formato", nota: "La tarjeta no es FAT32 -- formatearla en la PC" },
+    3: { valor: "Error escritura", nota: "Fallo al guardar (llena, dañada o se saco)" },
+    4: { valor: "Formateando", nota: "Formateo en curso -- no sacar la tarjeta" },
+};
+
+function pintarSd(datos) {
+    if (typeof datos.sd_estado !== "number") return;
+    const e = SD_ESTADOS[datos.sd_estado] || { valor: "Desconocido", nota: "" };
+    document.getElementById("sd-valor").textContent = e.valor;
+    document.getElementById("sd-nota").textContent = e.nota;
+    document.getElementById("sd-tarjeta").classList.toggle("nd", datos.sd_estado !== 0);
+}
+
+// Estado en tiempo real de cada modulo del controlador. 'ok' recibe el
+// JSON del WS y devuelve true/false, o null si el campo no vino (firmware
+// viejo) -- en ese caso el punto queda gris.
+const MODULOS = [
+    { nombre: "RTC", ok: (d) => (typeof d.rtc_ok === "boolean" ? d.rtc_ok && !d.rtc_detenido : undefined),
+      falla: (d) => d.rtc_detenido
+          ? "El reloj responde pero NO avanza -- oscilador detenido (revisar 5 V, pila/VBAT y cristal del DS1307)"
+          : "Reloj (DS1307) sin respuesta -- registros a la SD detenidos" },
+    { nombre: "ADC (T1-T4)", ok: (d) => d.adc_ok, falla: "ADS1115 sin respuesta -- temperaturas no validas" },
+    { nombre: "Sensor HR", ok: (d) => d.gestor_ok, falla: "AM2301A fallo la ultima lectura" },
+    { nombre: "Ethernet", ok: (d) => d.eth_conectado, falla: "Cable Ethernet sin link" },
+    { nombre: "Medidor", ok: (d) => d.energia_ok, falla: "Medidor RS-485 sin respuesta" },
+    { nombre: "Memoria SD", ok: (d) => (typeof d.sd_estado === "number" ? d.sd_estado === 0 : undefined), falla: null },
+];
+
+function pintarModulos(datos) {
+    const lista = document.getElementById("lista-modulos");
+    lista.innerHTML = "";
+    for (const m of MODULOS) {
+        const v = m.ok(datos);
+        const li = document.createElement("li");
+        li.textContent = m.nombre;
+        if (typeof v === "boolean") li.className = v ? "ok" : "falla";
+        lista.appendChild(li);
+    }
+}
+
 function pintar(datos) {
     ultimoMensajeEn = Date.now();
-    actualizarDesfaseServidor(datos.fecha_hora);
+    pintarHoraRtc(datos.fecha_hora);
 
     const t = datos.temperaturas || [];
     empujarHistorial("op1", t[0]);
@@ -308,6 +384,9 @@ function pintar(datos) {
     pintarNodoEstado("d-at", !!datos.alarma_at);
     pintarNodoEstado("d-bypass", bypassActivo);
 
+    pintarEnergia(datos);
+    pintarSd(datos);
+    pintarModulos(datos);
     actualizarEstadoSistema(datos);
     actualizarEventos(datos);
 
@@ -337,28 +416,36 @@ function conectarWs() {
 
 // ------------------------------------------------------------- reloj y sidebar
 
-const formateadorFecha = new Intl.DateTimeFormat("es-PE", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-const formateadorHora = new Intl.DateTimeFormat("es-PE", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
 
-// Desfase entre la hora del RTC (DS1307, ver rtc_braindlab.c) y el reloj del
-// navegador -- se recalcula cada vez que llega un mensaje de WS con
-// fecha_hora valida. Entre mensajes (el WS manda cada ~2s), actualizarReloj()
-// sigue tickeando cada 1s sumando este desfase al reloj local, para no
-// depender de la hora de la PC/celular que abre la pagina.
-let desfaseServidorMs = null;
+// Reloj del panel: muestra EXACTAMENTE la hora que manda el RTC (DS1307) en
+// cada mensaje del WS -- sin interpolar, sin usar la hora de la PC/celular.
+// Se actualiza cuando llega un mensaje (~cada 2 s), por eso los segundos
+// avanzan de a saltos: es la hora real del equipo, tal cual.
+// Se formatea a mano desde el texto "AAAA-MM-DD HH:MM:SS" (sin pasar por
+// Date) para que ninguna zona horaria del navegador la pueda correr.
+const DIAS_SEMANA = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+const MESES_NOMBRE = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                      "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
-function actualizarDesfaseServidor(fechaHoraTexto) {
-    if (!fechaHoraTexto || fechaHoraTexto === "----") return; // RTC no disponible todavia
-    const fecha = new Date(fechaHoraTexto.replace(" ", "T"));
-    if (isNaN(fecha.getTime())) return;
-    desfaseServidorMs = fecha.getTime() - Date.now();
+function pintarHoraRtc(fechaHoraTexto) {
+    const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(fechaHoraTexto || "");
+    if (!m) {
+        // "----" = RTC sin respuesta: no se inventa ninguna hora.
+        elHora.textContent = "--:--:--";
+        elFecha.textContent = "RTC sin respuesta";
+        return;
+    }
+    const [, anio, mes, dia, hh, mm, ss] = m;
+    const h = parseInt(hh, 10);
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    elHora.textContent = `${h12}:${mm}:${ss} ${h < 12 ? "a. m." : "p. m."}`;
+    // Dia de la semana: calculo de calendario puro (UTC), no depende de la
+    // zona horaria del navegador.
+    const dsem = new Date(Date.UTC(+anio, +mes - 1, +dia)).getUTCDay();
+    elFecha.textContent = `${DIAS_SEMANA[dsem]}, ${parseInt(dia, 10)} de ${MESES_NOMBRE[+mes - 1]} de ${anio}`;
 }
 
 function actualizarReloj() {
-    const ahora = desfaseServidorMs !== null ? new Date(Date.now() + desfaseServidorMs) : new Date();
-    elFecha.textContent = formateadorFecha.format(ahora);
-    elHora.textContent = formateadorHora.format(ahora);
-
     // Re-renderiza la lista de eventos solo para refrescar el "hace Xs" de
     // la ultima sincronizacion -- no vuelve a pedir nada al backend.
     if (ultimoMensajeEn) {

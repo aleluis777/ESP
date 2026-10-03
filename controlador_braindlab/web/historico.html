@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindlab - Historico</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
+  nav a:hover { color: var(--acento); }
+  main { max-width: 1100px; }
+  .oculto { display: none !important; }
+  .mensaje { font-size: 0.85rem; min-height: 1.1em; color: var(--texto-tenue); }
+  .mensaje.error { color: var(--alerta); }
+  .btn {
+    background: rgba(148,163,184,0.1); color: var(--texto); border: 1px solid #334155;
+    border-radius: 0.5rem; padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.9rem;
+  }
+  .btn:hover { border-color: var(--acento); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ---------- calendario ---------- */
+  .cal { max-width: 480px; }
+  .cal-cabecera { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+  .cal-cabecera h2 { margin: 0; text-transform: capitalize; }
+  .cal-grilla { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.3rem; }
+  .cal-dsem { text-align: center; font-size: 0.72rem; color: var(--texto-tenue); padding-bottom: 0.2rem; }
+  .cal-dia {
+    aspect-ratio: 1; border-radius: 0.5rem; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 0.2rem; font-size: 0.9rem; color: var(--texto-tenue);
+    background: rgba(148,163,184,0.04); border: 1px solid transparent; position: relative;
+  }
+  .cal-dia.con-datos { color: var(--texto); cursor: pointer; background: rgba(148,163,184,0.1); }
+  .cal-dia.con-datos:hover { border-color: var(--acento); }
+  .cal-dia.hoy { border-color: #475569; }
+  .cal-punto { width: 0.45rem; height: 0.45rem; border-radius: 50%; }
+  .cal-punto.completo { background: var(--ok); }
+  .cal-punto.parcial { background: var(--warning); }
+  .cal-leyenda { display: flex; gap: 1rem; font-size: 0.75rem; color: var(--texto-tenue); margin-top: 0.75rem; }
+  .cal-leyenda span { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+  /* ---------- graficos ---------- */
+  .dia-cabecera { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  .dia-cabecera h2 { margin: 0; flex: 1; min-width: 12rem; }
+  .graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1rem; }
+  @media (max-width: 560px) { .graficos { grid-template-columns: 1fr; } }
+  .grafico h3 { margin: 0 0 0.4rem; font-size: 0.9rem; font-weight: 600; }
+  .grafico canvas { width: 100%; height: 220px; display: block; touch-action: pan-y; }
+  .grafico.carriles canvas { height: 170px; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.75rem; color: var(--texto-tenue); margin-top: 0.4rem; }
+  .leyenda span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .leyenda i { width: 0.8rem; height: 0.18rem; border-radius: 1px; display: inline-block; }
+  .resumen-dia { font-size: 0.8rem; color: var(--texto-tenue); margin: 0 0 0.75rem; }
+</style>
+</head>
+<body>
+  <header class="topbar-simple">
+    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
+    <span>Historico</span>
+  </header>
+
+  <main>
+    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/files.html">Archivos</a></nav>
+
+    <!-- Vista 1: calendario del mes. Un GET por mes a /api/historico/dias
+         trae los dias con datos (el ESP32 lista la carpeta del mes). -->
+    <section class="tarjeta cal" id="vista-calendario">
+      <div class="cal-cabecera">
+        <button class="btn" id="mes-anterior" title="Mes anterior">&#9664;</button>
+        <h2 id="mes-titulo">--</h2>
+        <button class="btn" id="mes-siguiente" title="Mes siguiente">&#9654;</button>
+      </div>
+      <div class="cal-grilla" id="cal-grilla"></div>
+      <div class="cal-leyenda">
+        <span><i class="cal-punto completo"></i> Dia completo</span>
+        <span><i class="cal-punto parcial"></i> Dia parcial</span>
+        <span>Sin punto = sin datos</span>
+      </div>
+      <p class="mensaje" id="cal-mensaje"></p>
+    </section>
+
+    <!-- Vista 2: graficos de un dia. GET a /api/historico/dia trae el CSV
+         crudo; se parsea y dibuja aca, el ESP32 no procesa nada. -->
+    <section class="oculto" id="vista-dia">
+      <div class="tarjeta">
+        <div class="dia-cabecera">
+          <button class="btn" id="btn-volver">&#9664; Calendario</button>
+          <h2 id="dia-titulo">--</h2>
+          <button class="btn" id="dia-anterior" title="Dia anterior con datos">&#9664; Dia</button>
+          <button class="btn" id="dia-siguiente" title="Dia siguiente con datos">Dia &#9654;</button>
+          <a class="btn" id="btn-descargar" href="#" style="text-decoration:none">Descargar CSV</a>
+        </div>
+        <p class="resumen-dia" id="dia-resumen"></p>
+        <p class="mensaje" id="dia-mensaje"></p>
+      </div>
+      <div class="graficos" id="graficos"></div>
+    </section>
+  </main>
+
+  <script>
+    // ------------------------------------------------------------------ util
+
+    const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                   "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    const KB_DIA_COMPLETO = 150; // un dia entero (1440 filas) ronda 170 KB
+    const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    const dos = (n) => String(n).padStart(2, "0");
+    const textoFecha = (a, m, d) => `${a}-${dos(m)}-${dos(d)}`;
+
+    function mostrar(el, texto, error = false) {
+      el.textContent = texto;
+      el.className = "mensaje" + (error ? " error" : "");
+    }
+
+    // --------------------------------------------------------------- estado
+
+    const hoy = new Date();
+    let anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
+    let diasDelMes = [];           // [{dia, kb}] del mes que se esta viendo
+    let diaActual = null;          // dia abierto en la vista de graficos
+    let graficos = [];             // para redibujar al cambiar el tamaño
+
+    // ----------------------------------------------------------- calendario
+
+    async function cargarMes() {
+      const msg = document.getElementById("cal-mensaje");
+      document.getElementById("mes-titulo").textContent = `${MESES[mes - 1]} ${anio}`;
+      mostrar(msg, "Consultando la SD...");
+      diasDelMes = [];
+      dibujarCalendario();
+
+      try {
+        const r = await fetch(`/api/historico/dias?mes=${anio}-${dos(mes)}`);
+        if (!r.ok) throw new Error();
+        const d = await r.json();
+        if (!d.sd_ok) {
+          mostrar(msg, "La tarjeta SD no esta disponible -- revisar el estado en el panel.", true);
+          return;
+        }
+        diasDelMes = d.dias || [];
+        mostrar(msg, diasDelMes.length ? `${diasDelMes.length} dia(s) con datos.` : "Este mes no tiene datos.");
+        dibujarCalendario();
+      } catch {
+        mostrar(msg, "No se pudo consultar el controlador.", true);
+      }
+    }
+
+    function dibujarCalendario() {
+      const grilla = document.getElementById("cal-grilla");
+      grilla.innerHTML = "";
+      for (const d of ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"]) {
+        const el = document.createElement("div");
+        el.className = "cal-dsem";
+        el.textContent = d;
+        grilla.appendChild(el);
+      }
+      const primero = new Date(anio, mes - 1, 1);
+      const desfase = (primero.getDay() + 6) % 7; // lunes = columna 0
+      const totalDias = new Date(anio, mes, 0).getDate();
+      for (let i = 0; i < desfase; i++) grilla.appendChild(document.createElement("div"));
+
+      const porDia = new Map(diasDelMes.map((x) => [x.dia, x.kb]));
+      for (let dia = 1; dia <= totalDias; dia++) {
+        const el = document.createElement("div");
+        el.className = "cal-dia";
+        el.innerHTML = `<span>${dia}</span>`;
+        if (anio === hoy.getFullYear() && mes === hoy.getMonth() + 1 && dia === hoy.getDate()) {
+          el.classList.add("hoy");
+        }
+        if (porDia.has(dia)) {
+          const kb = porDia.get(dia);
+          el.classList.add("con-datos");
+          el.title = `${kb} KB`;
+          el.innerHTML += `<i class="cal-punto ${kb >= KB_DIA_COMPLETO ? "completo" : "parcial"}"></i>`;
+          el.addEventListener("click", () => abrirDia(dia));
+        }
+        grilla.appendChild(el);
+      }
+    }
+
+    function cambiarMes(delta) {
+      mes += delta;
+      if (mes < 1) { mes = 12; anio--; }
+      if (mes > 12) { mes = 1; anio++; }
+      cargarMes();
+    }
+
+    // ------------------------------------------------------------ dia / CSV
+
+    // Columnas del CSV (registro_sd.c). Un campo vacio = sensor caido ese
+    // minuto -> null -> hueco en la linea, no un 0 falso.
+    function parsearCsv(texto) {
+      const lineas = texto.trim().split(/\r?\n/);
+      const cab = lineas.shift().split(",");
+      const col = Object.fromEntries(cab.map((c, i) => [c.trim(), i]));
+      const filas = [];
+      for (const l of lineas) {
+        const c = l.split(",");
+        const hora = (c[col.fecha_hora] || "").slice(11, 16); // "HH:MM"
+        if (hora.length !== 5) continue;
+        const minuto = parseInt(hora.slice(0, 2), 10) * 60 + parseInt(hora.slice(3, 5), 10);
+        const num = (nombre) => {
+          const v = c[col[nombre]];
+          return v === undefined || v === "" ? null : parseFloat(v);
+        };
+        filas.push({ minuto, hora, num });
+      }
+      return filas;
+    }
+
+    async function abrirDia(dia) {
+      diaActual = dia;
+      const fecha = textoFecha(anio, mes, dia);
+      history.replaceState(null, "", "#" + fecha);
+      document.getElementById("vista-calendario").classList.add("oculto");
+      document.getElementById("vista-dia").classList.remove("oculto");
+      document.getElementById("dia-titulo").textContent = `${dos(dia)}/${dos(mes)}/${anio}`;
+      document.getElementById("btn-descargar").href = `/api/historico/dia?fecha=${fecha}&descargar=1`;
+      actualizarBotonesDia();
+
+      const msg = document.getElementById("dia-mensaje");
+      const resumen = document.getElementById("dia-resumen");
+      document.getElementById("graficos").innerHTML = "";
+      graficos = [];
+      resumen.textContent = "";
+      mostrar(msg, "Leyendo el archivo de la SD...");
+
+      try {
+        const r = await fetch(`/api/historico/dia?fecha=${fecha}`);
+        if (!r.ok) throw new Error(r.status === 404 ? "No hay datos de ese dia." : "Error leyendo la SD.");
+        const filas = parsearCsv(await r.text());
+        if (!filas.length) throw new Error("El archivo no tiene filas.");
+        mostrar(msg, "");
+        resumen.textContent = `${filas.length} registros (de 1440 posibles) · ` +
+                              `desde ${filas[0].hora} hasta ${filas[filas.length - 1].hora}`;
+        armarGraficos(filas);
+      } catch (e) {
+        mostrar(msg, e.message || "No se pudo leer el dia.", true);
+      }
+    }
+
+    function volverCalendario() {
+      history.replaceState(null, "", location.pathname);
+      document.getElementById("vista-dia").classList.add("oculto");
+      document.getElementById("vista-calendario").classList.remove("oculto");
+      graficos = [];
+    }
+
+    // Anterior/siguiente dentro del mismo mes, saltando los dias sin datos.
+    function diaVecino(delta) {
+      const dias = diasDelMes.map((x) => x.dia);
+      const i = dias.indexOf(diaActual);
+      return i < 0 ? null : dias[i + delta] ?? null;
+    }
+    function actualizarBotonesDia() {
+      document.getElementById("dia-anterior").disabled = diaVecino(-1) === null;
+      document.getElementById("dia-siguiente").disabled = diaVecino(1) === null;
+    }
+
+    // ------------------------------------------------------------- graficos
+
+    function armarGraficos(filas) {
+      const serie = (nombre) => filas.map((f) => [f.minuto, f.num(nombre)]);
+      const cont = document.getElementById("graficos");
+      const definiciones = [
+        { titulo: "Temperaturas", unidad: "°C", series: [
+            { nombre: "T1", color: css("--color-op1"), datos: serie("t1") },
+            { nombre: "T2", color: css("--color-op2"), datos: serie("t2") },
+            { nombre: "T3", color: css("--color-iny1"), datos: serie("t3") },
+            { nombre: "T4", color: css("--color-iny2"), datos: serie("t4") },
+            { nombre: "Gabinete", color: css("--color-gestor-t"), datos: serie("temp_gestor") } ] },
+        { titulo: "Humedad del gabinete", unidad: "%", series: [
+            { nombre: "HR", color: css("--color-gestor-h"), datos: serie("humedad_gestor") } ] },
+        { titulo: "Voltajes", unidad: "V", series: [
+            { nombre: "R", color: "#e66767", datos: serie("v_r") },
+            { nombre: "S", color: "#fab219", datos: serie("v_s") },
+            { nombre: "T", color: "#3987e5", datos: serie("v_t") } ] },
+        { titulo: "Corrientes", unidad: "A", series: [
+            { nombre: "R", color: "#e66767", datos: serie("i_r") },
+            { nombre: "S", color: "#fab219", datos: serie("i_s") },
+            { nombre: "T", color: "#3987e5", datos: serie("i_t") } ] },
+        { titulo: "Salidas", carriles: true, series: [
+            { nombre: "AA1", color: css("--acento"), datos: serie("aa1") },
+            { nombre: "AA2", color: css("--acento"), datos: serie("aa2") },
+            { nombre: "AA3", color: css("--acento"), datos: serie("aa3") },
+            { nombre: "AA4", color: css("--acento"), datos: serie("aa4") },
+            { nombre: "Alarma AT", color: css("--alerta"), datos: serie("alarma_at") },
+            { nombre: "Bypass", color: css("--warning"), datos: serie("bypass_activo") } ] },
+      ];
+      for (const def of definiciones) {
+        const art = document.createElement("article");
+        art.className = "tarjeta grafico" + (def.carriles ? " carriles" : "");
+        art.innerHTML = `<h3>${def.titulo}</h3><canvas></canvas><div class="leyenda"></div>`;
+        cont.appendChild(art);
+        const g = { def, canvas: art.querySelector("canvas"), hover: null };
+        if (!def.carriles) pintarLeyenda(art.querySelector(".leyenda"), def);
+        g.canvas.addEventListener("mousemove", (e) => { g.hover = e.offsetX; dibujar(g); });
+        g.canvas.addEventListener("mouseleave", () => { g.hover = null; dibujar(g); });
+        graficos.push(g);
+        dibujar(g);
+      }
+    }
+
+    // Leyenda con min / promedio / max del dia (ignorando los huecos).
+    function pintarLeyenda(el, def) {
+      el.innerHTML = def.series.map((s) => {
+        const v = s.datos.map((p) => p[1]).filter((x) => x !== null);
+        if (!v.length) return `<span><i style="background:${s.color}"></i>${s.nombre}: sin datos</span>`;
+        const prom = v.reduce((a, b) => a + b, 0) / v.length;
+        const f = (x) => x.toFixed(1);
+        return `<span><i style="background:${s.color}"></i>${s.nombre}: ` +
+               `min ${f(Math.min(...v))} · prom ${f(prom)} · max ${f(Math.max(...v))} ${def.unidad}</span>`;
+      }).join("");
+    }
+
+    function prepararCanvas(canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { ctx, w, h };
+    }
+
+    function dibujar(g) {
+      if (g.def.carriles) return dibujarCarriles(g);
+      const { ctx, w, h } = prepararCanvas(g.canvas);
+      const m = { izq: 44, der: 10, arr: 8, aba: 22 };
+      const ancho = w - m.izq - m.der, alto = h - m.arr - m.aba;
+      const colorTenue = css("--texto-tenue"), colorGrilla = "rgba(148,163,184,0.12)";
+
+      // Escala Y automatica con un poco de aire arriba y abajo.
+      const valores = g.def.series.flatMap((s) => s.datos.map((p) => p[1])).filter((x) => x !== null);
+      ctx.font = "11px system-ui, sans-serif";
+      if (!valores.length) {
+        ctx.fillStyle = colorTenue;
+        ctx.fillText("Sin datos este dia", m.izq + 8, m.arr + alto / 2);
+        return;
+      }
+      let min = Math.min(...valores), max = Math.max(...valores);
+      if (max - min < 1) { min -= 0.5; max += 0.5; }
+      const aire = (max - min) * 0.08;
+      min -= aire; max += aire;
+      const x = (minuto) => m.izq + (minuto / 1440) * ancho;
+      const y = (v) => m.arr + (1 - (v - min) / (max - min)) * alto;
+
+      // Grilla: cada 3 horas en X, 4 divisiones en Y.
+      ctx.strokeStyle = colorGrilla;
+      ctx.fillStyle = colorTenue;
+      ctx.lineWidth = 1;
+      ctx.textAlign = "center";
+      for (let hr = 0; hr <= 24; hr += 3) {
+        ctx.beginPath(); ctx.moveTo(x(hr * 60), m.arr); ctx.lineTo(x(hr * 60), m.arr + alto); ctx.stroke();
+        ctx.fillText(dos(hr) + "h", x(hr * 60), h - 6);
+      }
+      ctx.textAlign = "right";
+      for (let i = 0; i <= 4; i++) {
+        const v = min + (max - min) * (i / 4);
+        ctx.beginPath(); ctx.moveTo(m.izq, y(v)); ctx.lineTo(m.izq + ancho, y(v)); ctx.stroke();
+        ctx.fillText(v.toFixed(1), m.izq - 6, y(v) + 4);
+      }
+
+      // Lineas: se cortan en los huecos (null) y si faltan mas de 2 minutos
+      // seguidos (corte de luz, SD sacada), para no unir con una recta.
+      ctx.lineWidth = 1.5;
+      for (const s of g.def.series) {
+        ctx.strokeStyle = s.color;
+        ctx.beginPath();
+        let previo = null;
+        for (const [mn, v] of s.datos) {
+          if (v === null) { previo = null; continue; }
+          if (previo === null || mn - previo > 2) ctx.moveTo(x(mn), y(v));
+          else ctx.lineTo(x(mn), y(v));
+          previo = mn;
+        }
+        ctx.stroke();
+      }
+
+      // Cursor: linea vertical + valores de ese minuto.
+      if (g.hover !== null && g.hover >= m.izq && g.hover <= m.izq + ancho) {
+        const minuto = ((g.hover - m.izq) / ancho) * 1440;
+        const textos = [];
+        for (const s of g.def.series) {
+          const p = masCercano(s.datos, minuto);
+          if (p && p[1] !== null && Math.abs(p[0] - minuto) <= 3) {
+            textos.push({ t: `${s.nombre}: ${p[1].toFixed(2)} ${g.def.unidad}`, c: s.color });
+            ctx.fillStyle = s.color;
+            ctx.beginPath(); ctx.arc(x(p[0]), y(p[1]), 3, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+        ctx.strokeStyle = colorTenue;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(g.hover, m.arr); ctx.lineTo(g.hover, m.arr + alto); ctx.stroke();
+        ctx.setLineDash([]);
+        const hm = Math.round(minuto);
+        textos.unshift({ t: `${dos(Math.floor(hm / 60) % 24)}:${dos(hm % 60)}`, c: css("--texto") });
+        cajaTooltip(ctx, textos, g.hover, m.arr, w);
+      }
+    }
+
+    // Carriles on/off (aires, alarma, bypass): una franja por salida, pintada
+    // donde estuvo en 1.
+    function dibujarCarriles(g) {
+      const { ctx, w, h } = prepararCanvas(g.canvas);
+      const m = { izq: 70, der: 10, arr: 4, aba: 22 };
+      const ancho = w - m.izq - m.der, alto = h - m.arr - m.aba;
+      const n = g.def.series.length, carril = alto / n;
+      const x = (minuto) => m.izq + (minuto / 1440) * ancho;
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.fillStyle = css("--texto-tenue");
+      ctx.textAlign = "center";
+      for (let hr = 0; hr <= 24; hr += 3) ctx.fillText(dos(hr) + "h", x(hr * 60), h - 6);
+      g.def.series.forEach((s, i) => {
+        const y0 = m.arr + i * carril;
+        ctx.fillStyle = "rgba(148,163,184,0.06)";
+        ctx.fillRect(m.izq, y0 + 2, ancho, carril - 4);
+        ctx.fillStyle = css("--texto-tenue");
+        ctx.textAlign = "right";
+        ctx.fillText(s.nombre, m.izq - 8, y0 + carril / 2 + 4);
+        ctx.fillStyle = s.color;
+        for (const [mn, v] of s.datos) {
+          if (v === 1) ctx.fillRect(x(mn), y0 + 3, Math.max(ancho / 1440, 1), carril - 6);
+        }
+      });
+      if (g.hover !== null && g.hover >= m.izq && g.hover <= m.izq + ancho) {
+        const minuto = ((g.hover - m.izq) / ancho) * 1440;
+        const hm = Math.round(minuto);
+        const textos = [{ t: `${dos(Math.floor(hm / 60) % 24)}:${dos(hm % 60)}`, c: css("--texto") }];
+        for (const s of g.def.series) {
+          const p = masCercano(s.datos, minuto);
+          if (p && p[1] !== null && Math.abs(p[0] - minuto) <= 3) {
+            textos.push({ t: `${s.nombre}: ${p[1] ? "ON" : "off"}`, c: p[1] ? s.color : css("--texto-tenue") });
+          }
+        }
+        ctx.strokeStyle = css("--texto-tenue");
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(g.hover, m.arr); ctx.lineTo(g.hover, m.arr + alto); ctx.stroke();
+        ctx.setLineDash([]);
+        cajaTooltip(ctx, textos, g.hover, m.arr, w);
+      }
+    }
+
+    // Busqueda binaria del punto mas cercano a 'minuto' (los datos vienen
+    // ordenados por hora).
+    function masCercano(datos, minuto) {
+      let lo = 0, hi = datos.length - 1;
+      if (hi < 0) return null;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (datos[mid][0] < minuto) lo = mid; else hi = mid;
+      }
+      return Math.abs(datos[lo][0] - minuto) <= Math.abs(datos[hi][0] - minuto) ? datos[lo] : datos[hi];
+    }
+
+    function cajaTooltip(ctx, textos, px, top, w) {
+      ctx.font = "11px system-ui, sans-serif";
+      const anchoCaja = Math.max(...textos.map((t) => ctx.measureText(t.t).width)) + 14;
+      const altoCaja = textos.length * 15 + 8;
+      let bx = px + 10;
+      if (bx + anchoCaja > w - 4) bx = px - 10 - anchoCaja;
+      ctx.fillStyle = "rgba(10,14,22,0.92)";
+      ctx.strokeStyle = "#334155";
+      ctx.fillRect(bx, top + 4, anchoCaja, altoCaja);
+      ctx.strokeRect(bx, top + 4, anchoCaja, altoCaja);
+      ctx.textAlign = "left";
+      textos.forEach((t, i) => {
+        ctx.fillStyle = t.c;
+        ctx.fillText(t.t, bx + 7, top + 19 + i * 15);
+      });
+    }
+
+    // ---------------------------------------------------------------- init
+
+    document.getElementById("mes-anterior").addEventListener("click", () => cambiarMes(-1));
+    document.getElementById("mes-siguiente").addEventListener("click", () => cambiarMes(1));
+    document.getElementById("btn-volver").addEventListener("click", volverCalendario);
+    document.getElementById("dia-anterior").addEventListener("click", () => { const d = diaVecino(-1); if (d) abrirDia(d); });
+    document.getElementById("dia-siguiente").addEventListener("click", () => { const d = diaVecino(1); if (d) abrirDia(d); });
+    let esperaResize = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(esperaResize);
+      esperaResize = setTimeout(() => graficos.forEach(dibujar), 150);
+    });
+
+    // Entrar con #AAAA-MM-DD (link directo o recarga) abre ese dia.
+    (async () => {
+      const m = location.hash.match(/^#(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) { anio = +m[1]; mes = +m[2]; }
+      await cargarMes();
+      if (m) abrirDia(+m[3]);
+    })();
+  </script>
+</body>
+</html>

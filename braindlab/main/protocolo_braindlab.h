@@ -87,7 +87,7 @@ static inline uint32_t braindlab_leer_u32(const uint8_t *p)
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-// ---------- Payload de BRAINDLAB_CMD_ESTADO_UPDATE (35 bytes) ----------
+// ---------- Payload de BRAINDLAB_CMD_ESTADO_UPDATE (50 bytes) ----------
 //
 // Todos los campos son los mismos que ya se mandan por WebSocket (ver
 // publicar_estado_ws() en app_main.c) -- la pantalla es, en los hechos, otro
@@ -118,10 +118,41 @@ static inline uint32_t braindlab_leer_u32(const uint8_t *p)
 // 32      1       hora               u8   0..23
 // 33      1       minuto             u8   0..59
 // 34      1       segundo            u8   0..59
+// 35      1       energia_ok         u8   bool (medidor RS-485 respondiendo)
+// 36      6       voltajes[3]        u16 x3, decimas de V (R, S, T)
+// 42      6       corrientes[3]      u16 x3, centesimas de A (R, S, T)
+// 48      1       sd_estado          u8   0=OK, 1=sin tarjeta, 2=sin formato
+//                                         (no es FAT32), 3=error de escritura,
+//                                         4=formateando
+// 49      1       fallas             u8   bitmask, bit en 1 = modulo con falla
+//                                         AHORA (ver BRAINDLAB_FALLA_*)
 //
 // anio=0 (mes=dia=hora=minuto=segundo=0) significa "RTC no disponible",
-// equivalente al fecha_hora="----" del JSON del WS.
-#define BRAINDLAB_ESTADO_UPDATE_LEN 35
+// equivalente al fecha_hora="----" del JSON del WS. energia_ok=0 significa
+// que el medidor no responde: ignorar voltajes/corrientes y mostrar "--".
+//
+// Los campos de energia (offset 35+), sd_estado (48) y fallas (49) se agregaron al final
+// a proposito: una pantalla con firmware viejo (que espera 35 bytes) sigue
+// funcionando, solo ignora lo que sobra. BRAINDLAB_ESTADO_UPDATE_LEN_V1 es
+// ese minimo viejo; cada campo nuevo se lee solo si LEN lo alcanza.
+#define BRAINDLAB_ESTADO_UPDATE_LEN_V1 35
+#define BRAINDLAB_ESTADO_UPDATE_LEN    50
+
+#define BRAINDLAB_SD_OK              0
+#define BRAINDLAB_SD_SIN_TARJETA     1
+#define BRAINDLAB_SD_SIN_FORMATO     2
+#define BRAINDLAB_SD_ERROR_ESCRITURA 3
+#define BRAINDLAB_SD_FORMATEANDO     4
+
+// Bits de 'fallas' (offset 49): estado en tiempo real de cada modulo, el
+// mismo que publica el WS (rtc_ok, adc_ok, gestor_ok, eth_conectado,
+// energia_ok, sd_estado). 0 = todo OK.
+#define BRAINDLAB_FALLA_RTC      (1 << 0) // DS1307 no responde
+#define BRAINDLAB_FALLA_ADC      (1 << 1) // ADS1115 (NTC T1-T4) no responde
+#define BRAINDLAB_FALLA_GESTOR   (1 << 2) // AM2301A (temp/HR gabinete) fallo la ultima lectura
+#define BRAINDLAB_FALLA_ETH      (1 << 3) // Ethernet sin link
+#define BRAINDLAB_FALLA_MODBUS   (1 << 4) // medidor JSY-MK-333G sin respuesta
+#define BRAINDLAB_FALLA_SD       (1 << 5) // MicroSD != OK (detalle en sd_estado)
 
 // ---------- Payloads de los comandos Pantalla -> Controlador ----------
 //

@@ -21,6 +21,15 @@ static const char *TAG = "UART_BRAINDLAB";
 #define COLOR_NARANJA  lv_color_hex(0xF59E0B)
 
 static ui_dashboard_t *s_ui = NULL;
+static ui_energia_t *s_energia = NULL;
+
+// Enlace con el controlador: si no llega una trama valida en este tiempo
+// se muestra la fila "COM" (el controlador manda ESTADO_UPDATE cada ~2 s).
+// Es lo unico que la pantalla puede saber por si sola -- el controlador, a
+// su vez, no sabe si la pantalla esta (el protocolo no tiene ACK).
+#define ENLACE_TIMEOUT_MS 6000
+static volatile TickType_t s_ultimo_frame_ok = 0;
+static bool s_sin_enlace = false; // solo lo toca uart_rx_task
 
 // ---------- Envio de tramas ----------
 
@@ -84,7 +93,9 @@ static void formatear_decimas(char *buf, size_t buf_len, int16_t valor_decimas, 
 
 static void aplicar_estado_update(const uint8_t *p, uint16_t len)
 {
-    if (len < BRAINDLAB_ESTADO_UPDATE_LEN || !s_ui) {
+    // Minimo = payload v1 (sin energia); los campos de energia se leen solo
+    // si la trama los trae (controlador con firmware nuevo).
+    if (len < BRAINDLAB_ESTADO_UPDATE_LEN_V1 || !s_ui) {
         ESP_LOGW(TAG, "ESTADO_UPDATE invalido (len=%u)", (unsigned)len);
         return;
     }
@@ -103,6 +114,21 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     uint8_t mes = p[30], dia = p[31], hora = p[32], minuto = p[33], segundo = p[34];
     (void) indice_reserva; // sin widget propio en el dashboard todavia
 
+    bool hay_energia = len >= 48;
+    // Controlador viejo (sin el campo): se asume OK para no mostrar una
+    // alarma de SD que no se puede saber.
+    uint8_t sd_estado = len >= 49 ? p[48] : BRAINDLAB_SD_OK;
+    // Idem para 'fallas': sin el campo, no se muestra la fila MOD.
+    uint8_t fallas = len >= BRAINDLAB_ESTADO_UPDATE_LEN ? p[49] : 0;
+    bool energia_ok = hay_energia && p[35] != 0;
+    uint16_t voltajes[3] = { 0 }, corrientes[3] = { 0 };
+    if (hay_energia) {
+        for (int i = 0; i < 3; i++) {
+            voltajes[i] = braindlab_leer_u16(&p[36 + 2 * i]);
+            corrientes[i] = braindlab_leer_u16(&p[42 + 2 * i]);
+        }
+    }
+
     // Print de TODO lo que llego (una linea por trama), antes de tocar LVGL.
     // Las decimas se muestran como entero crudo (235 = 23.5) para ver
     // exactamente lo que mando el controlador.
@@ -116,6 +142,12 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
              (unsigned)bypass_activo, (unsigned)p[17], (unsigned)p[18], (unsigned)p[19],
              (int)temp_gestor_decimas, (int)humedad_decimas, (unsigned long)braindlab_leer_u32(&p[24]),
              (unsigned)anio, (unsigned)mes, (unsigned)dia, (unsigned)hora, (unsigned)minuto, (unsigned)segundo);
+    if (hay_energia) {
+        ESP_LOGI(TAG, "   energia_ok=%u V R/S/T=%u/%u/%u (dec) I R/S/T=%u/%u/%u (cent)",
+                 (unsigned)energia_ok, voltajes[0], voltajes[1], voltajes[2],
+                 corrientes[0], corrientes[1], corrientes[2]);
+    }
+    ESP_LOGI(TAG, "   sd_estado=%u fallas=0x%02X", (unsigned)sd_estado, (unsigned)fallas);
 
     if (!lvgl_port_lock(0)) {
         ESP_LOGW(TAG, "No se pudo tomar el lock de LVGL, trama recibida pero no aplicada a la UI");
@@ -172,6 +204,44 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     } else {
         lv_obj_add_flag(s_ui->fila_alarma_bps, LV_OBJ_FLAG_HIDDEN);
     }
+    if (sd_estado == BRAINDLAB_SD_OK) {
+        lv_obj_add_flag(s_ui->fila_alarma_sd, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        const char *texto_sd =
+            sd_estado == BRAINDLAB_SD_SIN_TARJETA ? "SD: sin tarjeta" :
+            sd_estado == BRAINDLAB_SD_SIN_FORMATO ? "SD: sin formato FAT32" :
+            sd_estado == BRAINDLAB_SD_ERROR_ESCRITURA ? "SD: error de escritura" :
+            sd_estado == BRAINDLAB_SD_FORMATEANDO ? "SD: formateando..." : "SD: estado desconocido";
+        lv_label_set_text(s_ui->lbl_alarma_sd, texto_sd);
+        lv_obj_remove_flag(s_ui->fila_alarma_sd, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // Modulos con falla (la SD ya tiene su propia fila, no se repite aca).
+    static const struct { uint8_t bit; const char *nombre; } modulos[] = {
+        { BRAINDLAB_FALLA_RTC,    "RTC" },
+        { BRAINDLAB_FALLA_ADC,    "ADC" },
+        { BRAINDLAB_FALLA_GESTOR, "Sensor HR" },
+        { BRAINDLAB_FALLA_ETH,    "Ethernet" },
+        { BRAINDLAB_FALLA_MODBUS, "Medidor" },
+    };
+    char texto_mod[64] = "";
+    for (size_t i = 0; i < sizeof(modulos) / sizeof(modulos[0]); i++) {
+        if (fallas & modulos[i].bit) {
+            if (texto_mod[0]) strlcat(texto_mod, ", ", sizeof(texto_mod));
+            strlcat(texto_mod, modulos[i].nombre, sizeof(texto_mod));
+        }
+    }
+    if (texto_mod[0]) {
+        lv_label_set_text(s_ui->lbl_alarma_mod, texto_mod);
+        lv_obj_remove_flag(s_ui->fila_alarma_mod, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s_ui->fila_alarma_mod, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // ---- Energia (vista Parametros Electricos) ----
+    if (s_energia) {
+        ui_energia_set_valores(s_energia, energia_ok, voltajes, corrientes);
+    }
 
     // ---- Hora / fecha ----
     if (anio == 0) {
@@ -189,6 +259,7 @@ static void procesar_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
 {
     switch (cmd) {
     case BRAINDLAB_CMD_ESTADO_UPDATE:
+        s_ultimo_frame_ok = xTaskGetTickCount();
         aplicar_estado_update(payload, len);
         break;
     default:
@@ -215,7 +286,23 @@ static void uart_rx_task(void *arg)
     ESP_LOGI(TAG, "Tarea RX lista, esperando tramas en UART_NUM_%d (RX=GPIO%d)",
              BRAINDLAB_UART_PORT, BRAINDLAB_UART_RX_PIN);
 
+    s_ultimo_frame_ok = xTaskGetTickCount();
+
     while (1) {
+        // Fila "COM": se revisa en cada vuelta (como mucho cada 200 ms) y
+        // solo se toca LVGL cuando el estado del enlace cambia.
+        bool sin_enlace = (xTaskGetTickCount() - s_ultimo_frame_ok) >= pdMS_TO_TICKS(ENLACE_TIMEOUT_MS);
+        if (sin_enlace != s_sin_enlace && s_ui && lvgl_port_lock(0)) {
+            if (sin_enlace) {
+                lv_obj_remove_flag(s_ui->fila_alarma_com, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(s_ui->fila_alarma_com, LV_OBJ_FLAG_HIDDEN);
+            }
+            lvgl_port_unlock();
+            s_sin_enlace = sin_enlace;
+            ESP_LOGW(TAG, "Enlace con el controlador %s", sin_enlace ? "PERDIDO" : "recuperado");
+        }
+
         if (uart_read_bytes(BRAINDLAB_UART_PORT, &b, 1, pdMS_TO_TICKS(200)) != 1) {
             // Sin bytes: avisa cada 5 s para saber que el enlace esta mudo
             // (cable/pines/GND/baud) y no solo que "no se ve nada".
@@ -278,9 +365,10 @@ static void uart_rx_task(void *arg)
     }
 }
 
-void uart_braindlab_init(ui_dashboard_t *ui)
+void uart_braindlab_init(ui_dashboard_t *ui, ui_energia_t *energia)
 {
     s_ui = ui;
+    s_energia = energia;
 
     uart_config_t cfg = {
         .baud_rate = BRAINDLAB_UART_BAUD,

@@ -61,6 +61,11 @@ typedef struct {
     lv_obj_t *cont_alarmas;    // contenedor donde se listan
     lv_obj_t *fila_alarma_at;  // fila "AT" -- se muestra/oculta segun alarma_at real
     lv_obj_t *fila_alarma_bps; // fila "BPS" -- se muestra/oculta segun bypass_activo real
+    lv_obj_t *fila_alarma_sd;  // fila "SD" -- se muestra si la MicroSD del controlador falla
+    lv_obj_t *lbl_alarma_sd;   // descripcion de esa fila (sin tarjeta / sin formato / ...)
+    lv_obj_t *fila_alarma_mod; // fila "MOD" -- modulos del controlador con falla (RTC, ADC, ...)
+    lv_obj_t *lbl_alarma_mod;  // descripcion de esa fila (lista de modulos)
+    lv_obj_t *fila_alarma_com; // fila "COM" -- esta pantalla no recibe tramas del controlador
 
     // ---- Controles Bypass / AT ----
     // Mismo patron que los botones de aire (ui_dash_aire_t.btn_power): el
