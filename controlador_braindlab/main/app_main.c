@@ -119,11 +119,12 @@ static bool hay_algun_override_manual(void)
 static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t *estado,
                                 const bool salida_aplicada[4], bool bypass_aplicado, bool alarma_at_aplicada,
                                 const char *fecha_hora, bool gestor_ok, float temp_gestor, float humedad_gestor,
-                                const modbus_lectura_t *energia, bool rtc_ok, bool rtc_detenido, bool adc_ok)
+                                const modbus_lectura_t *energia, bool rtc_ok, bool rtc_detenido, bool adc_ok,
+                                const bool ntc_ok[4])
 {
     bool modo_manual = hay_algun_override_manual();
 
-    char json[800];
+    char json[860];
     snprintf(json, sizeof(json),
              "{\"ciclo\":%d,"
              "\"temperaturas\":[%.1f,%.1f,%.1f,%.1f],"
@@ -148,7 +149,8 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
              "\"sd_estado\":%d,"
              "\"rtc_ok\":%s,"
              "\"rtc_detenido\":%s,"
-             "\"adc_ok\":%s}",
+             "\"adc_ok\":%s,"
+             "\"ntc_ok\":[%s,%s,%s,%s]}",
              (int)estado->ciclo,
              temperaturas[0], temperaturas[1], temperaturas[2], temperaturas[3],
              salida_aplicada[0] ? "true" : "false",
@@ -177,7 +179,11 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
              (int)registro_sd_estado(),
              rtc_ok ? "true" : "false",
              rtc_detenido ? "true" : "false",
-             adc_ok ? "true" : "false");
+             adc_ok ? "true" : "false",
+             ntc_ok[0] ? "true" : "false",
+             ntc_ok[1] ? "true" : "false",
+             ntc_ok[2] ? "true" : "false",
+             ntc_ok[3] ? "true" : "false");
     servidor_web_enviar_ws(json);
 }
 
@@ -220,7 +226,13 @@ static void tarea_climatizacion(void *arg)
     bool gestor_ok = false;
 
     while (1) {
-        bool sensores_temp_ok = sensores_temp_leer(temperaturas_crudas, sin_calibrar) == ESP_OK;
+        // adc_ok: el ADS1115 respondio por I2C. ntc_ok[i]: ademas el NTC de
+        // ese canal esta conectado (sin NTC la entrada queda en ~3V3 y se
+        // rechaza -- no es falla del ADS, ver sensores_temp.h).
+        // sensores_temp_ok (SNMP): todo bien, chip y los 4 NTC.
+        bool ntc_ok[4];
+        bool adc_ok = sensores_temp_leer(temperaturas_crudas, sin_calibrar, ntc_ok) == ESP_OK;
+        bool sensores_temp_ok = adc_ok && ntc_ok[0] && ntc_ok[1] && ntc_ok[2] && ntc_ok[3];
         for (int i = 0; i < 4; i++) {
             s_ultimas_temperaturas_crudas[i] = temperaturas_crudas[i];
             temperaturas[i] = temperaturas_crudas[i] + s_calib_ntc[i];
@@ -281,14 +293,14 @@ static void tarea_climatizacion(void *arg)
 
         publicar_estado_ws(temperaturas, &estado, salida_aplicada, bypass_aplicado, alarma_at_aplicada,
                            fecha_hora, gestor_ok, temp_gestor, humedad_gestor, &energia,
-                           rtc_ok, rtc_braindlab_detenido(), sensores_temp_ok);
+                           rtc_ok, rtc_braindlab_detenido(), adc_ok, ntc_ok);
 
         // Estado de cada modulo en tiempo real, para la pantalla (bitmask,
         // ver BRAINDLAB_FALLA_* en protocolo_braindlab.h). La web recibe lo
         // mismo pero como campos sueltos en el JSON.
         uint8_t fallas = 0;
         if (!rtc_ok || rtc_braindlab_detenido())       fallas |= BRAINDLAB_FALLA_RTC;
-        if (!sensores_temp_ok)                         fallas |= BRAINDLAB_FALLA_ADC;
+        if (!adc_ok)                                   fallas |= BRAINDLAB_FALLA_ADC;
         if (!gestor_ok)                                fallas |= BRAINDLAB_FALLA_GESTOR;
         if (!red_eth_esta_conectado())                 fallas |= BRAINDLAB_FALLA_ETH;
         if (!energia.ok)                               fallas |= BRAINDLAB_FALLA_MODBUS;
@@ -356,7 +368,6 @@ static void tarea_climatizacion(void *arg)
             ultimo_minuto_registrado = ahora.tm_min;
             registro_sd_muestra_t muestra = {
                 .fecha_hora = ahora,
-                .sensores_temp_ok = sensores_temp_ok,
                 .temp_gestor = temp_gestor,
                 .humedad_gestor = humedad_gestor,
                 .gestor_ok = gestor_ok,
@@ -367,6 +378,7 @@ static void tarea_climatizacion(void *arg)
             };
             for (int i = 0; i < 4; i++) {
                 muestra.temperaturas[i] = temperaturas[i];
+                muestra.temp_ok[i] = adc_ok && ntc_ok[i];
                 muestra.salida_aire[i] = salida_aplicada[i];
             }
             for (int i = 0; i < MODBUS_NUM_FASES; i++) {

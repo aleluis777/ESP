@@ -7,8 +7,8 @@
 extern "C" {
 #endif
 
-// Levanta el modulo W5500 (SPI, por POLLING -- el IRQ no esta cableado en
-// esta placa, ver HARDWARE.md 4.1) y el stack de red (esp_netif) con IP
+// Levanta el modulo W5500 (SPI, por interrupcion -- IRQ en GPIO25, ver
+// HARDWARE.md 4.1) y el stack de red (esp_netif) con IP
 // estatica, usando el componente oficial "espressif/ethernet_init" (ver
 // idf_component.yml). Llamar antes de servidor_web_init().
 esp_err_t red_eth_init(void);

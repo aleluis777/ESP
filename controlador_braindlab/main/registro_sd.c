@@ -139,10 +139,16 @@ static esp_err_t escribir_muestra(const registro_sd_muestra_t *m)
 
     // Sensores que fallaron -> campo vacio (no un 0.0 que se grafique como
     // dato real).
-    char temps[64] = ",,,";
-    if (m->sensores_temp_ok) {
-        snprintf(temps, sizeof(temps), "%.1f,%.1f,%.1f,%.1f",
-                 m->temperaturas[0], m->temperaturas[1], m->temperaturas[2], m->temperaturas[3]);
+    // Por canal: un NTC desconectado deja vacia solo su columna.
+    char temps[64] = "";
+    size_t largo = 0;
+    for (int i = 0; i < 4; i++) {
+        const char *sep = (i == 0) ? "" : ",";
+        if (m->temp_ok[i]) {
+            largo += snprintf(temps + largo, sizeof(temps) - largo, "%s%.1f", sep, m->temperaturas[i]);
+        } else {
+            largo += snprintf(temps + largo, sizeof(temps) - largo, "%s", sep);
+        }
     }
     char gestor[24] = ",";
     if (m->gestor_ok) {

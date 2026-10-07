@@ -5,6 +5,7 @@
 // SDA -- ver HARDWARE.md §4.2 y la conversacion sobre el esquematico). U1
 // (el segundo ADS1115 del esquematico) no se usa todavia.
 
+#include <stdbool.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -17,9 +18,16 @@ esp_err_t sensores_temp_init(void);
 // aplicando la ecuacion Beta sobre cada divisor NTC (10K fijo + NTC 10K/3950
 // a GND), sumando calibracion[i] al resultado de cada canal (ver
 // config_calibracion_t en config_braindlab.h -- constante de un solo punto,
-// 0.0 si no se calibro todavia). Si algun canal falla la lectura, ese indice
-// se deja con el ultimo valor bueno (temperaturas[] persiste entre llamadas
-// del lado del que llama) y devuelve el error del ultimo canal que fallo --
+// 0.0 si no se calibro todavia).
+//
+// Distingue dos tipos de falla:
+//   - canal_ok[i]=false: el ADS1115 respondio pero el NTC de ese canal esta
+//     desconectado o en corto (voltaje fuera de rango -- sin NTC la entrada
+//     queda tirada a 3V3 por el 10K fijo). NO es una falla del ADS.
+//   - valor de retorno != ESP_OK: el ADS1115 no respondio por I2C (o no se
+//     inicializo) en algun canal. Solo esto cuenta como falla del ADC.
+// Un canal con canal_ok[i]=false deja temperaturas[i] con el ultimo valor
+// bueno (temperaturas[] persiste entre llamadas del lado del que llama) --
 // nunca inventa un numero.
 //
 // OJO -- NO llamar desde mas de una tarea: no hay mutex ni proteccion
@@ -31,7 +39,7 @@ esp_err_t sensores_temp_init(void);
 // la calibracion via POST /calibrar_sensor) debe leer la ULTIMA lectura ya
 // cacheada por esa tarea (ver s_ultimas_temperaturas_crudas en app_main.c)
 // en vez de volver a llamar a esta funcion.
-esp_err_t sensores_temp_leer(float temperaturas[4], const float calibracion[4]);
+esp_err_t sensores_temp_leer(float temperaturas[4], const float calibracion[4], bool canal_ok[4]);
 
 #ifdef __cplusplus
 }

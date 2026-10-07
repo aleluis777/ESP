@@ -33,7 +33,7 @@ extern "C" {
 typedef struct {
     struct tm fecha_hora;      // hora del RTC -- define el archivo del dia
     float temperaturas[4];     // NTC 1-4, calibradas
-    bool sensores_temp_ok;
+    bool temp_ok[4];           // false -> esa columna se escribe vacia (ADS o NTC fallo)
     float temp_gestor;         // AM2301A, calibrado
     float humedad_gestor;
     bool gestor_ok;

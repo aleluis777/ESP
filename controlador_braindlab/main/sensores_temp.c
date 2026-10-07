@@ -39,6 +39,7 @@ static const char *TAG = "SENSORES_TEMP";
 #define NTC_MARGEN_V    0.1f    // ver comentario en leer_canal() -- deteccion de canal abierto/en corto
 
 static i2c_dev_t s_ads;
+static bool s_inicializado = false; // sensores_temp_init() termino bien
 
 // AIN0..AIN3 = T1..T4, en ese orden -- ver comentario de arriba.
 static const ads111x_mux_t s_mux_por_canal[4] = {
@@ -93,6 +94,7 @@ esp_err_t sensores_temp_init(void)
         return err;
     }
 
+    s_inicializado = true;
     ESP_LOGI(TAG, "ADS1115 (U2, direccion 0x%02x) listo -- 4 canales NTC (A5-A8 = T1-T4)", ADS1115_ADDR);
     return ESP_OK;
 }
@@ -183,18 +185,31 @@ static esp_err_t leer_canal(int canal, float calibracion, float *temperatura_c)
     return ESP_OK;
 }
 
-esp_err_t sensores_temp_leer(float temperaturas[4], const float calibracion[4])
+esp_err_t sensores_temp_leer(float temperaturas[4], const float calibracion[4], bool canal_ok[4])
 {
-    esp_err_t ultimo_error = ESP_OK;
+    for (int i = 0; i < 4; i++) {
+        canal_ok[i] = false;
+    }
+    // Si el init fallo (ADS1115 sin responder al arrancar) s_ads no esta
+    // armado -- no intentar transacciones sobre un descriptor invalido.
+    if (!s_inicializado) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t error_i2c = ESP_OK;
     for (int i = 0; i < 4; i++) {
         float valor;
         esp_err_t err = leer_canal(i, calibracion[i], &valor);
         if (err == ESP_OK) {
             temperaturas[i] = valor;
+            canal_ok[i] = true;
+        } else if (err == ESP_ERR_INVALID_RESPONSE) {
+            // NTC desconectado o en corto -- el ADS respondio bien (ya lo
+            // logueo leer_canal()), no es falla del chip.
         } else {
             ESP_LOGW(TAG, "No se pudo leer T%d (%s) -- se mantiene el ultimo valor", i + 1, esp_err_to_name(err));
-            ultimo_error = err;
+            error_i2c = err;
         }
     }
-    return ultimo_error;
+    return error_i2c;
 }

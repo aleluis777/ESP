@@ -309,7 +309,13 @@ const MODULOS = [
       falla: (d) => d.rtc_detenido
           ? "El reloj responde pero NO avanza -- oscilador detenido (revisar 5 V, pila/VBAT y cristal del DS1307)"
           : "Reloj (DS1307) sin respuesta -- registros a la SD detenidos" },
-    { nombre: "ADC (T1-T4)", ok: (d) => d.adc_ok, falla: "ADS1115 sin respuesta -- temperaturas no validas" },
+    { nombre: "ADC (T1-T4)", ok: (d) => d.adc_ok, falla: "ADS1115 sin respuesta por I2C -- temperaturas no validas" },
+    // Solo si el ADS responde: sin NTC la entrada queda en ~3.3 V y el
+    // firmware la rechaza -- es un sensor desconectado, no falla del chip.
+    { nombre: "Sensores NTC",
+      ok: (d) => (Array.isArray(d.ntc_ok) && d.adc_ok ? d.ntc_ok.every(Boolean) : undefined),
+      falla: (d) => "Sin sensor (desconectado o en corto): " +
+          d.ntc_ok.map((ok, i) => (ok ? null : "T" + (i + 1))).filter(Boolean).join(", ") },
     { nombre: "Sensor HR", ok: (d) => d.gestor_ok, falla: "AM2301A fallo la ultima lectura" },
     { nombre: "Ethernet", ok: (d) => d.eth_conectado, falla: "Cable Ethernet sin link" },
     { nombre: "Medidor", ok: (d) => d.energia_ok, falla: "Medidor RS-485 sin respuesta" },
@@ -332,11 +338,20 @@ function pintar(datos) {
     ultimoMensajeEn = Date.now();
     pintarHoraRtc(datos.fecha_hora);
 
-    const t = datos.temperaturas || [];
-    empujarHistorial("op1", t[0]);
-    empujarHistorial("op2", t[1]);
-    empujarHistorial("iny1", t[2]);
-    empujarHistorial("iny2", t[3]);
+    // Canal sin NTC (o ADS sin respuesta) -> null: no se grafica el ultimo
+    // valor viejo como si fuera real. Firmware viejo sin ntc_ok: se usa tal cual.
+    const t = (datos.temperaturas || []).map((v, i) =>
+        datos.adc_ok === false || (Array.isArray(datos.ntc_ok) && datos.ntc_ok[i] === false) ? null : v);
+    const claves = ["op1", "op2", "iny1", "iny2"];
+    claves.forEach((clave, i) => {
+        if (typeof t[i] === "number") {
+            empujarHistorial(clave, t[i]);
+        } else {
+            document.getElementById(clave + "-valor").textContent = "Sin sensor";
+        }
+    });
+    if (typeof t[2] !== "number") document.getElementById("iny1-mini-valor").textContent = "-- °C";
+    if (typeof t[3] !== "number") document.getElementById("iny2-mini-valor").textContent = "-- °C";
 
     if (typeof t[0] === "number") { actualizarGauge("op1", t[0]); actualizarChispaGrande("op1", "op1"); }
     if (typeof t[1] === "number") { actualizarGauge("op2", t[1]); actualizarChispaGrande("op2", "op2"); }
