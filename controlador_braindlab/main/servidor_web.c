@@ -120,6 +120,12 @@ static esp_err_t archivo_estatico_handler(httpd_req_t *req)
     }
 
     httpd_resp_set_type(req, info->content_type);
+    // CSS/JS/logo: el navegador los reusa 5 min sin volver a pedirlos (menos
+    // conexiones al ESP32 al pasar de una pagina a otra). Un archivo nuevo
+    // subido por /upload se ve a los 5 min como mucho, o ya con Ctrl+F5.
+    // HTML: siempre se pide de nuevo (pasa por el chequeo de sesion).
+    bool es_html = strcmp(info->content_type, "text/html") == 0;
+    httpd_resp_set_hdr(req, "Cache-Control", es_html ? "no-cache" : "max-age=300");
 
     char buf[512];
     size_t leidos;
@@ -144,7 +150,7 @@ static const archivo_estatico_t s_archivo_logo         = { "/www/logo.png", "ima
 static const archivo_estatico_t s_archivo_files_html   = { "/www/files.html", "text/html", false };
 static const archivo_estatico_t s_archivo_historico_html = { "/www/historico.html", "text/html", false };
 static const archivo_estatico_t s_archivo_login_html   = { "/www/login.html", "text/html", true };
-static const archivo_estatico_t s_archivo_auth_js      = { "/www/auth.js", "application/javascript", true };
+static const archivo_estatico_t s_archivo_comun_js     = { "/www/comun.js", "application/javascript", true };
 
 // "/" y "/index.html" apuntan al mismo archivo -- asi entrar directo a la IP
 // del controlador ya muestra la pagina.
@@ -188,9 +194,9 @@ static const httpd_uri_t s_uri_login_html = {
     .uri = "/login.html", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_login_html,
 };
-static const httpd_uri_t s_uri_auth_js = {
-    .uri = "/auth.js", .method = HTTP_GET,
-    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_auth_js,
+static const httpd_uri_t s_uri_comun_js = {
+    .uri = "/comun.js", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_comun_js,
 };
 
 // Lista lo que hay grabado en la particion SPIFFS "www" -- mismo formato
@@ -1122,7 +1128,7 @@ esp_err_t servidor_web_init(void)
     // servidor_web_enviar_ws() corre en tarea_climatizacion: un cliente
     // que no recibe no debe trabarla los 5 s del default por cada envio.
     config.send_wait_timeout = 2;
-    config.max_uri_handlers = 40; // 33 rutas registradas (27 + login.html/auth.js + 4 de auth_web.c), con margen
+    config.max_uri_handlers = 40; // 33 rutas registradas (27 + login.html/comun.js + 4 de auth_web.c), con margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -1158,7 +1164,7 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
     httpd_register_uri_handler(s_servidor, &s_uri_login_html);
-    httpd_register_uri_handler(s_servidor, &s_uri_auth_js);
+    httpd_register_uri_handler(s_servidor, &s_uri_comun_js);
     auth_web_registrar_handlers(s_servidor);
 
     ESP_LOGI(TAG, "Servidor HTTP + WS listo (puerto %d)", config.server_port);

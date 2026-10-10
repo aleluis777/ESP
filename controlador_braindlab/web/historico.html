@@ -6,14 +6,12 @@
 <title>Braindlab - Historico</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
-  nav a:hover { color: var(--acento); }
   main { max-width: 1100px; }
   .oculto { display: none !important; }
   .mensaje { font-size: 0.85rem; min-height: 1.1em; color: var(--texto-tenue); }
   .mensaje.error { color: var(--alerta); }
   .btn {
-    background: rgba(148,163,184,0.1); color: var(--texto); border: 1px solid #334155;
+    background: var(--superficie-hover); color: var(--texto); border: 1px solid var(--borde-input);
     border-radius: 0.5rem; padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.9rem;
   }
   .btn:hover { border-color: var(--acento); }
@@ -28,11 +26,11 @@
   .cal-dia {
     aspect-ratio: 1; border-radius: 0.5rem; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 0.2rem; font-size: 0.9rem; color: var(--texto-tenue);
-    background: rgba(148,163,184,0.04); border: 1px solid transparent; position: relative;
+    background: var(--superficie); border: 1px solid transparent; position: relative;
   }
-  .cal-dia.con-datos { color: var(--texto); cursor: pointer; background: rgba(148,163,184,0.1); }
+  .cal-dia.con-datos { color: var(--texto); cursor: pointer; background: var(--superficie-hover); }
   .cal-dia.con-datos:hover { border-color: var(--acento); }
-  .cal-dia.hoy { border-color: #475569; }
+  .cal-dia.hoy { border-color: var(--borde-fuerte); }
   .cal-punto { width: 0.45rem; height: 0.45rem; border-radius: 50%; }
   .cal-punto.completo { background: var(--ok); }
   .cal-punto.parcial { background: var(--warning); }
@@ -52,16 +50,15 @@
   .leyenda i { width: 0.8rem; height: 0.18rem; border-radius: 1px; display: inline-block; }
   .resumen-dia { font-size: 0.8rem; color: var(--texto-tenue); margin: 0 0 0.75rem; }
 </style>
-<script src="/auth.js"></script>
+<script src="/comun.js"></script>
 </head>
-<body>
-  <header class="topbar-simple">
-    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
-    <span>Historico</span>
+<body class="con-menu">
+ <div class="contenido">
+  <header class="topbar">
+    <h1>Historico</h1>
   </header>
 
   <main>
-    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/files.html">Archivos</a><a href="#" onclick="return salir()">Salir</a></nav>
 
     <!-- Vista 1: calendario del mes. Un GET por mes a /api/historico/dias
          trae los dias con datos (el ESP32 lista la carpeta del mes). -->
@@ -97,6 +94,7 @@
       <div class="graficos" id="graficos"></div>
     </section>
   </main>
+ </div>
 
   <script>
     // ------------------------------------------------------------------ util
@@ -105,6 +103,9 @@
                    "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
     const KB_DIA_COMPLETO = 150; // un dia entero (1440 filas) ronda 170 KB
     const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    // Las series guardan el nombre de la variable ("--color-op1"), no el
+    // color: se resuelve en cada dibujo para seguir el tema claro/oscuro.
+    const color = (s) => css(s.color);
     const dos = (n) => String(n).padStart(2, "0");
     const textoFecha = (a, m, d) => `${a}-${dos(m)}-${dos(d)}`;
 
@@ -265,28 +266,28 @@
       const cont = document.getElementById("graficos");
       const definiciones = [
         { titulo: "Temperaturas", unidad: "°C", series: [
-            { nombre: "T1", color: css("--color-op1"), datos: serie("t1") },
-            { nombre: "T2", color: css("--color-op2"), datos: serie("t2") },
-            { nombre: "T3", color: css("--color-iny1"), datos: serie("t3") },
-            { nombre: "T4", color: css("--color-iny2"), datos: serie("t4") },
-            { nombre: "Gabinete", color: css("--color-gestor-t"), datos: serie("temp_gestor") } ] },
+            { nombre: "T1", color: "--color-op1", datos: serie("t1") },
+            { nombre: "T2", color: "--color-op2", datos: serie("t2") },
+            { nombre: "T3", color: "--color-iny1", datos: serie("t3") },
+            { nombre: "T4", color: "--color-iny2", datos: serie("t4") },
+            { nombre: "Gabinete", color: "--color-gestor-t", datos: serie("temp_gestor") } ] },
         { titulo: "Humedad del gabinete", unidad: "%", series: [
-            { nombre: "HR", color: css("--color-gestor-h"), datos: serie("humedad_gestor") } ] },
+            { nombre: "HR", color: "--color-gestor-h", datos: serie("humedad_gestor") } ] },
         { titulo: "Voltajes", unidad: "V", series: [
-            { nombre: "R", color: "#e66767", datos: serie("v_r") },
-            { nombre: "S", color: "#fab219", datos: serie("v_s") },
-            { nombre: "T", color: "#3987e5", datos: serie("v_t") } ] },
+            { nombre: "R", color: "--fase-r", datos: serie("v_r") },
+            { nombre: "S", color: "--fase-s", datos: serie("v_s") },
+            { nombre: "T", color: "--fase-t", datos: serie("v_t") } ] },
         { titulo: "Corrientes", unidad: "A", series: [
-            { nombre: "R", color: "#e66767", datos: serie("i_r") },
-            { nombre: "S", color: "#fab219", datos: serie("i_s") },
-            { nombre: "T", color: "#3987e5", datos: serie("i_t") } ] },
+            { nombre: "R", color: "--fase-r", datos: serie("i_r") },
+            { nombre: "S", color: "--fase-s", datos: serie("i_s") },
+            { nombre: "T", color: "--fase-t", datos: serie("i_t") } ] },
         { titulo: "Salidas", carriles: true, series: [
-            { nombre: "AA1", color: css("--acento"), datos: serie("aa1") },
-            { nombre: "AA2", color: css("--acento"), datos: serie("aa2") },
-            { nombre: "AA3", color: css("--acento"), datos: serie("aa3") },
-            { nombre: "AA4", color: css("--acento"), datos: serie("aa4") },
-            { nombre: "Alarma AT", color: css("--alerta"), datos: serie("alarma_at") },
-            { nombre: "Bypass", color: css("--warning"), datos: serie("bypass_activo") } ] },
+            { nombre: "AA1", color: "--acento", datos: serie("aa1") },
+            { nombre: "AA2", color: "--acento", datos: serie("aa2") },
+            { nombre: "AA3", color: "--acento", datos: serie("aa3") },
+            { nombre: "AA4", color: "--acento", datos: serie("aa4") },
+            { nombre: "Alarma AT", color: "--alerta", datos: serie("alarma_at") },
+            { nombre: "Bypass", color: "--warning", datos: serie("bypass_activo") } ] },
       ];
       for (const def of definiciones) {
         const art = document.createElement("article");
@@ -306,10 +307,10 @@
     function pintarLeyenda(el, def) {
       el.innerHTML = def.series.map((s) => {
         const v = s.datos.map((p) => p[1]).filter((x) => x !== null);
-        if (!v.length) return `<span><i style="background:${s.color}"></i>${s.nombre}: sin datos</span>`;
+        if (!v.length) return `<span><i style="background:var(${s.color})"></i>${s.nombre}: sin datos</span>`;
         const prom = v.reduce((a, b) => a + b, 0) / v.length;
         const f = (x) => x.toFixed(1);
-        return `<span><i style="background:${s.color}"></i>${s.nombre}: ` +
+        return `<span><i style="background:var(${s.color})"></i>${s.nombre}: ` +
                `min ${f(Math.min(...v))} · prom ${f(prom)} · max ${f(Math.max(...v))} ${def.unidad}</span>`;
       }).join("");
     }
@@ -329,7 +330,7 @@
       const { ctx, w, h } = prepararCanvas(g.canvas);
       const m = { izq: 44, der: 10, arr: 8, aba: 22 };
       const ancho = w - m.izq - m.der, alto = h - m.arr - m.aba;
-      const colorTenue = css("--texto-tenue"), colorGrilla = "rgba(148,163,184,0.12)";
+      const colorTenue = css("--texto-tenue"), colorGrilla = css("--grilla");
 
       // Escala Y automatica con un poco de aire arriba y abajo.
       const valores = g.def.series.flatMap((s) => s.datos.map((p) => p[1])).filter((x) => x !== null);
@@ -366,7 +367,7 @@
       // seguidos (corte de luz, SD sacada), para no unir con una recta.
       ctx.lineWidth = 1.5;
       for (const s of g.def.series) {
-        ctx.strokeStyle = s.color;
+        ctx.strokeStyle = color(s);
         ctx.beginPath();
         let previo = null;
         for (const [mn, v] of s.datos) {
@@ -385,8 +386,8 @@
         for (const s of g.def.series) {
           const p = masCercano(s.datos, minuto);
           if (p && p[1] !== null && Math.abs(p[0] - minuto) <= 3) {
-            textos.push({ t: `${s.nombre}: ${p[1].toFixed(2)} ${g.def.unidad}`, c: s.color });
-            ctx.fillStyle = s.color;
+            textos.push({ t: `${s.nombre}: ${p[1].toFixed(2)} ${g.def.unidad}`, c: color(s) });
+            ctx.fillStyle = color(s);
             ctx.beginPath(); ctx.arc(x(p[0]), y(p[1]), 3, 0, Math.PI * 2); ctx.fill();
           }
         }
@@ -414,12 +415,12 @@
       for (let hr = 0; hr <= 24; hr += 3) ctx.fillText(dos(hr) + "h", x(hr * 60), h - 6);
       g.def.series.forEach((s, i) => {
         const y0 = m.arr + i * carril;
-        ctx.fillStyle = "rgba(148,163,184,0.06)";
+        ctx.fillStyle = css("--superficie");
         ctx.fillRect(m.izq, y0 + 2, ancho, carril - 4);
         ctx.fillStyle = css("--texto-tenue");
         ctx.textAlign = "right";
         ctx.fillText(s.nombre, m.izq - 8, y0 + carril / 2 + 4);
-        ctx.fillStyle = s.color;
+        ctx.fillStyle = color(s);
         for (const [mn, v] of s.datos) {
           if (v === 1) ctx.fillRect(x(mn), y0 + 3, Math.max(ancho / 1440, 1), carril - 6);
         }
@@ -431,7 +432,7 @@
         for (const s of g.def.series) {
           const p = masCercano(s.datos, minuto);
           if (p && p[1] !== null && Math.abs(p[0] - minuto) <= 3) {
-            textos.push({ t: `${s.nombre}: ${p[1] ? "ON" : "off"}`, c: p[1] ? s.color : css("--texto-tenue") });
+            textos.push({ t: `${s.nombre}: ${p[1] ? "ON" : "off"}`, c: p[1] ? color(s) : css("--texto-tenue") });
           }
         }
         ctx.strokeStyle = css("--texto-tenue");
@@ -460,8 +461,8 @@
       const altoCaja = textos.length * 15 + 8;
       let bx = px + 10;
       if (bx + anchoCaja > w - 4) bx = px - 10 - anchoCaja;
-      ctx.fillStyle = "rgba(10,14,22,0.92)";
-      ctx.strokeStyle = "#334155";
+      ctx.fillStyle = css("--tooltip-fondo");
+      ctx.strokeStyle = css("--borde-input");
       ctx.fillRect(bx, top + 4, anchoCaja, altoCaja);
       ctx.strokeRect(bx, top + 4, anchoCaja, altoCaja);
       ctx.textAlign = "left";
@@ -483,6 +484,8 @@
       clearTimeout(esperaResize);
       esperaResize = setTimeout(() => graficos.forEach(dibujar), 150);
     });
+    // Cambio de tema (comun.js): el canvas no sigue al CSS solo, se redibuja.
+    window.addEventListener("temacambiado", () => graficos.forEach(dibujar));
 
     // Entrar con #AAAA-MM-DD (link directo o recarga) abre ese dia.
     (async () => {

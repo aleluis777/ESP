@@ -5,22 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Braindlab - Ingresar</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/comun.js"></script>
 <style>
   body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
   form.tarjeta { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 0.8rem; }
   .logo-login { display: block; height: 48px; margin: 0 auto 0.5rem; }
+  #form-login input { font-size: 1rem; padding: 0.55rem 0.6rem; }
   h1 { font-size: 1.1rem; text-align: center; margin: 0 0 0.5rem; }
   label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
-  input {
-    background: rgba(148,163,184,0.08);
-    border: 1px solid #334155;
-    border-radius: 0.5rem;
-    padding: 0.55rem 0.6rem;
-    color: var(--texto);
-    font-size: 1rem;
-  }
   button {
-    background: var(--acento); color: #0f172a; border: none; border-radius: 0.5rem;
+    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem;
     padding: 0.6rem 1rem; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 0.25rem;
   }
   button:disabled { opacity: 0.6; cursor: not-allowed; }

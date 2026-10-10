@@ -6,29 +6,11 @@
 <title>Braindlab - Configuracion</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
-  nav a:hover { color: var(--acento); }
   form.tarjeta { display: flex; flex-direction: column; gap: 0.6rem; }
   label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
-  input[type="text"], input[type="number"], input[type="datetime-local"], input[type="password"] {
-    background: rgba(148,163,184,0.08);
-    border: 1px solid #334155;
-    border-radius: 0.5rem;
-    padding: 0.45rem 0.6rem;
-    color: var(--texto);
-    font-size: 0.95rem;
-  }
   label.fila-check { flex-direction: row; align-items: center; gap: 0.5rem; }
-  select {
-    background: rgba(148,163,184,0.08);
-    border: 1px solid #334155;
-    border-radius: 0.5rem;
-    padding: 0.45rem 0.6rem;
-    color: var(--texto);
-    font-size: 0.95rem;
-  }
   button.guardar {
-    background: var(--acento); color: #0f172a; border: none; border-radius: 0.5rem;
+    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem;
     padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; align-self: flex-start; margin-top: 0.25rem;
   }
   button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -36,18 +18,17 @@
   .mensaje { font-size: 0.85rem; min-height: 1.1em; }
   .mensaje.ok { color: var(--ok); }
   .mensaje.error { color: var(--alerta); }
-  main { max-width: 600px; }
+  main { max-width: 600px; gap: 1rem; }
 </style>
-<script src="/auth.js"></script>
+<script src="/comun.js"></script>
 </head>
-<body>
-  <header class="topbar-simple">
-    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
-    <span>Configuracion</span>
+<body class="con-menu">
+ <div class="contenido">
+  <header class="topbar">
+    <h1>Configuracion</h1>
   </header>
 
   <main>
-    <nav><a href="/">Panel</a><a href="/ota.html">Firmware (OTA)</a><a href="/files.html">Archivos</a><a href="#" onclick="return salir()">Salir</a></nav>
 
     <form class="tarjeta" id="form-red">
       <h2>Red</h2>
@@ -184,6 +165,7 @@
       </p>
     </section>
   </main>
+ </div>
 
   <script>
     // Mismo criterio en las dos: junta los campos del form, valida que no

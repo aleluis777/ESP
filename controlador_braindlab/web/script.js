@@ -432,7 +432,7 @@ function conectarWs() {
     };
 }
 
-// ------------------------------------------------------------- reloj y sidebar
+// ------------------------------------------------------------- reloj
 
 
 // Reloj del panel: muestra EXACTAMENTE la hora que manda el RTC (DS1307) en
@@ -474,11 +474,6 @@ function actualizarReloj() {
         }
     }
 }
-
-const sidebar = document.getElementById("sidebar");
-document.getElementById("btn-colapsar").addEventListener("click", () => {
-    sidebar.classList.toggle("colapsado");
-});
 
 marcarConexion(false);
 actualizarReloj();

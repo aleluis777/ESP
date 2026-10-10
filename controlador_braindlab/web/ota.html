@@ -6,17 +6,16 @@
 <title>Braindlab - Actualizar firmware</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  .aviso { background: rgba(56,189,248,0.12); color: var(--acento); border: 1px solid rgba(56,189,248,0.35); border-radius: 0.75rem; padding: 0.9rem 1.1rem; margin-bottom: 1.25rem; }
+  .aviso { background: var(--acento-suave); color: var(--acento); border: 1px solid var(--acento); border-radius: 0.75rem; padding: 0.9rem 1.1rem; margin-bottom: 1.25rem; }
   .subida { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
-  .subida button { background: var(--acento); color: #0f172a; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; }
+  .subida button { background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; }
   .subida button:disabled { opacity: 0.6; cursor: not-allowed; }
-  .subida input[type="file"] { color: var(--texto); }
   .error { color: var(--alerta); }
   .ok { color: var(--ok); }
   nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
   nav a:hover { color: var(--acento); }
 </style>
-<script src="/auth.js"></script>
+<script src="/comun.js"></script>
 </head>
 <body>
   <header class="topbar-simple">

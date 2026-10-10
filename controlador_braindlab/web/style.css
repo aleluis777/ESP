@@ -1,4 +1,8 @@
+/* Colores: TODO pasa por estas variables, asi el tema claro/oscuro es
+   solo cambiar el atributo data-tema de <html> (lo hace comun.js, en el
+   navegador -- el ESP32 no interviene). Oscuro = default. */
 :root {
+    color-scheme: dark;
     --fondo: #0a0e16;
     --panel: #0a0e16;
     --tarjeta: #131722;
@@ -6,9 +10,27 @@
     --texto: #e2e8f0;
     --texto-tenue: #94a3b8;
     --acento: #38bdf8;
+    --texto-sobre-acento: #0f172a;
+    --texto-sobre-warning: #0f172a;
     --ok: #0ca30c;
     --warning: #fab219;
     --alerta: #d03b3b;
+
+    /* Superficies y lineas tenues (fondos de items, grillas, bordes de inputs). */
+    --superficie: rgba(148,163,184,0.06);
+    --superficie-hover: rgba(148,163,184,0.1);
+    --borde-input: #334155;
+    --borde-fuerte: #475569;
+    --grilla: rgba(148,163,184,0.12);
+    --pista-gauge: rgba(148,163,184,0.18);
+    --tooltip-fondo: rgba(10,14,22,0.92);
+    --sombra-menu: 4px 0 24px rgba(0,0,0,0.45);
+
+    /* Fondos suaves de los colores de estado. */
+    --acento-suave: rgba(56,189,248,0.15);
+    --ok-suave: rgba(12,163,12,0.15);
+    --warning-suave: rgba(250,178,25,0.15);
+    --alerta-suave: rgba(208,59,59,0.15);
 
     --color-op1: #3987e5;
     --color-op2: #d95926;
@@ -16,7 +38,56 @@
     --color-gestor-h: #9085e9;
     --color-iny1: #e66767;
     --color-iny2: #d55181;
+    /* Fases del medidor (historico). */
+    --fase-r: #e66767;
+    --fase-s: #fab219;
+    --fase-t: #3987e5;
 }
+
+/* Tema claro: mismos nombres, tonos mas oscuros para que se lean sobre
+   blanco (los amarillos/celestes del oscuro quedan lavados en claro). */
+:root[data-tema="claro"] {
+    color-scheme: light;
+    --fondo: #f1f4f8;
+    --panel: #ffffff;
+    --tarjeta: #ffffff;
+    --tarjeta-borde: #dbe1ea;
+    --texto: #1e293b;
+    --texto-tenue: #5b6779;
+    --acento: #0284c7;
+    --texto-sobre-acento: #ffffff;
+    --texto-sobre-warning: #ffffff;
+    --ok: #15803d;
+    --warning: #b45309;
+    --alerta: #c62828;
+
+    --superficie: rgba(15,23,42,0.04);
+    --superficie-hover: rgba(15,23,42,0.07);
+    --borde-input: #cbd5e1;
+    --borde-fuerte: #94a3b8;
+    --grilla: rgba(15,23,42,0.08);
+    --pista-gauge: rgba(15,23,42,0.1);
+    --tooltip-fondo: rgba(255,255,255,0.96);
+    --sombra-menu: 4px 0 24px rgba(15,23,42,0.15);
+
+    --acento-suave: rgba(2,132,199,0.12);
+    --ok-suave: rgba(21,128,61,0.12);
+    --warning-suave: rgba(180,83,9,0.12);
+    --alerta-suave: rgba(198,40,40,0.1);
+
+    --color-op1: #2563eb;
+    --color-op2: #c2410c;
+    --color-gestor-t: #047857;
+    --color-gestor-h: #6d5bd0;
+    --color-iny1: #dc2626;
+    --color-iny2: #be185d;
+    --fase-r: #dc2626;
+    --fase-s: #b45309;
+    --fase-t: #2563eb;
+}
+
+/* El logo es blanco sobre transparente: en claro se oscurece. */
+:root[data-tema="claro"] img[src="/logo.png"] { filter: brightness(0) opacity(0.8); }
 
 * { box-sizing: border-box; }
 
@@ -25,65 +96,102 @@ body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--fondo);
     color: var(--texto);
+    transition: background 0.2s ease, color 0.2s ease;
 }
 
-/* Layout de sidebar+contenido -- SOLO para index.html (dashboard). Las
-   paginas sueltas (ota.html/configurar.html/files.html) no tienen sidebar,
-   asi que se quedan con el body en flujo normal (header arriba, main
-   abajo) en vez de flex-row, que las pondria una al lado de la otra. */
-body.pagina-panel {
-    display: flex;
-    min-height: 100vh;
-}
+code { font-size: 0.85em; }
 
-/* ---------------------------------------------------------------- sidebar */
+/* ---------------------------------------------------------------- menu lateral
+   Comun a index/historico/configurar (<body class="con-menu">, el <aside>
+   lo arma comun.js). Angosto (solo iconos) por defecto; se abre ENCIMA del
+   contenido al pasar el mouse (no lo empuja: no se redibuja nada), y con
+   "Fijar menu" (body.menu-fijo) queda abierto empujando el contenido.
+   En celular (<=768px) se oculta y se abre con el boton de 3 rayas. */
+
+:root { --menu-angosto: 64px; --menu-ancho: 230px; }
+
+body.con-menu {
+    padding-left: var(--menu-angosto);
+    transition: padding-left 0.18s ease, background 0.2s ease, color 0.2s ease;
+}
+body.con-menu.menu-fijo { padding-left: var(--menu-ancho); }
 
 .sidebar {
-    width: 240px;
-    flex: none;
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+    width: var(--menu-angosto);
     background: var(--panel);
     border-right: 1px solid var(--tarjeta-borde);
-    display: flex;
-    flex-direction: column;
-    padding: 1.25rem 1rem;
-    gap: 1.5rem;
-    transition: width 0.15s ease, padding 0.15s ease;
+    display: flex; flex-direction: column;
+    padding: 1.1rem 0.6rem;
+    gap: 1.25rem;
+    overflow: hidden;
+    transition: width 0.18s ease, box-shadow 0.18s ease, transform 0.2s ease;
 }
-.sidebar.colapsado {
-    width: 64px;
-    padding: 1.25rem 0.5rem;
+body.menu-fijo .sidebar { width: var(--menu-ancho); }
+@media (hover: hover) {
+    body.con-menu:not(.menu-fijo) .sidebar:hover { width: var(--menu-ancho); box-shadow: var(--sombra-menu); }
 }
-.sidebar.colapsado .marca-logo,
-.sidebar.colapsado .nav-lateral a span:not(.nav-icono) {
-    display: none;
-}
-.sidebar.colapsado .nav-lateral a { justify-content: center; }
 
-.marca { display: flex; align-items: center; overflow: hidden; }
-.marca-logo { height: 1.9rem; width: auto; max-width: 100%; object-fit: contain; object-position: left; }
+.marca { display: flex; align-items: center; height: 2rem; padding-left: 0.55rem; flex: none; }
+.marca-logo { height: 1.7rem; width: auto; display: none; }
+/* Angosto: solo el simbolo (los primeros ~34px de 184 del logo). */
+.marca-icono { height: 1.7rem; width: 1.5rem; object-fit: cover; object-position: left; }
+body.menu-fijo .marca-logo, .sidebar:hover .marca-logo { display: block; }
+body.menu-fijo .marca-icono, .sidebar:hover .marca-icono { display: none; }
 
 .nav-lateral { display: flex; flex-direction: column; gap: 0.15rem; }
+.nav-pie { margin-top: auto; border-top: 1px solid var(--tarjeta-borde); padding-top: 0.6rem; }
 .nav-lateral a {
-    display: flex; align-items: center; gap: 0.65rem;
-    padding: 0.5rem 0.6rem; border-radius: 0.5rem;
-    color: var(--texto-tenue); text-decoration: none; font-size: 0.85rem;
-    white-space: nowrap; overflow: hidden;
+    display: flex; align-items: center; gap: 0.8rem;
+    padding: 0.55rem 0.7rem; border-radius: 0.5rem;
+    color: var(--texto-tenue); text-decoration: none; font-size: 0.87rem;
+    white-space: nowrap;
 }
-.nav-lateral a:hover { background: rgba(148,163,184,0.08); color: var(--texto); }
-.nav-lateral a.activo { background: rgba(56,189,248,0.15); color: var(--acento); }
-.nav-lateral a.nav-proximamente { opacity: 0.45; pointer-events: none; }
-.nav-icono { font-size: 1rem; width: 1.1rem; text-align: center; flex: none; }
+.nav-lateral a:hover { background: var(--superficie-hover); color: var(--texto); }
+.nav-lateral a.activo { background: var(--acento-suave); color: var(--acento); }
+.nav-icono { font-size: 1.05rem; width: 1.2rem; text-align: center; flex: none; }
+/* El texto se desvanece en vez de cortarse de golpe al cerrar. */
+.nav-texto { opacity: 0; transition: opacity 0.12s ease; }
+body.menu-fijo .nav-texto, .sidebar:hover .nav-texto { opacity: 1; }
 
-.btn-colapsar {
-    margin-top: auto; align-self: flex-start;
-    background: none; border: 1px solid var(--tarjeta-borde); color: var(--texto-tenue);
-    border-radius: 0.4rem; padding: 0.3rem 0.55rem; cursor: pointer; font-size: 0.9rem;
+.btn-hamburguesa, .menu-velo { display: none; }
+
+@media (max-width: 768px) {
+    body.con-menu, body.con-menu.menu-fijo { padding-left: 0; }
+    .sidebar, body.menu-fijo .sidebar {
+        width: var(--menu-ancho);
+        transform: translateX(-100%);
+    }
+    body.menu-abierto .sidebar { transform: none; box-shadow: var(--sombra-menu); }
+    .sidebar .nav-texto { opacity: 1; }
+    .sidebar .marca-logo { display: block; }
+    .sidebar .marca-icono { display: none; }
+    #btn-fijar { display: none; }
+
+    .btn-hamburguesa {
+        display: flex; align-items: center; justify-content: center;
+        position: fixed; top: 0.7rem; left: 0.7rem; z-index: 40;
+        width: 2.4rem; height: 2.4rem; border-radius: 0.5rem;
+        background: var(--tarjeta); color: var(--texto);
+        border: 1px solid var(--tarjeta-borde); font-size: 1.2rem; cursor: pointer;
+    }
+    body.menu-abierto .menu-velo {
+        display: block; position: fixed; inset: 0; z-index: 45;
+        background: rgba(0,0,0,0.4);
+    }
+    /* Que el titulo no quede debajo del boton de menu. */
+    body.con-menu .topbar { padding-left: 4rem; }
 }
-.btn-colapsar:hover { color: var(--texto); }
+
+.aviso-password {
+    background: var(--warning); color: var(--texto-sobre-warning); padding: 0.5rem 1rem;
+    font-size: 0.9rem; text-align: center; font-weight: 600;
+}
+.aviso-password a { color: inherit; }
 
 /* ---------------------------------------------------------------- topbar */
 
-.contenido { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.contenido { min-width: 0; min-height: 100vh; display: flex; flex-direction: column; }
 
 .topbar {
     display: flex; align-items: center; justify-content: space-between;
@@ -105,11 +213,11 @@ body.pagina-panel {
 .pill-estado {
     display: inline-flex; align-items: center; gap: 0.4rem;
     font-size: 0.8rem; padding: 0.3rem 0.7rem; border-radius: 999px;
-    background: rgba(148,163,184,0.1); color: var(--texto-tenue);
+    background: var(--superficie-hover); color: var(--texto-tenue);
 }
 .pill-estado .punto { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
-.pill-estado.conectado { background: rgba(12,163,12,0.15); color: var(--ok); }
-.pill-estado.desconectado { background: rgba(208,59,59,0.15); color: var(--alerta); }
+.pill-estado.conectado { background: var(--ok-suave); color: var(--ok); }
+.pill-estado.desconectado { background: var(--alerta-suave); color: var(--alerta); }
 
 /* ---------------------------------------------------------------- main / layout */
 
@@ -159,7 +267,7 @@ main {
 .valor-metrica { font-size: 1.6rem; font-weight: 700; margin: 0 0 0.25rem; }
 
 .gauge { width: 100%; height: auto; display: block; }
-.gauge-pista { fill: none; stroke: rgba(148,163,184,0.18); stroke-width: 12; stroke-linecap: round; }
+.gauge-pista { fill: none; stroke: var(--pista-gauge); stroke-width: 12; stroke-linecap: round; }
 .gauge-valor { fill: none; stroke-width: 12; stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
 .tarjeta-gauge[data-color="op1"] .gauge-valor { stroke: var(--color-op1); }
 .tarjeta-gauge[data-color="op2"] .gauge-valor { stroke: var(--color-op2); }
@@ -210,7 +318,7 @@ main {
     gap: 0.75rem;
 }
 .actuador {
-    background: rgba(148,163,184,0.06);
+    background: var(--superficie);
     border-radius: 0.6rem;
     padding: 0.6rem 0.8rem;
     display: flex; align-items: center; justify-content: space-between;
@@ -218,7 +326,7 @@ main {
 .actuador span { font-size: 0.85rem; color: var(--texto-tenue); }
 .actuador em { font-style: normal; font-weight: 600; font-size: 0.85rem; margin-left: 0.5rem; }
 .actuador .toggle {
-    width: 2.1rem; height: 1.1rem; border-radius: 999px; background: #334155;
+    width: 2.1rem; height: 1.1rem; border-radius: 999px; background: var(--borde-input);
     position: relative; flex: none; margin-left: 0.6rem;
 }
 .actuador .toggle::after {
@@ -226,13 +334,13 @@ main {
     width: 0.9rem; height: 0.9rem; border-radius: 50%; background: var(--texto-tenue);
     transition: left 0.2s ease, background 0.2s ease;
 }
-.actuador.activo { background: rgba(12,163,12,0.12); }
+.actuador.activo { background: var(--ok-suave); }
 .actuador.activo em { color: var(--ok); }
-.actuador.activo .toggle { background: rgba(12,163,12,0.35); }
+.actuador.activo .toggle { background: color-mix(in srgb, var(--ok) 40%, transparent); }
 .actuador.activo .toggle::after { left: calc(100% - 0.9rem - 2px); background: var(--ok); }
 
 .actuador.editable { cursor: pointer; }
-.actuador.editable:hover { background: rgba(56,189,248,0.1); }
+.actuador.editable:hover { background: var(--acento-suave); }
 .actuador .etiqueta-manual { font-size: 0.62rem; color: var(--warning); margin-left: 0.35rem; }
 
 /* ---------------------------------------------------------------- esquema + eventos */
@@ -246,6 +354,10 @@ main {
 @media (max-width: 900px) {
     .fila-esquema-eventos { grid-template-columns: 1fr; }
 }
+/* Los items de grilla no se achican por debajo de su contenido (min-width
+   auto): sin esto el diagrama ancho desborda la pagina en celular, en vez
+   de hacer scroll dentro de su tarjeta. */
+.fila-esquema-eventos > *, .fila-gauges > *, .fila-inferior > * { min-width: 0; }
 
 .diagrama {
     display: flex; align-items: center; gap: 0.6rem;
@@ -254,7 +366,7 @@ main {
 .col-bypass-at, .col-salidas { display: flex; flex-direction: column; gap: 0.4rem; flex: none; }
 
 .nodo-sensores {
-    background: rgba(148,163,184,0.06); border: 1px solid var(--tarjeta-borde);
+    background: var(--superficie); border: 1px solid var(--tarjeta-borde);
     border-radius: 0.6rem; padding: 0.5rem 0.7rem; font-size: 0.7rem;
     color: var(--texto-tenue); text-align: center; flex: none; min-width: 8rem;
     font-weight: 700;
@@ -267,7 +379,7 @@ main {
 .sensores-grilla b { color: var(--texto); font-weight: 700; }
 
 .nodo-gestor {
-    background: rgba(56,189,248,0.08); border: 2px solid var(--acento);
+    background: var(--acento-suave); border: 2px solid var(--acento);
     border-radius: 0.7rem; padding: 0.8rem 1.1rem; font-weight: 700; font-size: 0.85rem;
     color: var(--acento); text-align: center; flex: none; min-width: 8rem;
     display: flex; flex-direction: column; gap: 0.2rem;
@@ -276,7 +388,7 @@ main {
 .flecha { color: var(--texto-tenue); font-size: 1.1rem; flex: none; }
 
 .nodo-bypass, .nodo-at {
-    background: rgba(148,163,184,0.06); border: 1px solid var(--tarjeta-borde);
+    background: var(--superficie); border: 1px solid var(--tarjeta-borde);
     border-radius: 0.5rem; padding: 0.4rem 0.7rem; font-size: 0.72rem;
     color: var(--texto-tenue); text-align: center; font-weight: 700; min-width: 6.5rem;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
@@ -284,17 +396,17 @@ main {
 .nodo-bypass span, .nodo-at span { display: block; font-weight: 700; color: var(--texto); font-size: 0.75rem; }
 /* Bypass activo = amarillo (warning): el A/C queda puenteado, directo. */
 .nodo-bypass.activo {
-    background: rgba(250,178,25,0.15); border-color: var(--warning); color: var(--warning);
+    background: var(--warning-suave); border-color: var(--warning); color: var(--warning);
 }
 .nodo-bypass.activo span { color: var(--warning); }
 /* AT activo = rojo (alarma de alta temperatura). */
 .nodo-at.activo {
-    background: rgba(208,59,59,0.15); border-color: var(--alerta); color: var(--alerta);
+    background: var(--alerta-suave); border-color: var(--alerta); color: var(--alerta);
 }
 .nodo-at.activo span { color: var(--alerta); }
 
 .nodo-chico {
-    background: rgba(148,163,184,0.06); border: 1px solid var(--tarjeta-borde);
+    background: var(--superficie); border: 1px solid var(--tarjeta-borde);
     border-radius: 0.5rem; padding: 0.35rem 0.6rem; font-size: 0.7rem;
     color: var(--texto-tenue); text-align: center; min-width: 6.5rem;
     transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
@@ -339,3 +451,18 @@ main {
 .lista-modulos li.ok::before { background: var(--ok); }
 .lista-modulos li.falla { color: var(--texto); }
 .lista-modulos li.falla::before { background: var(--alerta); }
+
+/* ---------------------------------------------------------------- formularios
+   Compartido por configurar/files/ota/login (antes repetido en cada <style>). */
+
+input[type="text"], input[type="number"], input[type="password"],
+input[type="datetime-local"], select {
+    background: var(--superficie);
+    border: 1px solid var(--borde-input);
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    color: var(--texto);
+    font-size: 0.95rem;
+}
+input:focus, select:focus { outline: 2px solid var(--acento-suave); border-color: var(--acento); }
+input[type="file"] { color: var(--texto); }
