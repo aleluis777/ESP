@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindlab - Contrasenas</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
+  nav a:hover { color: var(--acento); }
+  main { max-width: 600px; gap: 1rem; }
+  form.tarjeta { display: flex; flex-direction: column; gap: 0.6rem; }
+  h2 { margin: 0 0 0.2rem; }
+  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
+  button.guardar {
+    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem;
+    padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; align-self: flex-start; margin-top: 0.25rem;
+  }
+  button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
+  .mensaje { font-size: 0.85rem; min-height: 1.1em; margin: 0; }
+  .mensaje.ok { color: var(--ok); }
+  .mensaje.error { color: var(--alerta); }
+  .detalle { font-size: 0.8rem; color: var(--texto-tenue); margin: 0; }
+  .estado { font-size: 0.8rem; font-weight: 600; }
+  .estado.fabrica { color: var(--warning); }
+  .estado.propia { color: var(--ok); }
+</style>
+<script src="/comun.js"></script>
+</head>
+<body>
+  <header class="topbar-simple">
+    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
+    <span>Contrasenas (root)</span>
+  </header>
+
+  <main>
+    <nav><a href="/">Panel</a><a href="/files.html">Archivos</a><a href="/ota.html">Firmware (OTA)</a><a href="#" onclick="return salir()">Salir</a></nav>
+
+    <form class="tarjeta" id="form-admin">
+      <h2>Contrasena del cliente (admin)</h2>
+      <p class="estado" id="estado-admin">--</p>
+      <label>Contrasena nueva (6 a 64 caracteres)
+        <input type="password" id="admin-nueva" autocomplete="new-password" minlength="6" maxlength="64" required>
+      </label>
+      <label>Repetir contrasena nueva
+        <input type="password" id="admin-repetir" autocomplete="new-password" minlength="6" maxlength="64" required>
+      </label>
+      <button class="guardar" type="submit">Cambiar contrasena del cliente</button>
+      <p class="mensaje" id="admin-mensaje"></p>
+      <p class="detalle">
+        El cliente entra con el usuario <strong>admin</strong> (panel, historico y
+        configuracion). Sirve tambien para resetearla si la olvido. Al cambiarla
+        se cierran las sesiones de admin abiertas.
+      </p>
+    </form>
+
+    <form class="tarjeta" id="form-root">
+      <h2>Contrasena maestra (root)</h2>
+      <p class="estado" id="estado-root">--</p>
+      <label>Contrasena maestra actual
+        <input type="password" id="root-actual" autocomplete="current-password" required>
+      </label>
+      <label>Contrasena maestra nueva (12 a 64 caracteres)
+        <input type="password" id="root-nueva" autocomplete="new-password" minlength="12" maxlength="64" required>
+      </label>
+      <label>Repetir contrasena maestra nueva
+        <input type="password" id="root-repetir" autocomplete="new-password" minlength="12" maxlength="64" required>
+      </label>
+      <button class="guardar" type="submit">Cambiar contrasena maestra</button>
+      <p class="mensaje" id="root-mensaje"></p>
+      <p class="detalle">
+        Cambia la maestra <strong>solo en este equipo</strong> (queda en su memoria
+        NVS). La de fabrica esta en el firmware; si se borra la NVS del equipo,
+        vuelve a la de fabrica.
+      </p>
+    </form>
+  </main>
+
+  <script>
+    function mostrar(id, texto, clase) {
+      const el = document.getElementById(id);
+      el.textContent = texto;
+      el.className = 'mensaje ' + clase;
+    }
+
+    function pintarEstado(id, porDefecto) {
+      const el = document.getElementById(id);
+      el.textContent = porDefecto ? 'Sigue siendo la de fabrica' : 'Personalizada';
+      el.className = 'estado ' + (porDefecto ? 'fabrica' : 'propia');
+    }
+
+    function cargarEstado() {
+      fetch('/api/sesion')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d) return;
+          pintarEstado('estado-admin', d.admin_por_defecto);
+          pintarEstado('estado-root', d.root_por_defecto);
+        })
+        .catch(() => {});
+    }
+
+    function enviar(cuerpo, idMensaje, form) {
+      fetch('/cambiar_password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+      })
+        .then((r) => r.json().catch(() => ({ ok: false, error: 'respuesta invalida' })))
+        .then((datos) => {
+          if (datos.ok) {
+            mostrar(idMensaje, 'Contrasena cambiada', 'ok');
+            form.reset();
+            cargarEstado();
+          } else {
+            mostrar(idMensaje, datos.error || 'No se pudo cambiar', 'error');
+          }
+        })
+        .catch(() => mostrar(idMensaje, 'Sin conexion con el controlador', 'error'));
+    }
+
+    document.getElementById('form-admin').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const nueva = document.getElementById('admin-nueva').value;
+      if (nueva !== document.getElementById('admin-repetir').value) {
+        mostrar('admin-mensaje', 'Las contrasenas no coinciden', 'error');
+        return;
+      }
+      enviar({ usuario: 'admin', nueva }, 'admin-mensaje', ev.target);
+    });
+
+    document.getElementById('form-root').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const nueva = document.getElementById('root-nueva').value;
+      if (nueva !== document.getElementById('root-repetir').value) {
+        mostrar('root-mensaje', 'Las contrasenas no coinciden', 'error');
+        return;
+      }
+      enviar({ usuario: 'root', actual: document.getElementById('root-actual').value, nueva },
+             'root-mensaje', ev.target);
+    });
+
+    cargarEstado();
+  </script>
+</body>
+</html>

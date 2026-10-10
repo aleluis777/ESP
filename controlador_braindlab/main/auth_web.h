@@ -1,13 +1,21 @@
 #pragma once
 
-// Login de la interfaz web: un solo usuario ("admin"), contrasena guardada
-// en NVS (sobrevive a "idf.py flash" y a OTA -- solo "idf.py erase-flash"
-// la vuelve al valor de fabrica). En NVS se guarda solo un hash con salt,
-// nunca la contrasena en texto plano.
+// Login de la interfaz web con dos usuarios:
 //
-// Sesiones: al hacer login se entrega una cookie "sesion" con un token
-// aleatorio que vive solo en RAM (un reinicio cierra todas las sesiones).
-// Expira tras AUTH_SESION_INACTIVA_S sin actividad.
+//   "admin" -- el cliente. Panel, historico, configuracion y controles.
+//              Contrasena en NVS; de fabrica AUTH_PASSWORD_DEFAULT.
+//   "root"  -- el fabricante. Todo lo anterior + files/ota/root.html, y es
+//              el UNICO que cambia contrasenas (la suya y la del admin).
+//              De fabrica: el hash de auth_root_fabrica.h (generado por
+//              tools/generar_hash_root.py -- la contrasena no esta en el
+//              codigo). Si se cambia desde root.html, la nueva queda en NVS.
+//
+// En NVS solo se guardan hashes con salt, nunca contrasenas. Las dos
+// sobreviven a "idf.py flash" y a OTA; borrando la NVS (o erase-flash)
+// vuelven a las de fabrica.
+//
+// Sesiones: cookie "sesion" con un token aleatorio que vive solo en RAM (un
+// reinicio cierra todas). Expira tras AUTH_SESION_INACTIVA_S sin actividad.
 //
 // Todas las funciones que reciben httpd_req_t se llaman desde la tarea del
 // servidor HTTP (una sola), asi que no hay concurrencia entre ellas.
@@ -20,30 +28,38 @@
 extern "C" {
 #endif
 
-#define AUTH_USUARIO            "admin"
-#define AUTH_PASSWORD_DEFAULT   "braindlab"
+#define AUTH_USUARIO_ADMIN      "admin"
+#define AUTH_USUARIO_ROOT       "root"
+#define AUTH_PASSWORD_DEFAULT   "braindlab" // admin de fabrica
 #define AUTH_PASSWORD_MIN       6
+#define AUTH_PASSWORD_ROOT_MIN  12
 #define AUTH_PASSWORD_MAX       64
 #define AUTH_SESION_INACTIVA_S  (30 * 60)
 
-// Inicializa NVS (si nadie lo hizo) y carga el hash. Si no hay contrasena
-// guardada, graba la de fabrica (AUTH_PASSWORD_DEFAULT).
+typedef enum {
+    AUTH_NIVEL_NINGUNO = 0, // sin sesion
+    AUTH_NIVEL_ADMIN = 1,
+    AUTH_NIVEL_ROOT = 2,
+} auth_nivel_t;
+
+// Inicializa NVS (si nadie lo hizo) y carga los hashes. Si no hay
+// contrasena de admin guardada, graba la de fabrica.
 esp_err_t auth_web_init(void);
 
-// true si el request trae una cookie de sesion valida (y le renueva la
-// expiracion).
+// Nivel de la sesion del request (y le renueva la expiracion).
+auth_nivel_t auth_web_nivel(httpd_req_t *req);
+
+// true si el request trae cualquier sesion valida.
 bool auth_web_sesion_valida(httpd_req_t *req);
 
-// Para el inicio de cada handler protegido: si no hay sesion responde
-// 401 (APIs) y devuelve false -- el handler debe salir con ESP_OK sin
-// hacer nada mas.
+// Para el inicio de cada handler protegido: si no alcanza el nivel
+// responde 401 (sin sesion) o 403 (admin pidiendo algo de root) y devuelve
+// false -- el handler debe salir con ESP_OK sin hacer nada mas.
 bool auth_web_requerir(httpd_req_t *req);
-
-// true si la contrasena sigue siendo la de fabrica (la web muestra aviso).
-bool auth_web_password_por_defecto(void);
+bool auth_web_requerir_root(httpd_req_t *req);
 
 // Registra POST /login, POST /logout, POST /cambiar_password y GET
-// /api/sesion (login.html lo sirve servidor_web.c como archivo publico).
+// /api/sesion (login.html y root.html los sirve servidor_web.c).
 void auth_web_registrar_handlers(httpd_handle_t servidor);
 
 #ifdef __cplusplus

@@ -91,7 +91,9 @@ static void log_peticion(httpd_req_t *req)
 typedef struct {
     const char *ruta_spiffs;
     const char *content_type;
-    bool publico; // true: se sirve sin sesion (login.html y lo que necesita)
+    // Nivel minimo para verlo: NINGUNO = publico (login.html y lo que
+    // necesita), ADMIN = cualquier sesion, ROOT = solo el fabricante.
+    auth_nivel_t nivel;
 } archivo_estatico_t;
 
 // Sirve un archivo de /www en pedazos (httpd_resp_send_chunk), sin cargarlo
@@ -103,12 +105,24 @@ static esp_err_t archivo_estatico_handler(httpd_req_t *req)
     const archivo_estatico_t *info = (const archivo_estatico_t *)req->user_ctx;
 
     // Pagina protegida sin sesion -> al login (redirect, no 401: es el
-    // navegador pidiendo una pagina, no un fetch).
-    if (!info->publico && !auth_web_sesion_valida(req)) {
-        httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/login.html");
-        httpd_resp_send(req, NULL, 0);
-        return ESP_OK;
+    // navegador pidiendo una pagina, no un fetch). Con sesion de admin en
+    // una pagina de root -> 403, no al login (ya esta logueado).
+    if (info->nivel != AUTH_NIVEL_NINGUNO) {
+        auth_nivel_t nivel = auth_web_nivel(req);
+        if (nivel == AUTH_NIVEL_NINGUNO) {
+            httpd_resp_set_status(req, "302 Found");
+            httpd_resp_set_hdr(req, "Location", "/login.html");
+            httpd_resp_send(req, NULL, 0);
+            return ESP_OK;
+        }
+        if (nivel < info->nivel) {
+            httpd_resp_set_status(req, "403 Forbidden");
+            httpd_resp_set_type(req, "text/html");
+            httpd_resp_sendstr(req, "<!DOCTYPE html><meta charset=\"UTF-8\"><title>Acceso denegado</title>"
+                                    "<p style=\"font-family:sans-serif\">Acceso denegado: esta pagina es solo "
+                                    "para el usuario root. <a href=\"/\">Volver al panel</a></p>");
+            return ESP_OK;
+        }
     }
 
     FILE *f = fopen(info->ruta_spiffs, "r");
@@ -141,16 +155,17 @@ static esp_err_t archivo_estatico_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static const archivo_estatico_t s_archivo_index       = { "/www/index.html", "text/html", false };
-static const archivo_estatico_t s_archivo_style       = { "/www/style.css", "text/css", true };
-static const archivo_estatico_t s_archivo_script      = { "/www/script.js", "application/javascript", false };
-static const archivo_estatico_t s_archivo_ota_html     = { "/www/ota.html", "text/html", false };
-static const archivo_estatico_t s_archivo_configurar_html = { "/www/configurar.html", "text/html", false };
-static const archivo_estatico_t s_archivo_logo         = { "/www/logo.png", "image/png", true };
-static const archivo_estatico_t s_archivo_files_html   = { "/www/files.html", "text/html", false };
-static const archivo_estatico_t s_archivo_historico_html = { "/www/historico.html", "text/html", false };
-static const archivo_estatico_t s_archivo_login_html   = { "/www/login.html", "text/html", true };
-static const archivo_estatico_t s_archivo_comun_js     = { "/www/comun.js", "application/javascript", true };
+static const archivo_estatico_t s_archivo_index       = { "/www/index.html", "text/html", AUTH_NIVEL_ADMIN };
+static const archivo_estatico_t s_archivo_style       = { "/www/style.css", "text/css", AUTH_NIVEL_NINGUNO };
+static const archivo_estatico_t s_archivo_script      = { "/www/script.js", "application/javascript", AUTH_NIVEL_ADMIN };
+static const archivo_estatico_t s_archivo_ota_html     = { "/www/ota.html", "text/html", AUTH_NIVEL_ROOT };
+static const archivo_estatico_t s_archivo_configurar_html = { "/www/configurar.html", "text/html", AUTH_NIVEL_ADMIN };
+static const archivo_estatico_t s_archivo_logo         = { "/www/logo.png", "image/png", AUTH_NIVEL_NINGUNO };
+static const archivo_estatico_t s_archivo_files_html   = { "/www/files.html", "text/html", AUTH_NIVEL_ROOT };
+static const archivo_estatico_t s_archivo_historico_html = { "/www/historico.html", "text/html", AUTH_NIVEL_ADMIN };
+static const archivo_estatico_t s_archivo_login_html   = { "/www/login.html", "text/html", AUTH_NIVEL_NINGUNO };
+static const archivo_estatico_t s_archivo_comun_js     = { "/www/comun.js", "application/javascript", AUTH_NIVEL_NINGUNO };
+static const archivo_estatico_t s_archivo_root_html    = { "/www/root.html", "text/html", AUTH_NIVEL_ROOT };
 
 // "/" y "/index.html" apuntan al mismo archivo -- asi entrar directo a la IP
 // del controlador ya muestra la pagina.
@@ -198,6 +213,10 @@ static const httpd_uri_t s_uri_comun_js = {
     .uri = "/comun.js", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_comun_js,
 };
+static const httpd_uri_t s_uri_root_html = {
+    .uri = "/root.html", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_root_html,
+};
 
 // Lista lo que hay grabado en la particion SPIFFS "www" -- mismo formato
 // que controlador_labgeo: {"total_bytes":N,"usados_bytes":N,"archivos":
@@ -205,7 +224,7 @@ static const httpd_uri_t s_uri_comun_js = {
 static esp_err_t listado_www_handler(httpd_req_t *req)
 {
     log_peticion(req);
-    if (!auth_web_requerir(req)) {
+    if (!auth_web_requerir_root(req)) {
         return ESP_OK;
     }
 
@@ -290,7 +309,7 @@ static const char *content_type_por_extension(const char *nombre)
 static esp_err_t upload_handler(httpd_req_t *req)
 {
     log_peticion(req);
-    if (!auth_web_requerir(req)) {
+    if (!auth_web_requerir_root(req)) {
         return ESP_OK;
     }
 
@@ -409,7 +428,7 @@ static const httpd_uri_t s_uri_descargar = {
 static esp_err_t eliminar_handler(httpd_req_t *req)
 {
     log_peticion(req);
-    if (!auth_web_requerir(req)) {
+    if (!auth_web_requerir_root(req)) {
         return ESP_OK;
     }
 
@@ -991,7 +1010,7 @@ static const httpd_uri_t s_uri_reiniciar = {
 static esp_err_t ota_handler(httpd_req_t *req)
 {
     log_peticion(req);
-    if (!auth_web_requerir(req)) {
+    if (!auth_web_requerir_root(req)) {
         return ESP_OK;
     }
 
@@ -1128,7 +1147,7 @@ esp_err_t servidor_web_init(void)
     // servidor_web_enviar_ws() corre en tarea_climatizacion: un cliente
     // que no recibe no debe trabarla los 5 s del default por cada envio.
     config.send_wait_timeout = 2;
-    config.max_uri_handlers = 40; // 33 rutas registradas (27 + login.html/comun.js + 4 de auth_web.c), con margen
+    config.max_uri_handlers = 40; // 34 rutas registradas (27 + login/root.html + comun.js + 4 de auth_web.c), con margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -1165,6 +1184,7 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
     httpd_register_uri_handler(s_servidor, &s_uri_login_html);
     httpd_register_uri_handler(s_servidor, &s_uri_comun_js);
+    httpd_register_uri_handler(s_servidor, &s_uri_root_html);
     auth_web_registrar_handlers(s_servidor);
 
     ESP_LOGI(TAG, "Servidor HTTP + WS listo (puerto %d)", config.server_port);

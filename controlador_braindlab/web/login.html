@@ -53,8 +53,7 @@
         .then((r) => r.json().catch(() => ({ ok: false, error: 'respuesta invalida' })))
         .then((datos) => {
           if (datos.ok) {
-            // Contrasena de fabrica: directo a cambiarla.
-            location.href = datos.por_defecto ? '/configurar.html#seguridad' : '/';
+            location.href = '/';
           } else {
             mensaje.textContent = datos.error || 'No se pudo ingresar';
             document.getElementById('password').value = '';

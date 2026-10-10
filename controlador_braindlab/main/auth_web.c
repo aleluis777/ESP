@@ -2,13 +2,16 @@
 //
 // Hash: SHA-256 iterado con salt aleatorio de 16 bytes (AUTH_ITERACIONES
 // vueltas, ~decenas de ms en el ESP32 con SHA por hardware) -- encarece
-// probar contrasenas si alguien llegara a leer la flash. Se usa la API PSA
-// (psa/crypto.h) porque ESP-IDF 6 trae mbedTLS 4 / TF-PSA-Crypto; el PSA ya
-// lo inicializa ESP-IDF al arrancar.
+// probar contrasenas si alguien llegara a leer la flash o el .bin. Se usa
+// la API PSA (psa/crypto.h) porque ESP-IDF 6 trae mbedTLS 4 /
+// TF-PSA-Crypto; el PSA ya lo inicializa ESP-IDF al arrancar. El mismo
+// calculo esta en tools/generar_hash_root.py -- si se cambia uno, cambiar
+// el otro.
 
 #include <string.h>
 #include <stdio.h>
 #include "auth_web.h"
+#include "auth_root_fabrica.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
@@ -33,13 +36,26 @@ static const char *TAG = "AUTH_WEB";
 #define FALLOS_MAX         5
 #define BLOQUEO_S          60
 
-static uint8_t s_salt[SALT_LEN];
-static uint8_t s_hash[HASH_LEN];
-static bool s_por_defecto = false;
+// Credencial de un usuario. Claves NVS: admin = "salt"/"hash"/"defecto"
+// (las mismas de la version con un solo usuario, asi no se pierde la
+// contrasena ya guardada); root = "r_salt"/"r_hash" (si no existen, rige
+// el hash de fabrica de auth_root_fabrica.h).
+typedef struct {
+    const char *usuario;
+    const char *clave_salt;
+    const char *clave_hash;
+    uint8_t salt[SALT_LEN];
+    uint8_t hash[HASH_LEN];
+    bool por_defecto; // sigue siendo la de fabrica
+} credencial_t;
+
+static credencial_t s_admin = { .usuario = AUTH_USUARIO_ADMIN, .clave_salt = "salt", .clave_hash = "hash" };
+static credencial_t s_root = { .usuario = AUTH_USUARIO_ROOT, .clave_salt = "r_salt", .clave_hash = "r_hash" };
 static bool s_listo = false;
 
 typedef struct {
     bool activa;
+    auth_nivel_t nivel;
     char token[TOKEN_HEX_LEN + 1];
     int64_t ultima_actividad_us;
 } sesion_t;
@@ -86,17 +102,17 @@ static bool iguales(const uint8_t *a, const uint8_t *b, size_t n)
     return dif == 0;
 }
 
-static bool verificar_password(const char *password)
+static bool verificar_password(const credencial_t *c, const char *password)
 {
     uint8_t calculado[HASH_LEN];
-    if (calcular_hash(password, s_salt, calculado) != ESP_OK) {
+    if (calcular_hash(password, c->salt, calculado) != ESP_OK) {
         return false;
     }
-    return iguales(calculado, s_hash, HASH_LEN);
+    return iguales(calculado, c->hash, HASH_LEN);
 }
 
 // Genera salt nuevo + hash y lo graba en NVS.
-static esp_err_t guardar_password(const char *password, bool por_defecto)
+static esp_err_t guardar_password(credencial_t *c, const char *password, bool por_defecto)
 {
     uint8_t salt[SALT_LEN], hash[HASH_LEN];
     esp_fill_random(salt, sizeof(salt));
@@ -110,18 +126,26 @@ static esp_err_t guardar_password(const char *password, bool por_defecto)
     if (err != ESP_OK) {
         return err;
     }
-    err = nvs_set_blob(nvs, "salt", salt, sizeof(salt));
-    if (err == ESP_OK) err = nvs_set_blob(nvs, "hash", hash, sizeof(hash));
-    if (err == ESP_OK) err = nvs_set_u8(nvs, "defecto", por_defecto ? 1 : 0);
+    err = nvs_set_blob(nvs, c->clave_salt, salt, sizeof(salt));
+    if (err == ESP_OK) err = nvs_set_blob(nvs, c->clave_hash, hash, sizeof(hash));
+    if (err == ESP_OK && c == &s_admin) err = nvs_set_u8(nvs, "defecto", por_defecto ? 1 : 0);
     if (err == ESP_OK) err = nvs_commit(nvs);
     nvs_close(nvs);
 
     if (err == ESP_OK) {
-        memcpy(s_salt, salt, sizeof(salt));
-        memcpy(s_hash, hash, sizeof(hash));
-        s_por_defecto = por_defecto;
+        memcpy(c->salt, salt, sizeof(salt));
+        memcpy(c->hash, hash, sizeof(hash));
+        c->por_defecto = por_defecto;
     }
     return err;
+}
+
+// true si encontro salt+hash del usuario en NVS.
+static bool cargar_de_nvs(nvs_handle_t nvs, credencial_t *c)
+{
+    size_t salt_len = sizeof(c->salt), hash_len = sizeof(c->hash);
+    return nvs_get_blob(nvs, c->clave_salt, c->salt, &salt_len) == ESP_OK && salt_len == SALT_LEN &&
+           nvs_get_blob(nvs, c->clave_hash, c->hash, &hash_len) == ESP_OK && hash_len == HASH_LEN;
 }
 
 esp_err_t auth_web_init(void)
@@ -137,35 +161,40 @@ esp_err_t auth_web_init(void)
         return err;
     }
 
-    nvs_handle_t nvs;
-    size_t salt_len = sizeof(s_salt), hash_len = sizeof(s_hash);
+    bool admin_cargado = false, root_cargado = false;
     uint8_t defecto = 0;
-    bool cargado = false;
+    nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
-        cargado = nvs_get_blob(nvs, "salt", s_salt, &salt_len) == ESP_OK && salt_len == SALT_LEN &&
-                  nvs_get_blob(nvs, "hash", s_hash, &hash_len) == ESP_OK && hash_len == HASH_LEN;
+        admin_cargado = cargar_de_nvs(nvs, &s_admin);
+        root_cargado = cargar_de_nvs(nvs, &s_root);
         nvs_get_u8(nvs, "defecto", &defecto);
         nvs_close(nvs);
     }
 
-    if (cargado) {
-        s_por_defecto = defecto != 0;
-        ESP_LOGI(TAG, "Contrasena cargada de NVS%s", s_por_defecto ? " (sigue siendo la de fabrica)" : "");
+    if (admin_cargado) {
+        s_admin.por_defecto = defecto != 0;
     } else {
-        err = guardar_password(AUTH_PASSWORD_DEFAULT, true);
+        err = guardar_password(&s_admin, AUTH_PASSWORD_DEFAULT, true);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "No se pudo grabar la contrasena de fabrica (%s)", esp_err_to_name(err));
+            ESP_LOGE(TAG, "No se pudo grabar la contrasena de fabrica del admin (%s)", esp_err_to_name(err));
             return err;
         }
-        ESP_LOGW(TAG, "Sin contrasena en NVS -- se grabo la de fabrica (usuario \"%s\")", AUTH_USUARIO);
+        ESP_LOGW(TAG, "Sin contrasena de admin en NVS -- se grabo la de fabrica");
     }
+
+    // Root: no se graba la de fabrica en NVS -- se usa directo del firmware
+    // hasta que alguien la cambie (asi un firmware nuevo con otro hash de
+    // fabrica aplica en los equipos que nunca la cambiaron).
+    if (!root_cargado) {
+        memcpy(s_root.salt, AUTH_ROOT_FABRICA_SALT, SALT_LEN);
+        memcpy(s_root.hash, AUTH_ROOT_FABRICA_HASH, HASH_LEN);
+        s_root.por_defecto = true;
+    }
+
+    ESP_LOGI(TAG, "Contrasenas cargadas: admin %s, root %s",
+             s_admin.por_defecto ? "de fabrica" : "propia", s_root.por_defecto ? "de fabrica" : "propia (NVS)");
     s_listo = true;
     return ESP_OK;
-}
-
-bool auth_web_password_por_defecto(void)
-{
-    return s_por_defecto;
 }
 
 // ------------------------------------------------------------------ sesiones
@@ -195,33 +224,60 @@ static sesion_t *buscar_sesion(httpd_req_t *req)
     return NULL;
 }
 
-bool auth_web_sesion_valida(httpd_req_t *req)
+auth_nivel_t auth_web_nivel(httpd_req_t *req)
 {
     if (!s_listo) {
         // Sin NVS no hay contrasena que verificar -- antes que dejar la web
         // abierta, se niega todo (se ve en el log por que).
-        return false;
+        return AUTH_NIVEL_NINGUNO;
     }
     sesion_t *s = buscar_sesion(req);
     if (!s) {
-        return false;
+        return AUTH_NIVEL_NINGUNO;
     }
     s->ultima_actividad_us = esp_timer_get_time();
-    return true;
+    return s->nivel;
+}
+
+bool auth_web_sesion_valida(httpd_req_t *req)
+{
+    return auth_web_nivel(req) != AUTH_NIVEL_NINGUNO;
+}
+
+static void responder_json(httpd_req_t *req, const char *estado, const char *json)
+{
+    if (estado) {
+        httpd_resp_set_status(req, estado);
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+}
+
+static bool requerir_nivel(httpd_req_t *req, auth_nivel_t minimo)
+{
+    auth_nivel_t nivel = auth_web_nivel(req);
+    if (nivel >= minimo) {
+        return true;
+    }
+    if (nivel == AUTH_NIVEL_NINGUNO) {
+        responder_json(req, "401 Unauthorized", "{\"ok\":false,\"error\":\"sesion requerida\"}");
+    } else {
+        responder_json(req, "403 Forbidden", "{\"ok\":false,\"error\":\"requiere usuario root\"}");
+    }
+    return false;
 }
 
 bool auth_web_requerir(httpd_req_t *req)
 {
-    if (auth_web_sesion_valida(req)) {
-        return true;
-    }
-    httpd_resp_set_status(req, "401 Unauthorized");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"ok\":false,\"error\":\"sesion requerida\"}");
-    return false;
+    return requerir_nivel(req, AUTH_NIVEL_ADMIN);
 }
 
-static sesion_t *crear_sesion(void)
+bool auth_web_requerir_root(httpd_req_t *req)
+{
+    return requerir_nivel(req, AUTH_NIVEL_ROOT);
+}
+
+static sesion_t *crear_sesion(auth_nivel_t nivel)
 {
     // Slot libre, o si no hay, el de actividad mas vieja.
     sesion_t *elegida = &s_sesiones[0];
@@ -241,8 +297,20 @@ static sesion_t *crear_sesion(void)
         snprintf(&elegida->token[i * 2], 3, "%02x", aleatorio[i]);
     }
     elegida->activa = true;
+    elegida->nivel = nivel;
     elegida->ultima_actividad_us = esp_timer_get_time();
     return elegida;
+}
+
+// Cierra las sesiones de un nivel (al cambiarle la contrasena), menos
+// 'excepto' (la de quien hizo el cambio).
+static void cerrar_sesiones(auth_nivel_t nivel, const sesion_t *excepto)
+{
+    for (int i = 0; i < AUTH_MAX_SESIONES; i++) {
+        if (&s_sesiones[i] != excepto && s_sesiones[i].nivel == nivel) {
+            s_sesiones[i].activa = false;
+        }
+    }
 }
 
 // ------------------------------------------------------------------ handlers
@@ -270,16 +338,7 @@ static bool leer_body(httpd_req_t *req, char *buf, size_t tam)
     return true;
 }
 
-static void responder_json(httpd_req_t *req, const char *estado, const char *json)
-{
-    if (estado) {
-        httpd_resp_set_status(req, estado);
-    }
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, json);
-}
-
-// POST /login -- body {"usuario":"admin","password":"..."}.
+// POST /login -- body {"usuario":"admin"|"root","password":"..."}.
 static esp_err_t login_handler(httpd_req_t *req)
 {
     char body[200];
@@ -299,9 +358,19 @@ static esp_err_t login_handler(httpd_req_t *req)
     cJSON *raiz = cJSON_Parse(body);
     const cJSON *usuario = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "usuario") : NULL;
     const cJSON *password = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "password") : NULL;
-    bool ok = s_listo && cJSON_IsString(usuario) && cJSON_IsString(password) &&
-              strcmp(usuario->valuestring, AUTH_USUARIO) == 0 &&
-              verificar_password(password->valuestring);
+
+    const credencial_t *c = NULL;
+    auth_nivel_t nivel = AUTH_NIVEL_NINGUNO;
+    if (cJSON_IsString(usuario)) {
+        if (strcmp(usuario->valuestring, AUTH_USUARIO_ADMIN) == 0) {
+            c = &s_admin;
+            nivel = AUTH_NIVEL_ADMIN;
+        } else if (strcmp(usuario->valuestring, AUTH_USUARIO_ROOT) == 0) {
+            c = &s_root;
+            nivel = AUTH_NIVEL_ROOT;
+        }
+    }
+    bool ok = s_listo && c && cJSON_IsString(password) && verificar_password(c, password->valuestring);
     cJSON_Delete(raiz);
 
     if (!ok) {
@@ -317,14 +386,18 @@ static esp_err_t login_handler(httpd_req_t *req)
     }
 
     s_fallos = 0;
-    sesion_t *s = crear_sesion();
+    sesion_t *s = crear_sesion(nivel);
     // El string de la cookie tiene que seguir vivo hasta que se envie la
     // respuesta -- static alcanza (una sola tarea HTTP).
     static char cookie[96];
     snprintf(cookie, sizeof(cookie), "sesion=%s; Path=/; HttpOnly; SameSite=Strict", s->token);
     httpd_resp_set_hdr(req, "Set-Cookie", cookie);
-    ESP_LOGI(TAG, "Login correcto de \"%s\"", AUTH_USUARIO);
-    responder_json(req, NULL, s_por_defecto ? "{\"ok\":true,\"por_defecto\":true}" : "{\"ok\":true,\"por_defecto\":false}");
+    ESP_LOGI(TAG, "Login correcto de \"%s\"", c->usuario);
+
+    char json[96];
+    snprintf(json, sizeof(json), "{\"ok\":true,\"nivel\":\"%s\",\"admin_por_defecto\":%s}",
+             c->usuario, s_admin.por_defecto ? "true" : "false");
+    responder_json(req, NULL, json);
     return ESP_OK;
 }
 
@@ -340,32 +413,44 @@ static esp_err_t logout_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-// POST /cambiar_password -- body {"actual":"...","nueva":"..."}. Requiere
-// sesion Y la contrasena actual (por si alguien deja la sesion abierta).
-// Cierra todas las demas sesiones.
+// POST /cambiar_password -- SOLO root. Body:
+//   {"usuario":"admin","nueva":"..."}                   -> resetea la del cliente
+//   {"usuario":"root","actual":"...","nueva":"..."}     -> cambia la maestra
+// La maestra pide la actual por si alguien deja la sesion root abierta.
+// Cierra las sesiones abiertas del usuario cambiado (menos la propia).
 static esp_err_t cambiar_password_handler(httpd_req_t *req)
 {
-    if (!auth_web_requerir(req)) {
+    if (!auth_web_requerir_root(req)) {
         return ESP_OK;
     }
-    char body[200];
+    char body[256];
     if (!leer_body(req, body, sizeof(body))) {
         return ESP_OK;
     }
 
     cJSON *raiz = cJSON_Parse(body);
+    const cJSON *usuario = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "usuario") : NULL;
     const cJSON *actual = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "actual") : NULL;
     const cJSON *nueva = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "nueva") : NULL;
 
+    credencial_t *c = NULL;
+    if (cJSON_IsString(usuario)) {
+        if (strcmp(usuario->valuestring, AUTH_USUARIO_ADMIN) == 0) c = &s_admin;
+        else if (strcmp(usuario->valuestring, AUTH_USUARIO_ROOT) == 0) c = &s_root;
+    }
+    size_t minimo = (c == &s_root) ? AUTH_PASSWORD_ROOT_MIN : AUTH_PASSWORD_MIN;
+
     const char *error = NULL;
-    if (!cJSON_IsString(actual) || !cJSON_IsString(nueva)) {
-        error = "{\"ok\":false,\"error\":\"faltan \\\"actual\\\"/\\\"nueva\\\"\"}";
-    } else if (!verificar_password(actual->valuestring)) {
-        error = "{\"ok\":false,\"error\":\"la contrasena actual no es correcta\"}";
-    } else if (strlen(nueva->valuestring) < AUTH_PASSWORD_MIN || strlen(nueva->valuestring) > AUTH_PASSWORD_MAX) {
-        error = "{\"ok\":false,\"error\":\"la nueva contrasena debe tener entre 6 y 64 caracteres\"}";
-    } else if (strcmp(nueva->valuestring, AUTH_PASSWORD_DEFAULT) == 0) {
-        error = "{\"ok\":false,\"error\":\"la nueva contrasena no puede ser la de fabrica\"}";
+    if (!c || !cJSON_IsString(nueva)) {
+        error = "{\"ok\":false,\"error\":\"faltan \\\"usuario\\\" (admin/root) o \\\"nueva\\\"\"}";
+    } else if (c == &s_root && (!cJSON_IsString(actual) || !verificar_password(&s_root, actual->valuestring))) {
+        error = "{\"ok\":false,\"error\":\"la contrasena maestra actual no es correcta\"}";
+    } else if (strlen(nueva->valuestring) < minimo || strlen(nueva->valuestring) > AUTH_PASSWORD_MAX) {
+        error = (c == &s_root)
+            ? "{\"ok\":false,\"error\":\"la maestra debe tener entre 12 y 64 caracteres\"}"
+            : "{\"ok\":false,\"error\":\"la contrasena debe tener entre 6 y 64 caracteres\"}";
+    } else if (c == &s_admin && strcmp(nueva->valuestring, AUTH_PASSWORD_DEFAULT) == 0) {
+        error = "{\"ok\":false,\"error\":\"no puede ser la de fabrica\"}";
     }
 
     if (error) {
@@ -374,36 +459,34 @@ static esp_err_t cambiar_password_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    esp_err_t err = guardar_password(nueva->valuestring, false);
+    esp_err_t err = guardar_password(c, nueva->valuestring, false);
     cJSON_Delete(raiz);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "No se pudo guardar la contrasena nueva (%s)", esp_err_to_name(err));
+        ESP_LOGE(TAG, "No se pudo guardar la contrasena de \"%s\" (%s)", c->usuario, esp_err_to_name(err));
         responder_json(req, "500 Internal Server Error", "{\"ok\":false,\"error\":\"no se pudo guardar en NVS\"}");
         return ESP_OK;
     }
 
-    // Cierra las otras sesiones; la actual sigue.
-    sesion_t *propia = buscar_sesion(req);
-    for (int i = 0; i < AUTH_MAX_SESIONES; i++) {
-        if (&s_sesiones[i] != propia) {
-            s_sesiones[i].activa = false;
-        }
-    }
-    ESP_LOGI(TAG, "Contrasena cambiada");
+    cerrar_sesiones(c == &s_root ? AUTH_NIVEL_ROOT : AUTH_NIVEL_ADMIN, buscar_sesion(req));
+    ESP_LOGW(TAG, "Contrasena de \"%s\" cambiada (por root)", c->usuario);
     responder_json(req, NULL, "{\"ok\":true}");
     return ESP_OK;
 }
 
-// GET /api/sesion -- para que la web sepa si mostrar el aviso de
-// contrasena de fabrica.
+// GET /api/sesion -- quien esta logueado y si las contrasenas siguen
+// siendo las de fabrica (la web muestra avisos solo a root, que es quien
+// puede cambiarlas).
 static esp_err_t sesion_handler(httpd_req_t *req)
 {
     if (!auth_web_requerir(req)) {
         return ESP_OK;
     }
-    char json[80];
-    snprintf(json, sizeof(json), "{\"usuario\":\"%s\",\"por_defecto\":%s}",
-             AUTH_USUARIO, s_por_defecto ? "true" : "false");
+    bool es_root = auth_web_nivel(req) == AUTH_NIVEL_ROOT;
+    char json[128];
+    snprintf(json, sizeof(json), "{\"usuario\":\"%s\",\"admin_por_defecto\":%s,\"root_por_defecto\":%s}",
+             es_root ? AUTH_USUARIO_ROOT : AUTH_USUARIO_ADMIN,
+             s_admin.por_defecto ? "true" : "false",
+             s_root.por_defecto ? "true" : "false");
     responder_json(req, NULL, json);
     return ESP_OK;
 }

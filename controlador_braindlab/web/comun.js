@@ -5,7 +5,8 @@
 //      Por defecto sigue al sistema; el boton del menu lo fija y se recuerda
 //      en localStorage (por navegador, no se guarda nada en el equipo).
 //   2. Sesion: cualquier fetch() con 401 manda al login; salir() la cierra;
-//      aviso si la contrasena sigue siendo la de fabrica.
+//      al usuario root le avisa si alguna contrasena sigue siendo la de
+//      fabrica (el admin no ve el aviso: no puede cambiarlas).
 //   3. Menu lateral comun: solo en paginas con <body class="con-menu">
 //      (index, historico, configurar). files.html y ota.html no lo llevan.
 //      Angosto (iconos) por defecto, se abre al pasar el mouse por encima y
@@ -89,12 +90,16 @@
         fetch("/api/sesion")
             .then((r) => (r.ok ? r.json() : null))
             .then((datos) => {
-                if (!datos || !datos.por_defecto) return;
+                if (!datos || datos.usuario !== "root") return;
+                const cuales = [];
+                if (datos.admin_por_defecto) cuales.push("la del cliente (admin)");
+                if (datos.root_por_defecto) cuales.push("la maestra (root)");
+                if (!cuales.length || location.pathname === "/root.html") return;
                 const aviso = document.createElement("div");
                 aviso.className = "aviso-password";
                 aviso.innerHTML =
-                    'La contrasena sigue siendo la de fabrica. ' +
-                    '<a href="/configurar.html#seguridad">Cambiarla ahora</a>';
+                    "Sigue siendo la de fabrica: " + cuales.join(" y ") + ". " +
+                    '<a href="/root.html">Cambiarla</a>';
                 const destino = document.querySelector(".contenido") || document.body;
                 destino.prepend(aviso);
             })
