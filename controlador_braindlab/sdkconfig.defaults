@@ -67,3 +67,8 @@ CONFIG_I2CDEV_TIMEOUT=150
 # internos son debiles (mejor un pull-up externo de 4.7-10k si el modulo no
 # trae uno propio), pero sirven de red de seguridad para prototipar.
 CONFIG_I2CDEV_AUTO_ENABLE_PULLUPS=y
+
+# Login de la web (auth_web.c): el WebSocket /ws valida la cookie de sesion
+# ANTES del handshake (ws_pre_handshake_cb) -- sin esto cualquiera en la red
+# podria abrir el WS y ver el estado en vivo sin loguearse.
+CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT=y

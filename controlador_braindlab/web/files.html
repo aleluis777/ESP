@@ -24,6 +24,7 @@
   button.btn-eliminar { background: var(--alerta); color: white; border: none; border-radius: 0.4rem; padding: 0.3rem 0.7rem; cursor: pointer; font-size: 0.78rem; }
   button.btn-eliminar:hover { opacity: 0.85; }
 </style>
+<script src="/auth.js"></script>
 </head>
 <body>
   <header class="topbar-simple">
@@ -32,7 +33,7 @@
   </header>
 
   <main>
-    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/ota.html">Firmware (OTA)</a></nav>
+    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/ota.html">Firmware (OTA)</a><a href="#" onclick="return salir()">Salir</a></nav>
 
     <div class="subida">
       <input type="file" id="input-archivo">

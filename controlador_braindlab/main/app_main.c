@@ -49,6 +49,7 @@
 #include "snmp_braindlab.h"
 #include "registro_sd.h"
 #include "modbus_braindlab.h"
+#include "auth_web.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -637,6 +638,14 @@ void app_main(void)
     // climatizacion (esa tarea ya esta corriendo arriba) ni dependen de
     // ella. Si el W5500 no responde, red_eth_init() devuelve error, no
     // aborta -- seguimos sin red antes que dejar el equipo sin climatizar.
+    // Login de la web: contrasena en NVS (ver auth_web.h). Sin NVS la web
+    // queda cerrada (rechaza todo) en vez de abierta sin contrasena.
+    esp_err_t err_auth = auth_web_init();
+    if (err_auth != ESP_OK) {
+        ESP_LOGE(TAG, "auth_web_init() fallo (%s) -- la web va a rechazar todos los logins",
+                 esp_err_to_name(err_auth));
+    }
+
     esp_err_t err_red = red_eth_init();
     if (err_red != ESP_OK) {
         ESP_LOGE(TAG, "red_eth_init() fallo (%s) -- sigue sin red, la climatizacion no depende de esto",

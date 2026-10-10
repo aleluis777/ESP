@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindlab - Ingresar</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+  form.tarjeta { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 0.8rem; }
+  .logo-login { display: block; height: 48px; margin: 0 auto 0.5rem; }
+  h1 { font-size: 1.1rem; text-align: center; margin: 0 0 0.5rem; }
+  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
+  input {
+    background: rgba(148,163,184,0.08);
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.6rem;
+    color: var(--texto);
+    font-size: 1rem;
+  }
+  button {
+    background: var(--acento); color: #0f172a; border: none; border-radius: 0.5rem;
+    padding: 0.6rem 1rem; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 0.25rem;
+  }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .mensaje { font-size: 0.85rem; min-height: 1.1em; color: var(--alerta); text-align: center; }
+</style>
+</head>
+<body>
+  <form class="tarjeta" id="form-login">
+    <img class="logo-login" src="/logo.png" alt="BraindLab">
+    <h1>Controlador de climatizacion</h1>
+    <label>Usuario
+      <input type="text" id="usuario" value="admin" autocomplete="username" required>
+    </label>
+    <label>Contrasena
+      <input type="password" id="password" autocomplete="current-password" required autofocus>
+    </label>
+    <button type="submit" id="boton">Ingresar</button>
+    <p class="mensaje" id="mensaje"></p>
+  </form>
+
+  <script>
+    document.getElementById('form-login').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const boton = document.getElementById('boton');
+      const mensaje = document.getElementById('mensaje');
+      boton.disabled = true;
+      mensaje.textContent = '';
+      fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuario: document.getElementById('usuario').value,
+          password: document.getElementById('password').value,
+        }),
+      })
+        .then((r) => r.json().catch(() => ({ ok: false, error: 'respuesta invalida' })))
+        .then((datos) => {
+          if (datos.ok) {
+            // Contrasena de fabrica: directo a cambiarla.
+            location.href = datos.por_defecto ? '/configurar.html#seguridad' : '/';
+          } else {
+            mensaje.textContent = datos.error || 'No se pudo ingresar';
+            document.getElementById('password').value = '';
+            boton.disabled = false;
+          }
+        })
+        .catch(() => {
+          mensaje.textContent = 'Sin conexion con el controlador';
+          boton.disabled = false;
+        });
+    });
+  </script>
+</body>
+</html>

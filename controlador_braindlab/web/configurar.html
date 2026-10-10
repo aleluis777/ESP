@@ -10,7 +10,7 @@
   nav a:hover { color: var(--acento); }
   form.tarjeta { display: flex; flex-direction: column; gap: 0.6rem; }
   label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
-  input[type="text"], input[type="number"], input[type="datetime-local"] {
+  input[type="text"], input[type="number"], input[type="datetime-local"], input[type="password"] {
     background: rgba(148,163,184,0.08);
     border: 1px solid #334155;
     border-radius: 0.5rem;
@@ -38,6 +38,7 @@
   .mensaje.error { color: var(--alerta); }
   main { max-width: 600px; }
 </style>
+<script src="/auth.js"></script>
 </head>
 <body>
   <header class="topbar-simple">
@@ -46,7 +47,7 @@
   </header>
 
   <main>
-    <nav><a href="/">Panel</a><a href="/ota.html">Firmware (OTA)</a><a href="/files.html">Archivos</a></nav>
+    <nav><a href="/">Panel</a><a href="/ota.html">Firmware (OTA)</a><a href="/files.html">Archivos</a><a href="#" onclick="return salir()">Salir</a></nav>
 
     <form class="tarjeta" id="form-red">
       <h2>Red</h2>
@@ -149,6 +150,28 @@
       </p>
     </section>
 
+    <form class="tarjeta" id="seguridad">
+      <h2>Contrasena de acceso</h2>
+      <label>Contrasena actual
+        <input type="password" id="pw-actual" autocomplete="current-password" required>
+      </label>
+      <label>Contrasena nueva (6 a 64 caracteres)
+        <input type="password" id="pw-nueva" autocomplete="new-password" minlength="6" maxlength="64" required>
+      </label>
+      <label>Repetir contrasena nueva
+        <input type="password" id="pw-repetir" autocomplete="new-password" minlength="6" maxlength="64" required>
+      </label>
+      <button class="guardar" type="submit">Cambiar contrasena</button>
+      <p class="mensaje" id="pw-mensaje"></p>
+      <p class="detalle">
+        Usuario: <strong>admin</strong>. La contrasena se guarda en la memoria
+        interna del equipo (NVS): no se pierde al reiniciar, actualizar por OTA
+        ni al flashear. Solo se vuelve a la de fabrica borrando toda la flash
+        (<code>idf.py erase-flash</code>). Al cambiarla se cierran las demas
+        sesiones abiertas.
+      </p>
+    </form>
+
     <section class="tarjeta">
       <h2>Reiniciar equipo</h2>
       <button class="guardar peligro" type="button" id="btn-reiniciar">Reiniciar ahora</button>
@@ -193,6 +216,31 @@
         .catch(() => {}); // config.json no existe todavia -- se deja el placeholder
     }
     precargarRed();
+
+    document.getElementById('seguridad').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const mensaje = document.getElementById('pw-mensaje');
+      const nueva = document.getElementById('pw-nueva').value;
+      if (nueva !== document.getElementById('pw-repetir').value) {
+        mostrarMensaje(mensaje, 'Las contrasenas nuevas no coinciden', 'error');
+        return;
+      }
+      fetch('/cambiar_password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actual: document.getElementById('pw-actual').value, nueva }),
+      })
+        .then((r) => r.json().catch(() => ({ ok: false, error: 'respuesta invalida' })))
+        .then((datos) => {
+          if (datos.ok) {
+            mostrarMensaje(mensaje, 'Contrasena cambiada', 'ok');
+            ev.target.reset();
+          } else {
+            mostrarMensaje(mensaje, datos.error || 'No se pudo cambiar', 'error');
+          }
+        })
+        .catch(() => mostrarMensaje(mensaje, 'Sin conexion con el controlador', 'error'));
+    });
 
     document.getElementById('form-red').addEventListener('submit', (ev) => {
       ev.preventDefault();

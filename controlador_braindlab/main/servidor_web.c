@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include "registro_sd.h"
 #include "servidor_web.h"
+#include "auth_web.h"
 #include "esp_http_server.h"
 #include "esp_spiffs.h"
 #include "esp_log.h"
@@ -28,6 +29,8 @@
 static const char *TAG = "SERVIDOR_WEB";
 
 #define WS_MAX_CLIENTES 4
+// Sockets totales del servidor (HTTP + WS). El maximo permitido es 13 (16-3).
+#define HTTPD_MAX_SOCKETS (WS_MAX_CLIENTES + 8)
 
 static httpd_handle_t s_servidor = NULL;
 static servidor_web_callbacks_t s_callbacks;
@@ -88,6 +91,7 @@ static void log_peticion(httpd_req_t *req)
 typedef struct {
     const char *ruta_spiffs;
     const char *content_type;
+    bool publico; // true: se sirve sin sesion (login.html y lo que necesita)
 } archivo_estatico_t;
 
 // Sirve un archivo de /www en pedazos (httpd_resp_send_chunk), sin cargarlo
@@ -97,6 +101,15 @@ static esp_err_t archivo_estatico_handler(httpd_req_t *req)
     log_peticion(req);
 
     const archivo_estatico_t *info = (const archivo_estatico_t *)req->user_ctx;
+
+    // Pagina protegida sin sesion -> al login (redirect, no 401: es el
+    // navegador pidiendo una pagina, no un fetch).
+    if (!info->publico && !auth_web_sesion_valida(req)) {
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/login.html");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_OK;
+    }
 
     FILE *f = fopen(info->ruta_spiffs, "r");
     if (!f) {
@@ -122,14 +135,16 @@ static esp_err_t archivo_estatico_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static const archivo_estatico_t s_archivo_index       = { "/www/index.html", "text/html" };
-static const archivo_estatico_t s_archivo_style       = { "/www/style.css", "text/css" };
-static const archivo_estatico_t s_archivo_script      = { "/www/script.js", "application/javascript" };
-static const archivo_estatico_t s_archivo_ota_html     = { "/www/ota.html", "text/html" };
-static const archivo_estatico_t s_archivo_configurar_html = { "/www/configurar.html", "text/html" };
-static const archivo_estatico_t s_archivo_logo         = { "/www/logo.png", "image/png" };
-static const archivo_estatico_t s_archivo_files_html   = { "/www/files.html", "text/html" };
-static const archivo_estatico_t s_archivo_historico_html = { "/www/historico.html", "text/html" };
+static const archivo_estatico_t s_archivo_index       = { "/www/index.html", "text/html", false };
+static const archivo_estatico_t s_archivo_style       = { "/www/style.css", "text/css", true };
+static const archivo_estatico_t s_archivo_script      = { "/www/script.js", "application/javascript", false };
+static const archivo_estatico_t s_archivo_ota_html     = { "/www/ota.html", "text/html", false };
+static const archivo_estatico_t s_archivo_configurar_html = { "/www/configurar.html", "text/html", false };
+static const archivo_estatico_t s_archivo_logo         = { "/www/logo.png", "image/png", true };
+static const archivo_estatico_t s_archivo_files_html   = { "/www/files.html", "text/html", false };
+static const archivo_estatico_t s_archivo_historico_html = { "/www/historico.html", "text/html", false };
+static const archivo_estatico_t s_archivo_login_html   = { "/www/login.html", "text/html", true };
+static const archivo_estatico_t s_archivo_auth_js      = { "/www/auth.js", "application/javascript", true };
 
 // "/" y "/index.html" apuntan al mismo archivo -- asi entrar directo a la IP
 // del controlador ya muestra la pagina.
@@ -169,6 +184,14 @@ static const httpd_uri_t s_uri_files_html = {
     .uri = "/files.html", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_files_html,
 };
+static const httpd_uri_t s_uri_login_html = {
+    .uri = "/login.html", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_login_html,
+};
+static const httpd_uri_t s_uri_auth_js = {
+    .uri = "/auth.js", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_auth_js,
+};
 
 // Lista lo que hay grabado en la particion SPIFFS "www" -- mismo formato
 // que controlador_labgeo: {"total_bytes":N,"usados_bytes":N,"archivos":
@@ -176,6 +199,9 @@ static const httpd_uri_t s_uri_files_html = {
 static esp_err_t listado_www_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     size_t total = 0, usados = 0;
     esp_spiffs_info("www", &total, &usados);
@@ -258,6 +284,9 @@ static const char *content_type_por_extension(const char *nombre)
 static esp_err_t upload_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char nombre[64];
     size_t hdr_len = httpd_req_get_hdr_value_len(req, "X-Filename");
@@ -326,6 +355,9 @@ static const httpd_uri_t s_uri_upload = {
 static esp_err_t descargar_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char query[96];
     char nombre[64];
@@ -371,6 +403,9 @@ static const httpd_uri_t s_uri_descargar = {
 static esp_err_t eliminar_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char query[96];
     char nombre[64];
@@ -411,6 +446,9 @@ static const httpd_uri_t s_uri_eliminar = {
 static esp_err_t configurar_red_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[160];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -454,6 +492,9 @@ static const httpd_uri_t s_uri_configurar_red = {
 static esp_err_t configurar_climatizacion_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[256];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -505,6 +546,9 @@ static const httpd_uri_t s_uri_configurar_climatizacion = {
 static esp_err_t control_aire_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[96];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -545,6 +589,9 @@ static const httpd_uri_t s_uri_control_aire = {
 static esp_err_t control_bypass_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[64];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -584,6 +631,9 @@ static const httpd_uri_t s_uri_control_bypass = {
 static esp_err_t configurar_rtc_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[64];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -634,6 +684,9 @@ static const httpd_uri_t s_uri_configurar_rtc = {
 static esp_err_t control_at_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[64];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -671,6 +724,9 @@ static const httpd_uri_t s_uri_control_at = {
 static esp_err_t control_automatico_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     if (s_callbacks.on_control_automatico) {
         s_callbacks.on_control_automatico();
@@ -690,6 +746,9 @@ static const httpd_uri_t s_uri_control_automatico = {
 static esp_err_t calibrar_sensor_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[96];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -732,6 +791,9 @@ static const httpd_uri_t s_uri_calibrar_sensor = {
 static esp_err_t sd_formatear_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char body[64];
     int len = httpd_req_recv(req, body, sizeof(body) - 1);
@@ -796,6 +858,9 @@ static bool leer_query(httpd_req_t *req, const char *clave, char *valor, size_t 
 static esp_err_t historico_dias_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char mes_txt[12];
     int anio = 0, mes = 0;
@@ -834,6 +899,9 @@ static const httpd_uri_t s_uri_historico_dias = {
 static esp_err_t historico_dia_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     char fecha[16];
     int anio = 0, mes = 0, dia = 0;
@@ -887,6 +955,9 @@ static const httpd_uri_t s_uri_historico_dia = {
 static esp_err_t reiniciar_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true,\"mensaje\":\"reiniciando\"}");
@@ -914,6 +985,9 @@ static const httpd_uri_t s_uri_reiniciar = {
 static esp_err_t ota_handler(httpd_req_t *req)
 {
     log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
 
     if (req->content_len == 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio -- mandar el .bin como body crudo");
@@ -1006,11 +1080,26 @@ static esp_err_t ws_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// Antes del handshake: sin sesion no se abre el WebSocket (si no,
+// cualquiera en la red veria el estado en vivo sin loguearse). Necesita
+// CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT=y (sdkconfig.defaults).
+static esp_err_t ws_pre_handshake(httpd_req_t *req)
+{
+    if (!auth_web_sesion_valida(req)) {
+        ESP_LOGW(TAG, "WS rechazado: sin sesion (fd=%d)", httpd_req_to_sockfd(req));
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_send(req, NULL, 0);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
 static const httpd_uri_t s_uri_ws = {
     .uri = "/ws",
     .method = HTTP_GET,
     .handler = ws_handler,
     .is_websocket = true,
+    .ws_pre_handshake_cb = ws_pre_handshake,
 };
 
 esp_err_t servidor_web_init(void)
@@ -1021,9 +1110,19 @@ esp_err_t servidor_web_init(void)
     montar_www();
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_open_sockets = WS_MAX_CLIENTES + 8; // 12 total -- max permitido es 13 (16-3), margen para la pagina de archivos cargando varios recursos
+    config.max_open_sockets = HTTPD_MAX_SOCKETS; // 12 total, margen para la pagina de archivos cargando varios recursos
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 30; // 27 rutas registradas, con un poco de margen
+    // Keep-alive TCP: detecta y libera sockets de pestanas cerradas sin
+    // aviso (WS que no mandaron el close, PC que se desconecto) en ~15 s,
+    // en vez de dejarlos ocupando lugar hasta que el LRU los purgue.
+    config.keep_alive_enable = true;
+    config.keep_alive_idle = 5;
+    config.keep_alive_interval = 5;
+    config.keep_alive_count = 3;
+    // servidor_web_enviar_ws() corre en tarea_climatizacion: un cliente
+    // que no recibe no debe trabarla los 5 s del default por cada envio.
+    config.send_wait_timeout = 2;
+    config.max_uri_handlers = 40; // 33 rutas registradas (27 + login.html/auth.js + 4 de auth_web.c), con margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -1058,6 +1157,9 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_historico_dia);
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
+    httpd_register_uri_handler(s_servidor, &s_uri_login_html);
+    httpd_register_uri_handler(s_servidor, &s_uri_auth_js);
+    auth_web_registrar_handlers(s_servidor);
 
     ESP_LOGI(TAG, "Servidor HTTP + WS listo (puerto %d)", config.server_port);
     return ESP_OK;
@@ -1073,9 +1175,15 @@ void servidor_web_enviar_ws(const char *json)
         return; // el servidor no llego a arrancar (por ejemplo, sin Ethernet)
     }
 
-    size_t fds = WS_MAX_CLIENTES;
-    int client_fds[WS_MAX_CLIENTES];
+    // OJO: httpd_get_client_list() devuelve TODOS los sockets abiertos
+    // (HTTP + WS), y falla si hay mas que el tamanio del arreglo -- antes
+    // era de WS_MAX_CLIENTES (4) y con 5+ conexiones abiertas (el navegador
+    // abre varias en paralelo al cargar la pagina) no se enviaba nada a
+    // nadie. Tiene que ser del tamanio de max_open_sockets.
+    size_t fds = HTTPD_MAX_SOCKETS;
+    int client_fds[HTTPD_MAX_SOCKETS];
     if (httpd_get_client_list(s_servidor, &fds, client_fds) != ESP_OK) {
+        ESP_LOGW(TAG, "WS: no se pudo obtener la lista de clientes");
         return;
     }
 
@@ -1090,7 +1198,12 @@ void servidor_web_enviar_ws(const char *json)
     for (size_t i = 0; i < fds; i++) {
         int fd = client_fds[i];
         if (httpd_ws_get_fd_info(s_servidor, fd) == HTTPD_WS_CLIENT_WEBSOCKET) {
-            httpd_ws_send_frame_async(s_servidor, fd, &frame);
+            if (httpd_ws_send_frame_async(s_servidor, fd, &frame) != ESP_OK) {
+                // Cliente muerto (pestana cerrada sin aviso): se cierra para
+                // liberar el socket en vez de reintentarle cada 2 s.
+                ESP_LOGW(TAG, "WS: fallo el envio a fd=%d, cerrando la sesion", fd);
+                httpd_sess_trigger_close(s_servidor, fd);
+            }
         }
     }
 }

@@ -16,6 +16,7 @@
   nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
   nav a:hover { color: var(--acento); }
 </style>
+<script src="/auth.js"></script>
 </head>
 <body>
   <header class="topbar-simple">
@@ -24,7 +25,7 @@
   </header>
 
   <main>
-    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/files.html">Archivos</a></nav>
+    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/files.html">Archivos</a><a href="#" onclick="return salir()">Salir</a></nav>
 
     <p class="aviso">
       Elegi el archivo <strong>.bin</strong> que genera <code>idf.py build</code>

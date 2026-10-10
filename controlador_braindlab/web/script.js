@@ -416,6 +416,9 @@ function conectarWs() {
     ws.onopen = () => marcarConexion(true);
     ws.onclose = () => {
         marcarConexion(false);
+        // Si el WS se cerro por sesion vencida (o el equipo reinicio y se
+        // perdieron las sesiones), este fetch da 401 y auth.js manda al login.
+        fetch("/api/sesion").catch(() => {});
         setTimeout(conectarWs, 2000); // reintenta -- el controlador puede reiniciar o el link caerse
     };
     ws.onerror = () => ws.close();
