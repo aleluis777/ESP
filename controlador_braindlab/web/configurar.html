@@ -5,21 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Braindlab - Configuracion</title>
 <link rel="stylesheet" href="/style.css">
-<style>
-  form.tarjeta { display: flex; flex-direction: column; gap: 0.6rem; }
-  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
-  label.fila-check { flex-direction: row; align-items: center; gap: 0.5rem; }
-  button.guardar {
-    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem;
-    padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; align-self: flex-start; margin-top: 0.25rem;
-  }
-  button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
-  button.guardar.peligro { background: var(--alerta); color: #fff; }
-  .mensaje { font-size: 0.85rem; min-height: 1.1em; }
-  .mensaje.ok { color: var(--ok); }
-  .mensaje.error { color: var(--alerta); }
-  main { max-width: 600px; gap: 1rem; }
-</style>
 <script src="/comun.js"></script>
 </head>
 <body class="con-menu">
@@ -28,119 +13,153 @@
     <h1>Configuracion</h1>
   </header>
 
-  <main>
+  <main class="grilla-config">
 
-    <form class="tarjeta" id="form-red">
-      <h2>Red</h2>
-      <label>IP
-        <input type="text" id="red-ip" placeholder="192.168.5.95" required>
+    <form class="tarjeta tarjeta-form ancho" id="form-climatizacion">
+      <div>
+        <h2><i>&#10052;</i>Climatizacion</h2>
+        <p class="sub">Umbrales de control y rotacion de la unidad de reserva. Se aplica al reiniciar el equipo.</p>
+      </div>
+
+      <p class="grupo">Temperaturas</p>
+      <div class="campos cuatro">
+        <label>Minima (apaga todo)
+          <span class="unidad" data-u="°C"><input type="number" step="0.1" id="clima-tmin" placeholder="25.0" required></span>
+        </label>
+        <label>Maxima (etapa normal)
+          <span class="unidad" data-u="°C"><input type="number" step="0.1" id="clima-tmax" placeholder="28.0" required></span>
+        </label>
+        <label>Alta temperatura (alarma)
+          <span class="unidad" data-u="°C"><input type="number" step="0.1" id="clima-tat" placeholder="80.0" required></span>
+        </label>
+        <label>Bypass
+          <span class="unidad" data-u="°C"><input type="number" step="0.1" id="clima-tbypass" placeholder="82.0" required></span>
+        </label>
+      </div>
+
+      <p class="grupo">Aires</p>
+      <div class="campos">
+        <label>Cantidad de aires (1-4)
+          <input type="number" id="clima-cantidad" min="1" max="4" placeholder="4" required>
+        </label>
+        <label>Descansa esta semana
+          <select id="clima-alternar"></select>
+        </label>
+        <label>Fallas max. antes de anular bypass
+          <input type="number" id="clima-fails" placeholder="3" required>
+        </label>
+      </div>
+      <label class="interruptor">
+        <input type="checkbox" id="clima-rotar" checked>
+        Rotar la unidad de reserva cada semana
       </label>
-      <label>Gateway
-        <input type="text" id="red-gateway" placeholder="192.168.5.1" required>
-      </label>
-      <label>Mascara
-        <input type="text" id="red-mascara" placeholder="255.255.255.0" required>
-      </label>
-      <button class="guardar" type="submit">Guardar red</button>
-      <p class="mensaje" id="red-mensaje"></p>
-      <p class="detalle">
-        Se guarda en <code>config.json</code> -- el equipo la lee y la aplica
-        al W5500 recien al arrancar, no en caliente. Reiniciar el equipo
-        despues de guardar para que tome efecto.
-      </p>
+
+      <details>
+        <summary>Como funciona</summary>
+        <p>
+          Con N aires se encienden N-1 en la etapa normal y el que descansa solo
+          entra en alta temperatura (con 1 aire no hay reserva). El que descansa
+          cambia solo cada lunes a martes (00:00 del reloj): pasa al siguiente y
+          despues del ultimo vuelve al 1; en ese momento el equipo se reinicia.
+          <span id="clima-ultima-rotacion"></span>
+        </p>
+      </details>
+
+      <div class="acciones">
+        <p class="mensaje" id="clima-mensaje"></p>
+        <button class="guardar" type="submit">Guardar climatizacion</button>
+      </div>
     </form>
 
-    <form class="tarjeta" id="form-rtc">
-      <h2>Reloj (RTC)</h2>
+    <form class="tarjeta tarjeta-form" id="form-red">
+      <div>
+        <h2><i>&#8644;</i>Red</h2>
+        <p class="sub">Se aplica al reiniciar el equipo.</p>
+      </div>
+      <div class="campos">
+        <label>IP
+          <input type="text" id="red-ip" placeholder="192.168.5.95" required>
+        </label>
+        <label>Gateway
+          <input type="text" id="red-gateway" placeholder="192.168.5.1" required>
+        </label>
+        <label>Mascara
+          <input type="text" id="red-mascara" placeholder="255.255.255.0" required>
+        </label>
+      </div>
+      <div class="acciones">
+        <p class="mensaje" id="red-mensaje"></p>
+        <button class="guardar" type="submit">Guardar red</button>
+      </div>
+    </form>
+
+    <form class="tarjeta tarjeta-form" id="form-rtc">
+      <div>
+        <h2><i>&#9719;</i>Reloj (RTC)</h2>
+        <p class="sub">Ajusta el DS1307. La rotacion semanal depende de esta hora.</p>
+      </div>
       <label>Fecha y hora
         <input type="datetime-local" id="rtc-fecha-hora" step="1" required>
       </label>
-      <button class="guardar" type="submit">Guardar hora</button>
-      <p class="mensaje" id="rtc-mensaje"></p>
-      <p class="detalle">
-        Ajusta el DS1307 a este valor. Arranca precargado con la hora de este
-        navegador -- cambiala antes de guardar si no es la que corresponde.
-      </p>
+      <div class="acciones">
+        <p class="mensaje" id="rtc-mensaje"></p>
+        <button class="guardar" type="submit">Guardar hora</button>
+      </div>
     </form>
 
-    <form class="tarjeta" id="form-climatizacion">
-      <h2>Climatizacion</h2>
-      <label>Cantidad de aires (1-4)
-        <input type="number" id="clima-cantidad" min="1" max="4" placeholder="4" required>
-      </label>
-      <label>Temp. minima (apaga todo)
-        <input type="number" step="0.1" id="clima-tmin" placeholder="25.0" required>
-      </label>
-      <label>Temp. maxima (etapa normal)
-        <input type="number" step="0.1" id="clima-tmax" placeholder="28.0" required>
-      </label>
-      <label>Temp. alta temperatura (alarma)
-        <input type="number" step="0.1" id="clima-tat" placeholder="80.0" required>
-      </label>
-      <label>Temp. bypass
-        <input type="number" step="0.1" id="clima-tbypass" placeholder="82.0" required>
-      </label>
-      <label>Fallas maximas antes de deshabilitar bypass automatico
-        <input type="number" id="clima-fails" placeholder="3" required>
-      </label>
-      <label class="fila-check">
-        <input type="checkbox" id="clima-rotar" checked>
-        Rotar la unidad de reserva semanalmente
-      </label>
-      <button class="guardar" type="submit">Guardar climatizacion</button>
-      <p class="mensaje" id="clima-mensaje"></p>
-      <p class="detalle">
-        Se guarda en <code>config.json</code> -- <code>tarea_climatizacion</code>
-        recien lo relee la proxima vez que el equipo arranca.
-      </p>
+    <form class="tarjeta tarjeta-form" id="form-calibracion">
+      <div>
+        <h2><i>&#9878;</i>Calibracion de sensores</h2>
+        <p class="sub">Compara contra un instrumento de referencia.</p>
+      </div>
+      <div class="campos">
+        <label>Sensor
+          <select id="calib-sensor">
+            <option value="t1">Temperatura 1</option>
+            <option value="t2">Temperatura 2</option>
+            <option value="t3">Temperatura 3</option>
+            <option value="t4">Temperatura 4</option>
+          </select>
+        </label>
+        <label>Valor de referencia
+          <span class="unidad" data-u="°C"><input type="number" step="0.1" id="calib-referencia" placeholder="25.0" required></span>
+        </label>
+      </div>
+      <details>
+        <summary>Como funciona</summary>
+        <p>
+          El equipo toma una lectura cruda del sensor elegido (sin calibracion
+          previa) y guarda la diferencia con el valor que pongas. Hace falta
+          reiniciar el equipo para que la correccion se note en las lecturas.
+        </p>
+      </details>
+      <div class="acciones">
+        <p class="mensaje" id="calib-mensaje"></p>
+        <button class="guardar" type="submit">Calibrar</button>
+      </div>
     </form>
 
-    <form class="tarjeta" id="form-calibracion">
-      <h2>Calibracion de sensores</h2>
-      <label>Sensor
-        <select id="calib-sensor">
-          <option value="t1">Temperatura 1</option>
-          <option value="t2">Temperatura 2</option>
-          <option value="t3">Temperatura 3</option>
-          <option value="t4">Temperatura 4</option>
-        </select>
-      </label>
-      <label>Valor medido con instrumento de referencia (°C)
-        <input type="number" step="0.1" id="calib-referencia" placeholder="25.0" required>
-      </label>
-      <button class="guardar" type="submit">Calibrar</button>
-      <p class="mensaje" id="calib-mensaje"></p>
-      <p class="detalle">
-        El equipo toma una lectura cruda del sensor elegido (sin ninguna
-        calibracion previa) y calcula la constante a sumarle: el valor que
-        pongas aca menos esa lectura cruda. Se guarda en
-        <code>config.json</code> -- hace falta reiniciar el equipo para que
-        la correccion se note en las lecturas.
-      </p>
-    </form>
-
-    <section class="tarjeta">
-      <h2>Memoria SD</h2>
-      <button class="guardar peligro" type="button" id="btn-formatear-sd">Formatear SD</button>
-      <p class="mensaje" id="sd-mensaje"></p>
-      <p class="detalle">
-        Formatea la tarjeta MicroSD del controlador en FAT32. <strong>Borra todo
-        el historico guardado</strong> y no se puede deshacer. Sirve tambien para
-        tarjetas nuevas que vienen en exFAT (estado "Sin formato"). Puede tardar
-        unos segundos; mientras tanto el control de los aires sigue normal.
-      </p>
-    </section>
-
-    <section class="tarjeta">
-      <h2>Reiniciar equipo</h2>
-      <button class="guardar peligro" type="button" id="btn-reiniciar">Reiniciar ahora</button>
-      <p class="mensaje" id="reiniciar-mensaje"></p>
-      <p class="detalle">
-        Reinicia el controlador ya mismo. Usalo despues de guardar Red o
-        Climatizacion para que tomen efecto (esos dos no se aplican en
-        caliente) -- el equipo queda sin responder unos segundos mientras
-        arranca de nuevo.
-      </p>
+    <section class="tarjeta tarjeta-form zona-peligro">
+      <div>
+        <h2><i>&#9888;</i>Mantenimiento</h2>
+        <p class="sub">Acciones que no se pueden deshacer.</p>
+      </div>
+      <div class="riesgo">
+        <div>
+          <strong>Formatear SD</strong>
+          <p class="sub">Borra todo el historico (FAT32). El control de los aires sigue normal.</p>
+        </div>
+        <button class="guardar peligro" type="button" id="btn-formatear-sd">Formatear</button>
+        <p class="mensaje" id="sd-mensaje"></p>
+      </div>
+      <div class="riesgo">
+        <div>
+          <strong>Reiniciar equipo</strong>
+          <p class="sub">Necesario para aplicar Red y Climatizacion. Queda unos segundos sin responder.</p>
+        </div>
+        <button class="guardar peligro" type="button" id="btn-reiniciar">Reiniciar</button>
+        <p class="mensaje" id="reiniciar-mensaje"></p>
+      </div>
     </section>
   </main>
  </div>
@@ -164,16 +183,50 @@
     // existe (nunca se guardo nada) o no tiene seccion "red" -- primer
     // arranque del equipo, por ejemplo -- se deja el placeholder como esta,
     // no es un error.
+    // Opciones del selector "aire que descansa": AA1..AA<cantidad>.
+    function armarOpcionesAlternar(elegido) {
+      const sel = document.getElementById('clima-alternar');
+      const cantidad = Math.min(4, Math.max(1, Number(document.getElementById('clima-cantidad').value) || 4));
+      const actual = elegido || Number(sel.value) || 1;
+      sel.innerHTML = '';
+      for (let i = 1; i <= cantidad; i++) {
+        const op = document.createElement('option');
+        op.value = i;
+        op.textContent = 'AA' + i;
+        sel.appendChild(op);
+      }
+      sel.value = actual <= cantidad ? actual : 1;
+      sel.disabled = cantidad === 1; // 1+0: no hay reserva
+    }
+    document.getElementById('clima-cantidad').addEventListener('input', () => armarOpcionesAlternar());
+
     function precargarRed() {
       fetch('/descargar?nombre=config.json')
         .then((r) => (r.ok ? r.json() : null))
         .then((datos) => {
-          if (!datos || !datos.red) return;
-          if (datos.red.ip) document.getElementById('red-ip').value = datos.red.ip;
-          if (datos.red.gateway) document.getElementById('red-gateway').value = datos.red.gateway;
-          if (datos.red.mascara) document.getElementById('red-mascara').value = datos.red.mascara;
+          if (datos && datos.red) {
+            if (datos.red.ip) document.getElementById('red-ip').value = datos.red.ip;
+            if (datos.red.gateway) document.getElementById('red-gateway').value = datos.red.gateway;
+            if (datos.red.mascara) document.getElementById('red-mascara').value = datos.red.mascara;
+          }
+          const c = datos && datos.climatizacion;
+          if (c) {
+            const poner = (id, v) => { if (typeof v === 'number') document.getElementById(id).value = v; };
+            poner('clima-cantidad', c.cantidad_aires);
+            poner('clima-tmin', c.temp_min);
+            poner('clima-tmax', c.temp_max);
+            poner('clima-tat', c.temp_at);
+            poner('clima-tbypass', c.temp_bypass);
+            poner('clima-fails', c.fails_max_bypass);
+            if (typeof c.rotar_reserva === 'boolean') document.getElementById('clima-rotar').checked = c.rotar_reserva;
+            if (c.ultima_rotacion) {
+              document.getElementById('clima-ultima-rotacion').textContent =
+                'Ultima rotacion: semana del martes ' + c.ultima_rotacion + '.';
+            }
+          }
+          armarOpcionesAlternar(c && c.aire_alternar);
         })
-        .catch(() => {}); // config.json no existe todavia -- se deja el placeholder
+        .catch(() => armarOpcionesAlternar()); // config.json no existe todavia -- se dejan los placeholders
     }
     precargarRed();
 
@@ -222,6 +275,7 @@
         temp_bypass: Number(document.getElementById('clima-tbypass').value),
         fails_max_bypass: Number(document.getElementById('clima-fails').value),
         rotar_reserva: document.getElementById('clima-rotar').checked,
+        aire_alternar: Number(document.getElementById('clima-alternar').value) || 1,
       };
 
       fetch('/configurar_climatizacion', { method: 'POST', body: JSON.stringify(cuerpo) })

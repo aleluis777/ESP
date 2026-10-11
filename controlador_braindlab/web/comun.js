@@ -144,8 +144,8 @@
         aside.className = "sidebar";
         aside.id = "sidebar";
         aside.innerHTML =
-            '<div class="marca"><img class="marca-logo" src="/logo.png" alt="BraindLab">' +
-            '<img class="marca-icono" src="/logo.png" alt=""></div>' +
+            '<a class="marca" href="/" title="Inicio"><img class="marca-logo" src="/logo.png" alt="BraindLab">' +
+            '<img class="marca-icono" src="/logo.png" alt=""></a>' +
             '<nav class="nav-lateral">' + PAGINAS.map(itemMenu).join("") + "</nav>" +
             '<nav class="nav-lateral nav-pie">' +
             boton("btn-tema", "&#9728;", "Tema claro", "cambiarTema()") +

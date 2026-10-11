@@ -3,41 +3,43 @@
    navegador -- el ESP32 no interviene). Oscuro = default. */
 :root {
     color-scheme: dark;
-    --fondo: #0a0e16;
-    --panel: #0a0e16;
-    --tarjeta: #131722;
-    --tarjeta-borde: #242a38;
-    --texto: #e2e8f0;
-    --texto-tenue: #94a3b8;
-    --acento: #38bdf8;
-    --texto-sobre-acento: #0f172a;
-    --texto-sobre-warning: #0f172a;
-    --ok: #0ca30c;
-    --warning: #fab219;
-    --alerta: #d03b3b;
+    --fondo: #161936;
+    --panel: #1b1e42;
+    --tarjeta: #20244b;
+    --tarjeta-borde: #2c3160;
+    --texto: #e9ecfb;
+    --texto-tenue: #9ca3cc;
+    --acento: #74dfc3;
+    --menta: #74dfc3;
+    --sobre-menta: #1b1e42;
+    --texto-sobre-acento: #1b1e42;
+    --texto-sobre-warning: #1b1e42;
+    --ok: #6fdcb9;
+    --warning: #f2c46d;
+    --alerta: #f08a93;
 
     /* Superficies y lineas tenues (fondos de items, grillas, bordes de inputs). */
-    --superficie: rgba(148,163,184,0.06);
-    --superficie-hover: rgba(148,163,184,0.1);
-    --borde-input: #334155;
-    --borde-fuerte: #475569;
-    --grilla: rgba(148,163,184,0.12);
-    --pista-gauge: rgba(148,163,184,0.18);
-    --tooltip-fondo: rgba(10,14,22,0.92);
+    --superficie: #282d58;
+    --superficie-hover: #2f3563;
+    --borde-input: #363c70;
+    --borde-fuerte: #4a5190;
+    --grilla: rgba(233,236,251,0.08);
+    --pista-gauge: #2e3463;
+    --tooltip-fondo: rgba(27,30,66,0.95);
     --sombra-menu: 4px 0 24px rgba(0,0,0,0.45);
 
     /* Fondos suaves de los colores de estado. */
-    --acento-suave: rgba(56,189,248,0.15);
-    --ok-suave: rgba(12,163,12,0.15);
-    --warning-suave: rgba(250,178,25,0.15);
-    --alerta-suave: rgba(208,59,59,0.15);
+    --acento-suave: rgba(116,223,195,0.16);
+    --ok-suave: rgba(111,220,185,0.16);
+    --warning-suave: rgba(242,196,109,0.16);
+    --alerta-suave: rgba(240,138,147,0.16);
 
-    --color-op1: #3987e5;
-    --color-op2: #d95926;
-    --color-gestor-t: #199e70;
-    --color-gestor-h: #9085e9;
-    --color-iny1: #e66767;
-    --color-iny2: #d55181;
+    --color-op1: #74dfc3;
+    --color-op2: #95a3f0;
+    --color-gestor-t: #6ccbe6;
+    --color-gestor-h: #b9a3f2;
+    --color-iny1: #f29a9a;
+    --color-iny2: #f2c07a;
     /* Fases del medidor (historico). */
     --fase-r: #e66767;
     --fase-s: #fab219;
@@ -46,41 +48,45 @@
 
 /* Tema claro: mismos nombres, tonos mas oscuros para que se lean sobre
    blanco (los amarillos/celestes del oscuro quedan lavados en claro). */
+/* Claro = paleta pastel: fondo gris azulado, menta como acento y azul
+   marino para textos/valores. */
 :root[data-tema="claro"] {
     color-scheme: light;
-    --fondo: #f1f4f8;
-    --panel: #ffffff;
-    --tarjeta: #ffffff;
-    --tarjeta-borde: #dbe1ea;
-    --texto: #1e293b;
-    --texto-tenue: #5b6779;
-    --acento: #0284c7;
-    --texto-sobre-acento: #ffffff;
-    --texto-sobre-warning: #ffffff;
-    --ok: #15803d;
-    --warning: #b45309;
-    --alerta: #c62828;
+    --fondo: #dde8f1;
+    --panel: #f5f9fc;
+    --tarjeta: #f5f9fc;
+    --tarjeta-borde: #d3e0ea;
+    --texto: #2b2d5c;
+    --texto-tenue: #6b7398;
+    --acento: #2fb894;
+    --menta: #74dfc3;
+    --sobre-menta: #2b2d5c;
+    --texto-sobre-acento: #2b2d5c;
+    --texto-sobre-warning: #2b2d5c;
+    --ok: #1f9e7c;
+    --warning: #c98a12;
+    --alerta: #d6505b;
 
-    --superficie: rgba(15,23,42,0.04);
-    --superficie-hover: rgba(15,23,42,0.07);
-    --borde-input: #cbd5e1;
-    --borde-fuerte: #94a3b8;
-    --grilla: rgba(15,23,42,0.08);
-    --pista-gauge: rgba(15,23,42,0.1);
-    --tooltip-fondo: rgba(255,255,255,0.96);
-    --sombra-menu: 4px 0 24px rgba(15,23,42,0.15);
+    --superficie: #e6eef5;
+    --superficie-hover: #dbe7f0;
+    --borde-input: #c9d7e3;
+    --borde-fuerte: #9aaac0;
+    --grilla: rgba(43,45,92,0.08);
+    --pista-gauge: #dbe5ee;
+    --tooltip-fondo: rgba(245,249,252,0.97);
+    --sombra-menu: 4px 0 24px rgba(43,45,92,0.12);
 
-    --acento-suave: rgba(2,132,199,0.12);
-    --ok-suave: rgba(21,128,61,0.12);
-    --warning-suave: rgba(180,83,9,0.12);
-    --alerta-suave: rgba(198,40,40,0.1);
+    --acento-suave: #d3f5ec;
+    --ok-suave: #d3f5ec;
+    --warning-suave: #fbeccd;
+    --alerta-suave: #fadadd;
 
-    --color-op1: #2563eb;
-    --color-op2: #c2410c;
-    --color-gestor-t: #047857;
-    --color-gestor-h: #6d5bd0;
-    --color-iny1: #dc2626;
-    --color-iny2: #be185d;
+    --color-op1: #3fc4a2;
+    --color-op2: #7c8ce0;
+    --color-gestor-t: #4fb8d6;
+    --color-gestor-h: #a48be6;
+    --color-iny1: #ef8a8a;
+    --color-iny2: #efb062;
     --fase-r: #dc2626;
     --fase-s: #b45309;
     --fase-t: #2563eb;
@@ -466,3 +472,191 @@ input[type="datetime-local"], select {
 }
 input:focus, select:focus { outline: 2px solid var(--acento-suave); border-color: var(--acento); }
 input[type="file"] { color: var(--texto); }
+
+/* ---------------------------------------------------------------- estilo pastel
+   Solo forma (bordes redondeados, iconos en circulo, contornos menta), igual
+   en los dos temas; los colores salen de las variables de cada tema.
+   --sobre-menta = texto encima de un relleno menta. */
+
+.tarjeta {
+    border: none; border-radius: 1.25rem;
+    box-shadow: 0 1px 2px rgba(43,45,92,0.06), 0 6px 18px rgba(43,45,92,0.05);
+}
+/* Tarjetas destacadas con contorno menta (como "Welcome"/"Others devices"). */
+.tarjeta-estado,
+.fila-actuadores { box-shadow: inset 0 0 0 2px var(--menta); }
+.tarjeta > header { color: var(--texto); font-weight: 700; }
+.valor-metrica,
+.stat-valor { color: var(--texto); }
+
+/* Icono de cada metrica dentro de un circulo pastel. */
+.icono-metrica {
+    width: 2rem; height: 2rem; border-radius: 50%; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--acento-suave); font-size: 0.95rem;
+}
+.gauge-pista,
+.gauge-valor { stroke-width: 14; }
+
+.estado-escudo {
+    width: 4.2rem; height: 4.2rem; font-size: 1.7rem; border: none;
+    background: var(--acento-suave); box-shadow: 0 0 0 6px var(--panel), 0 0 0 8px currentColor;
+}
+.estado-escudo.warning { background: var(--warning-suave); }
+.estado-escudo.critical { background: var(--alerta-suave); }
+
+/* Actuadores: pastilla redondeada, encendido = relleno menta. */
+.actuador { border-radius: 999px; padding: 0.55rem 0.9rem 0.55rem 1.1rem; }
+.actuador span { color: var(--texto); font-weight: 600; }
+.actuador.activo { background: var(--menta); }
+.actuador.activo em,
+.actuador.activo span { color: var(--sobre-menta); }
+.actuador.activo .toggle { background: var(--panel); }
+.actuador.activo .toggle::after { background: var(--texto); }
+.btn-auto { border-radius: 999px; border-color: var(--menta); color: var(--texto); }
+
+/* Esquema: nodos redondeados, gestor en menta. */
+.nodo-sensores,
+.nodo-bypass,
+.nodo-at,
+.nodo-chico { border-radius: 0.9rem; border-color: transparent; }
+.nodo-gestor { border-radius: 1.1rem; background: var(--menta); border-color: var(--menta); color: var(--sobre-menta); }
+.nodo-gestor .gestor-linea { color: var(--sobre-menta); }
+.eventos li .marca-evento {
+    width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--superficie);
+    display: flex; align-items: center; justify-content: center; font-size: 0.75rem;
+}
+
+/* Menu lateral: cada icono en un cuadrado redondeado menta. */
+.nav-lateral a { padding: 0.3rem 0.4rem; }
+.nav-lateral .nav-icono {
+    width: 2.25rem; height: 2.25rem; border-radius: 0.7rem;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--acento-suave); color: var(--texto);
+}
+.nav-lateral a.activo { background: none; color: var(--texto); font-weight: 600; }
+.nav-lateral a.activo .nav-icono { background: var(--menta); color: var(--sobre-menta); box-shadow: inset 0 0 0 2px var(--texto); }
+.nav-lateral a:hover .nav-icono { background: var(--menta); color: var(--sobre-menta); }
+.nav-lateral a:hover { background: none; }
+.pill-estado.conectado { background: var(--menta); color: var(--sobre-menta); }
+
+/* ---------------------------------------------------------------- paginas de formularios
+   Configuracion, archivos, OTA, contrasenas y login: tarjetas con titulo +
+   icono, campos en grilla y pie con mensaje a la izquierda y boton a la
+   derecha (<form class="tarjeta tarjeta-form">). */
+
+.grilla-config { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; max-width: 1100px; }
+.grilla-config > * { min-width: 0; }
+.ancho { grid-column: 1 / -1; }
+@media (max-width: 860px) { .grilla-config { grid-template-columns: 1fr; } }
+
+.tarjeta-form { display: flex; flex-direction: column; gap: 0.9rem; }
+.tarjeta-form h2 { font-size: 1rem; margin: 0; display: flex; align-items: center; gap: 0.6rem; }
+/* Icono del titulo en un circulo pastel (mismo estilo que index). */
+.tarjeta-form h2 i {
+    font-style: normal; width: 2rem; height: 2rem; border-radius: 50%; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--acento-suave); color: var(--texto); font-size: 0.95rem;
+}
+.sub { margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--texto-tenue); }
+
+.campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }
+.campos.cuatro { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 700px) { .campos.cuatro { grid-template-columns: 1fr 1fr; } }
+.grupo { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--texto-tenue);
+         margin: 0.2rem 0 -0.35rem; }
+.tarjeta-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--texto-tenue); }
+.tarjeta-form label input, .tarjeta-form label select { width: 100%; }
+
+/* Unidad dentro del input (°C) sin JS: la pone el ::after del contenedor. */
+.unidad { position: relative; display: block; }
+.unidad input { padding-right: 2.2rem; }
+.unidad::after { content: attr(data-u); position: absolute; right: 0.65rem; top: 50%; transform: translateY(-50%);
+                 font-size: 0.8rem; color: var(--texto-tenue); pointer-events: none; }
+
+/* Checkbox con forma de interruptor (sigue siendo un checkbox para el JS). */
+.tarjeta-form label.interruptor { flex-direction: row; align-items: center; gap: 0.6rem; color: var(--texto); cursor: pointer; }
+.tarjeta-form label.interruptor input { appearance: none; width: 2.3rem; height: 1.3rem; border-radius: 999px; margin: 0; flex: none;
+                     background: var(--borde-input); position: relative; cursor: pointer; transition: background 0.2s; }
+.tarjeta-form label.interruptor input::after { content: ""; position: absolute; top: 3px; left: 3px; width: calc(1.3rem - 6px);
+                            height: calc(1.3rem - 6px); border-radius: 50%; background: #fff; transition: left 0.2s; }
+.tarjeta-form label.interruptor input:checked { background: var(--acento); }
+.tarjeta-form label.interruptor input:checked::after { left: calc(100% - 1.3rem + 3px); }
+
+.acciones { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
+            border-top: 1px solid var(--tarjeta-borde); padding-top: 0.8rem; margin-top: auto; }
+button.guardar {
+    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 999px;
+    padding: 0.5rem 1.2rem; font-weight: 600; cursor: pointer; margin-left: auto;
+}
+button.guardar:hover { filter: brightness(1.08); }
+button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
+button.guardar.peligro { background: transparent; color: var(--alerta); border: 1px solid var(--alerta); }
+button.guardar.peligro:hover { background: var(--alerta); color: #fff; }
+.mensaje { font-size: 0.8rem; margin: 0; }
+.mensaje:empty { display: none; }
+.mensaje.ok { color: var(--ok); }
+.mensaje.error { color: var(--alerta); }
+
+details { font-size: 0.78rem; color: var(--texto-tenue); }
+details summary { cursor: pointer; color: var(--acento); width: fit-content; }
+details p { margin: 0.4rem 0 0; line-height: 1.45; }
+
+.tarjeta.zona-peligro { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--alerta) 45%, transparent); }
+.riesgo { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; flex-wrap: wrap;
+          padding-top: 0.8rem; border-top: 1px solid var(--tarjeta-borde); }
+.riesgo div { flex: 1 1 220px; }
+.riesgo strong { font-size: 0.88rem; }
+.riesgo .mensaje { flex-basis: 100%; }
+
+
+/* Boton "Elegir archivo" del input file en forma de pastilla. */
+input[type="file"] { font-size: 0.85rem; max-width: 100%; }
+input[type="file"]::file-selector-button {
+    margin-right: 0.75rem; border: none; border-radius: 999px; padding: 0.45rem 1rem; cursor: pointer;
+    background: var(--acento-suave); color: var(--texto); font-weight: 600;
+}
+input[type="file"]::file-selector-button:hover { background: var(--menta); color: var(--sobre-menta); }
+
+/* Boton secundario redondeado (historico, archivos). */
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+    background: var(--superficie); color: var(--texto); border: none; border-radius: 999px;
+    padding: 0.45rem 1rem; cursor: pointer; font-size: 0.85rem; font-weight: 600; text-decoration: none;
+}
+.btn:hover { background: var(--menta); color: var(--sobre-menta); }
+button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.redondo { width: 2.3rem; height: 2.3rem; padding: 0; }
+
+/* Paginas root (sin menu lateral): barra con logo-enlace y navegacion en pastillas. */
+.topbar-simple { justify-content: space-between; flex-wrap: wrap; }
+.topbar-simple .marca-enlace { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+.nav-simple { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.nav-simple a {
+    color: var(--texto-tenue); text-decoration: none; font-size: 0.82rem; font-weight: 600;
+    padding: 0.4rem 0.85rem; border-radius: 999px; background: var(--superficie);
+}
+.nav-simple a:hover { background: var(--menta); color: var(--sobre-menta); }
+.nav-simple a.activo { background: var(--menta); color: var(--sobre-menta); }
+
+/* ---------------------------------------------------------------- dial de los gauges
+   Aguja con punta de flecha (la gira script.js con moverAguja), centro del
+   color del sensor y marcas de escala. "sin-dato" = sensor sin lectura. */
+
+.tarjeta-gauge[data-color="op1"] { --c: var(--color-op1); }
+.tarjeta-gauge[data-color="op2"] { --c: var(--color-op2); }
+.tarjeta-gauge[data-color="iny1"] { --c: var(--color-iny1); }
+.tarjeta-gauge[data-color="iny2"] { --c: var(--color-iny2); }
+.tarjeta-gauge[data-color="gestor-t"] { --c: var(--color-gestor-t); }
+.tarjeta-gauge[data-color="gestor-h"] { --c: var(--color-gestor-h); }
+
+.gauge-marcas { fill: none; stroke: var(--texto-tenue); stroke-width: 5; stroke-dasharray: 0.5 9.5; opacity: 0.45; }
+.gauge-marcador { display: none; } /* la aguja reemplaza al punto */
+.gauge-aguja {
+    fill: var(--texto); transform-origin: 100px 100px;
+    transition: transform 0.6s cubic-bezier(0.3, 1.4, 0.6, 1), opacity 0.3s;
+    filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.25));
+}
+.gauge-centro { fill: var(--c, var(--acento)); stroke: var(--tarjeta); stroke-width: 3; }
+.gauge.sin-dato .gauge-valor { opacity: 0; }
+.gauge.sin-dato .gauge-aguja { opacity: 0.3; }

@@ -537,6 +537,7 @@ static esp_err_t configurar_climatizacion_handler(httpd_req_t *req)
     const cJSON *tbypass_item  = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "temp_bypass") : NULL;
     const cJSON *fails_item    = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "fails_max_bypass") : NULL;
     const cJSON *rotar_item    = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "rotar_reserva") : NULL;
+    const cJSON *alternar_item = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "aire_alternar") : NULL; // opcional
 
     if (!cJSON_IsNumber(cantidad_item) || !cJSON_IsNumber(tmin_item) || !cJSON_IsNumber(tmax_item) ||
         !cJSON_IsNumber(tat_item) || !cJSON_IsNumber(tbypass_item) || !cJSON_IsNumber(fails_item) ||
@@ -552,7 +553,8 @@ static esp_err_t configurar_climatizacion_handler(httpd_req_t *req)
         s_callbacks.on_configurar_climatizacion((uint8_t)cantidad_item->valuedouble,
                                                  (float)tmin_item->valuedouble, (float)tmax_item->valuedouble,
                                                  (float)tat_item->valuedouble, (float)tbypass_item->valuedouble,
-                                                 (uint8_t)fails_item->valuedouble, cJSON_IsTrue(rotar_item));
+                                                 (uint8_t)fails_item->valuedouble, cJSON_IsTrue(rotar_item),
+                                                 cJSON_IsNumber(alternar_item) ? (uint8_t)alternar_item->valuedouble : 0);
     }
     cJSON_Delete(raiz);
 

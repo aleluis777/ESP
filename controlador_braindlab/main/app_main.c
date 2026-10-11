@@ -24,9 +24,6 @@
 //     GPIO32=EN_485) ya implementado (modbus_braindlab.c): voltajes y
 //     corrientes R/S/T, van al WS, a la SD y a la pantalla por UART. Falta
 //     SNMP.
-//   - Rotacion semanal de la reserva (climatizacion_rotar_reserva() no se
-//     llama todavia desde ningun lado) -- ya hay RTC disponible para
-//     disparar esto, falta la logica de "cambio de semana".
 
 #include <stdio.h>
 #include <string.h>
@@ -36,6 +33,7 @@
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
+#include "esp_system.h"
 #include "config_braindlab.h"
 #include "salidas_braindlab.h"
 #include "climatizacion.h"
@@ -188,6 +186,57 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
     servidor_web_enviar_ws(json);
 }
 
+// Compara la semana actual (martes 00:00 a lunes 23:59) con la de la ultima
+// rotacion guardada en config.json:
+//   - primera vez (nunca roto): solo guarda la semana, no rota;
+//   - semana nueva: el que descansa pasa al siguiente (N -> 1), se guarda
+//     en config.json y se REINICIA el equipo para arrancar limpio con la
+//     nueva reserva (no importa en que ciclo estaba);
+//   - reloj atrasado (semana anterior a la guardada, p.ej. se corrigio la
+//     hora): se guarda la semana sin rotar.
+// Con 1 aire o rotar_reserva=false nunca rota (solo lleva la semana al dia).
+static void revisar_rotacion_semanal(config_climatizacion_t *cfg, const struct tm *ahora, bool *fallo)
+{
+    char semana[11];
+    climatizacion_semana_rotacion(ahora, semana);
+    int orden = strcmp(semana, cfg->ultima_rotacion);
+    if (orden == 0) {
+        return; // misma semana
+    }
+
+    bool rotar = orden > 0 && cfg->ultima_rotacion[0] != '\0' && cfg->rotar_reserva && cfg->cantidad_aires > 1;
+    uint8_t anterior = cfg->aire_alternar;
+    if (rotar) {
+        cfg->aire_alternar = climatizacion_siguiente_alternar(cfg->aire_alternar, cfg->cantidad_aires);
+    }
+    strncpy(cfg->ultima_rotacion, semana, sizeof(cfg->ultima_rotacion) - 1);
+    cfg->ultima_rotacion[sizeof(cfg->ultima_rotacion) - 1] = '\0';
+
+    // Se guarda sobre lo que hay en config.json (no sobre 'cfg', que es la
+    // copia del arranque): si desde la web se cambiaron otros parametros sin
+    // reiniciar, no se pisan. Solo se tocan los dos campos de la rotacion.
+    config_climatizacion_t en_archivo;
+    config_braindlab_cargar_climatizacion(&en_archivo);
+    if (rotar) {
+        en_archivo.aire_alternar = cfg->aire_alternar <= en_archivo.cantidad_aires ? cfg->aire_alternar : 1;
+    }
+    memcpy(en_archivo.ultima_rotacion, cfg->ultima_rotacion, sizeof(en_archivo.ultima_rotacion));
+
+    if (config_braindlab_guardar_climatizacion(&en_archivo) != ESP_OK) {
+        ESP_LOGE(TAG, "Rotacion semanal: no se pudo guardar config.json -- no se rota ni se reinicia");
+        *fallo = true;
+        return;
+    }
+    if (!rotar) {
+        ESP_LOGI(TAG, "Rotacion semanal: semana %s registrada (sin rotar)", semana);
+        return;
+    }
+    ESP_LOGW(TAG, "Rotacion semanal (semana %s): descansaba AA%u, ahora descansa AA%u -- reiniciando",
+             semana, anterior, cfg->aire_alternar);
+    vTaskDelay(pdMS_TO_TICKS(1000)); // que el log y el archivo terminen de salir
+    esp_restart();
+}
+
 static void tarea_climatizacion(void *arg)
 {
     config_climatizacion_t cfg;
@@ -203,7 +252,8 @@ static void tarea_climatizacion(void *arg)
     s_calib_humedad_gestor = calib_inicial.humedad_gestor;
 
     clima_estado_t estado;
-    climatizacion_iniciar(&estado);
+    climatizacion_iniciar(&cfg, &estado);
+    bool rotacion_pendiente_fallo = false; // si no se pudo guardar, no reintentar cada 2 s
     clima_ciclo_t ciclo_previo = estado.ciclo;
     int ultimo_minuto_registrado = -1; // registro_sd: una fila por minuto
 
@@ -395,10 +445,13 @@ static void tarea_climatizacion(void *arg)
             ESP_LOGW(TAG, "Ethernet: cable desconectado (sin link)");
         }
 
-        // TODO: reemplazar por el disparo real de rotacion semanal (RTC,
-        // igual que semana/semana_last en neuvov2.ino) cuando el modulo de
-        // red/RTC este listo. Por ahora climatizacion_rotar_reserva() no se
-        // llama desde ningun lado.
+        // Rotacion semanal del aire que descansa (lunes -> martes 00:00).
+        // Solo con un RTC confiable: si el reloj no responde, esta congelado
+        // o tiene una fecha imposible, no se rota (mejor una semana de mas
+        // con el mismo aire que rotar por una hora basura).
+        if (rtc_ok && !rtc_braindlab_detenido() && ahora.tm_year + 1900 >= 2024 && !rotacion_pendiente_fallo) {
+            revisar_rotacion_semanal(&cfg, &ahora, &rotacion_pendiente_fallo);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(2000)); // mismo periodo que neuvov2.ino (2s)
     }
@@ -428,17 +481,25 @@ static void on_configurar_red(const char *ip, const char *gateway, const char *m
 // aplicacion en caliente todavia -- mismo criterio "solo guardar" que
 // on_configurar_red/on_configurar_equipo en controlador_labgeo).
 static void on_configurar_climatizacion(uint8_t cantidad_aires, float temp_min, float temp_max, float temp_at,
-                                         float temp_bypass, uint8_t fails_max_bypass, bool rotar_reserva)
+                                         float temp_bypass, uint8_t fails_max_bypass, bool rotar_reserva,
+                                         uint8_t aire_alternar)
 {
-    config_climatizacion_t cfg = {
-        .cantidad_aires = cantidad_aires,
-        .temp_min = temp_min,
-        .temp_max = temp_max,
-        .temp_at = temp_at,
-        .temp_bypass = temp_bypass,
-        .fails_max_bypass = fails_max_bypass,
-        .rotar_reserva = rotar_reserva,
-    };
+    // Se parte de lo guardado para no perder ultima_rotacion (la web no la
+    // manda) ni aire_alternar si no vino (0).
+    config_climatizacion_t cfg;
+    config_braindlab_cargar_climatizacion(&cfg);
+    cfg.cantidad_aires = cantidad_aires;
+    cfg.temp_min = temp_min;
+    cfg.temp_max = temp_max;
+    cfg.temp_at = temp_at;
+    cfg.temp_bypass = temp_bypass;
+    cfg.fails_max_bypass = fails_max_bypass;
+    cfg.rotar_reserva = rotar_reserva;
+    if (aire_alternar >= 1 && aire_alternar <= cantidad_aires) {
+        cfg.aire_alternar = aire_alternar;
+    } else if (cfg.aire_alternar > cantidad_aires) {
+        cfg.aire_alternar = 1;
+    }
 
     if (config_braindlab_guardar_climatizacion(&cfg) != ESP_OK) {
         ESP_LOGE(TAG, "configurar_climatizacion: no se pudo guardar config.json");

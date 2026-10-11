@@ -8,22 +8,23 @@
 <script src="/comun.js"></script>
 <style>
   body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-  form.tarjeta { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 0.8rem; }
-  .logo-login { display: block; height: 48px; margin: 0 auto 0.5rem; }
-  #form-login input { font-size: 1rem; padding: 0.55rem 0.6rem; }
-  h1 { font-size: 1.1rem; text-align: center; margin: 0 0 0.5rem; }
-  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
-  button {
-    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem;
-    padding: 0.6rem 1rem; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 0.25rem;
+  form.tarjeta { width: 100%; max-width: 360px; padding: 2rem 1.75rem; gap: 1rem; }
+  .logo-login { display: block; height: 48px; margin: 0 auto; }
+  .marca-login { display: block; width: fit-content; margin: 0 auto 0.25rem; }
+  #form-login input { font-size: 1rem; padding: 0.6rem 0.8rem; border-radius: 999px; }
+  h1 { font-size: 1.05rem; text-align: center; margin: 0 0 0.25rem; }
+  button#boton {
+    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 999px;
+    padding: 0.65rem 1rem; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 0.25rem;
   }
-  button:disabled { opacity: 0.6; cursor: not-allowed; }
-  .mensaje { font-size: 0.85rem; min-height: 1.1em; color: var(--alerta); text-align: center; }
+  button#boton:hover { filter: brightness(1.08); }
+  button#boton:disabled { opacity: 0.6; cursor: not-allowed; }
+  .mensaje { color: var(--alerta); text-align: center; }
 </style>
 </head>
 <body>
-  <form class="tarjeta" id="form-login">
-    <img class="logo-login" src="/logo.png" alt="BraindLab">
+  <form class="tarjeta tarjeta-form" id="form-login">
+    <a class="marca-login" href="/" title="Inicio"><img class="logo-login" src="/logo.png" alt="BraindLab"></a>
     <h1>Controlador de climatizacion</h1>
     <label>Usuario
       <input type="text" id="usuario" value="admin" autocomplete="username" required>

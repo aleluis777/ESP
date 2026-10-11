@@ -160,6 +160,8 @@ void config_braindlab_cargar_climatizacion(config_climatizacion_t *cfg)
     cfg->temp_bypass      = TEMP_BYPASS_DEFAULT;
     cfg->fails_max_bypass = FAILS_MAX_BYPASS_DEFAULT;
     cfg->rotar_reserva    = ROTAR_RESERVA_DEFAULT;
+    cfg->aire_alternar    = AIRE_ALTERNAR_DEFAULT;
+    cfg->ultima_rotacion[0] = '\0';
 
     bloquear();
     cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
@@ -174,6 +176,8 @@ void config_braindlab_cargar_climatizacion(config_climatizacion_t *cfg)
         cfg->fails_max_bypass = (uint8_t)leer_campo_num(clima, "fails_max_bypass", FAILS_MAX_BYPASS_DEFAULT);
         const cJSON *rotar = cJSON_GetObjectItemCaseSensitive(clima, "rotar_reserva");
         cfg->rotar_reserva = cJSON_IsBool(rotar) ? cJSON_IsTrue(rotar) : ROTAR_RESERVA_DEFAULT;
+        cfg->aire_alternar = (uint8_t)leer_campo_num(clima, "aire_alternar", AIRE_ALTERNAR_DEFAULT);
+        leer_campo_str(clima, "ultima_rotacion", cfg->ultima_rotacion, sizeof(cfg->ultima_rotacion), "");
     }
 
     if (cfg->cantidad_aires < 1 || cfg->cantidad_aires > 4) {
@@ -181,12 +185,19 @@ void config_braindlab_cargar_climatizacion(config_climatizacion_t *cfg)
                  cfg->cantidad_aires, CANTIDAD_AIRES_DEFAULT);
         cfg->cantidad_aires = CANTIDAD_AIRES_DEFAULT;
     }
+    // Si se bajo la cantidad (p.ej. de 4 a 2 con aire_alternar=3), el que
+    // descansa tiene que ser uno de los instalados.
+    if (cfg->aire_alternar < 1 || cfg->aire_alternar > cfg->cantidad_aires) {
+        ESP_LOGW(TAG, "aire_alternar=%u fuera de rango (1-%u), forzando a 1", cfg->aire_alternar, cfg->cantidad_aires);
+        cfg->aire_alternar = 1;
+    }
 
     cJSON_Delete(raiz);
     desbloquear();
-    ESP_LOGI(TAG, "Climatizacion cargada: N=%u tmin=%.2f tmax=%.2f at=%.2f bypass=%.2f fails_max=%u rotar=%d",
+    ESP_LOGI(TAG, "Climatizacion cargada: N=%u tmin=%.2f tmax=%.2f at=%.2f bypass=%.2f fails_max=%u rotar=%d "
+                  "descansa=AA%u ultima_rotacion=\"%s\"",
              cfg->cantidad_aires, cfg->temp_min, cfg->temp_max, cfg->temp_at, cfg->temp_bypass,
-             cfg->fails_max_bypass, cfg->rotar_reserva);
+             cfg->fails_max_bypass, cfg->rotar_reserva, cfg->aire_alternar, cfg->ultima_rotacion);
 }
 
 esp_err_t config_braindlab_guardar_climatizacion(const config_climatizacion_t *cfg)
@@ -203,6 +214,8 @@ esp_err_t config_braindlab_guardar_climatizacion(const config_climatizacion_t *c
     cJSON_AddNumberToObject(clima, "temp_bypass", cfg->temp_bypass);
     cJSON_AddNumberToObject(clima, "fails_max_bypass", cfg->fails_max_bypass);
     cJSON_AddBoolToObject(clima, "rotar_reserva", cfg->rotar_reserva);
+    cJSON_AddNumberToObject(clima, "aire_alternar", cfg->aire_alternar);
+    cJSON_AddStringToObject(clima, "ultima_rotacion", cfg->ultima_rotacion);
     cJSON_AddItemToObject(raiz, "climatizacion", clima);
 
     esp_err_t err = guardar_json_archivo(raiz);

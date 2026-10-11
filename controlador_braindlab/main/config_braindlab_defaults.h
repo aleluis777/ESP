@@ -37,6 +37,9 @@
 // generalizada a N unidades en vez de solo 2.
 #define ROTAR_RESERVA_DEFAULT (true)
 
+// Aire que descansa (el de reserva) al arrancar por primera vez: 1..N.
+#define AIRE_ALTERNAR_DEFAULT (1)
+
 // ---------------------------------------------------------------------------
 // Red (mismo campo que config_labgeo_defaults.h -- placeholder hasta que se
 // aplique de verdad al W5500)

@@ -26,6 +26,22 @@ const elUptime = document.getElementById("uptime");
 let ultimoMensajeEn = null;
 let gestorTuvoLecturaBuena = false;
 
+// Aguja del dial: dibujada apuntando a la izquierda (0%), se gira 0..180
+// grados alrededor del centro (100,100). La animacion la hace el CSS.
+function moverAguja(prefijo, pct) {
+    const aguja = document.getElementById(prefijo + "-aguja");
+    if (aguja) aguja.style.transform = `rotate(${(pct / 100) * 180}deg)`;
+    const svg = document.getElementById(prefijo + "-arco").ownerSVGElement;
+    svg.classList.remove("sin-dato");
+}
+
+// Sensor sin lectura: arco vacio y aguja en reposo, atenuada.
+function gaugeSinDato(prefijo) {
+    document.getElementById(prefijo + "-arco").setAttribute("stroke-dasharray", "0 100");
+    moverAguja(prefijo, 0);
+    document.getElementById(prefijo + "-arco").ownerSVGElement.classList.add("sin-dato");
+}
+
 // Gauge simple sin chispa (T. Gestor / H. Gestor) -- mismo dibujo de arco
 // que actualizarGauge() pero con rango/unidad propios (humedad es 0-100%,
 // no comparte escala con las temperaturas).
@@ -41,6 +57,7 @@ function actualizarGaugeSimple(prefijo, valor, min, max, unidad) {
     const marcador = document.getElementById(prefijo + "-marcador");
     marcador.setAttribute("cx", mx.toFixed(1));
     marcador.setAttribute("cy", my.toFixed(1));
+    moverAguja(prefijo, pct);
 
     document.getElementById(prefijo + "-valor").textContent = valor.toFixed(1) + unidad;
 }
@@ -69,6 +86,7 @@ function actualizarGauge(prefijo, valor) {
     const marcador = document.getElementById(prefijo + "-marcador");
     marcador.setAttribute("cx", mx.toFixed(1));
     marcador.setAttribute("cy", my.toFixed(1));
+    moverAguja(prefijo, pct);
 
     document.getElementById(prefijo + "-valor").textContent = valor.toFixed(1) + " °C";
 }
@@ -348,6 +366,7 @@ function pintar(datos) {
             empujarHistorial(clave, t[i]);
         } else {
             document.getElementById(clave + "-valor").textContent = "Sin sensor";
+            gaugeSinDato(clave);
         }
     });
     if (typeof t[2] !== "number") document.getElementById("iny1-mini-valor").textContent = "-- °C";

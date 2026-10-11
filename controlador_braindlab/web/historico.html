@@ -10,36 +10,30 @@
   .oculto { display: none !important; }
   .mensaje { font-size: 0.85rem; min-height: 1.1em; color: var(--texto-tenue); }
   .mensaje.error { color: var(--alerta); }
-  .btn {
-    background: var(--superficie-hover); color: var(--texto); border: 1px solid var(--borde-input);
-    border-radius: 0.5rem; padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.9rem;
-  }
-  .btn:hover { border-color: var(--acento); }
-  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* ---------- calendario ---------- */
-  .cal { max-width: 480px; }
+  .cal { max-width: 480px; width: 100%; margin: 0 auto; }
   .cal-cabecera { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
-  .cal-cabecera h2 { margin: 0; text-transform: capitalize; }
+  .cal-cabecera h2 { margin: 0; text-transform: capitalize; font-size: 1.05rem; }
   .cal-grilla { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.3rem; }
   .cal-dsem { text-align: center; font-size: 0.72rem; color: var(--texto-tenue); padding-bottom: 0.2rem; }
   .cal-dia {
-    aspect-ratio: 1; border-radius: 0.5rem; display: flex; flex-direction: column; align-items: center;
+    aspect-ratio: 1; border-radius: 50%; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 0.2rem; font-size: 0.9rem; color: var(--texto-tenue);
     background: var(--superficie); border: 1px solid transparent; position: relative;
   }
   .cal-dia.con-datos { color: var(--texto); cursor: pointer; background: var(--superficie-hover); }
-  .cal-dia.con-datos:hover { border-color: var(--acento); }
-  .cal-dia.hoy { border-color: var(--borde-fuerte); }
+  .cal-dia.con-datos:hover { background: var(--menta); color: var(--sobre-menta); }
+  .cal-dia.hoy { border: 2px solid var(--menta); font-weight: 700; }
   .cal-punto { width: 0.45rem; height: 0.45rem; border-radius: 50%; }
   .cal-punto.completo { background: var(--ok); }
   .cal-punto.parcial { background: var(--warning); }
-  .cal-leyenda { display: flex; gap: 1rem; font-size: 0.75rem; color: var(--texto-tenue); margin-top: 0.75rem; }
+  .cal-leyenda { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1rem; font-size: 0.75rem; color: var(--texto-tenue); margin-top: 0.75rem; }
   .cal-leyenda span { display: inline-flex; align-items: center; gap: 0.35rem; }
 
   /* ---------- graficos ---------- */
   .dia-cabecera { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-  .dia-cabecera h2 { margin: 0; flex: 1; min-width: 12rem; }
+  .dia-cabecera h2 { margin: 0; flex: 1; min-width: 12rem; font-size: 1.05rem; }
   .graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1rem; }
   @media (max-width: 560px) { .graficos { grid-template-columns: 1fr; } }
   .grafico h3 { margin: 0 0 0.4rem; font-size: 0.9rem; font-weight: 600; }
@@ -64,9 +58,9 @@
          trae los dias con datos (el ESP32 lista la carpeta del mes). -->
     <section class="tarjeta cal" id="vista-calendario">
       <div class="cal-cabecera">
-        <button class="btn" id="mes-anterior" title="Mes anterior">&#9664;</button>
+        <button class="btn redondo" id="mes-anterior" title="Mes anterior">&#9664;</button>
         <h2 id="mes-titulo">--</h2>
-        <button class="btn" id="mes-siguiente" title="Mes siguiente">&#9654;</button>
+        <button class="btn redondo" id="mes-siguiente" title="Mes siguiente">&#9654;</button>
       </div>
       <div class="cal-grilla" id="cal-grilla"></div>
       <div class="cal-leyenda">
@@ -86,7 +80,7 @@
           <h2 id="dia-titulo">--</h2>
           <button class="btn" id="dia-anterior" title="Dia anterior con datos">&#9664; Dia</button>
           <button class="btn" id="dia-siguiente" title="Dia siguiente con datos">Dia &#9654;</button>
-          <a class="btn" id="btn-descargar" href="#" style="text-decoration:none">Descargar CSV</a>
+          <a class="btn" id="btn-descargar" href="#">Descargar CSV</a>
         </div>
         <p class="resumen-dia" id="dia-resumen"></p>
         <p class="mensaje" id="dia-mensaje"></p>

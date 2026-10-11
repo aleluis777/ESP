@@ -32,6 +32,14 @@ typedef struct {
     float   temp_bypass;       // activa el bypass
     uint8_t fails_max_bypass;  // escalones a "alta temperatura" antes de deshabilitar el bypass automatico
     bool    rotar_reserva;     // si la unidad "de reserva" rota semanalmente entre las N configuradas
+    // Rotacion semanal (ver tarea_climatizacion en app_main.c): el aire que
+    // descansa esta semana, 1..N ("aire_alternar" en config.json, editable a
+    // mano -- se aplica al reiniciar). Cada lunes->martes 00:00 (RTC) pasa
+    // al siguiente (N -> 1), se guarda y el equipo se reinicia.
+    uint8_t aire_alternar;
+    // "AAAA-MM-DD" del martes de la ultima rotacion ("" = nunca roto) --
+    // evita rotar dos veces la misma semana (reinicio, corte de luz).
+    char    ultima_rotacion[11];
 } config_climatizacion_t;
 
 typedef struct {

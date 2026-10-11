@@ -6,38 +6,46 @@
 <title>Braindlab - Actualizar firmware</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  .aviso { background: var(--acento-suave); color: var(--acento); border: 1px solid var(--acento); border-radius: 0.75rem; padding: 0.9rem 1.1rem; margin-bottom: 1.25rem; }
-  .subida { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
-  .subida button { background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; }
-  .subida button:disabled { opacity: 0.6; cursor: not-allowed; }
+  main { max-width: 640px; }
+  .pasos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.82rem; color: var(--texto-tenue); counter-reset: paso; }
+  .pasos li { display: flex; gap: 0.6rem; align-items: flex-start; line-height: 1.45; }
+  .pasos li::before { counter-increment: paso; content: counter(paso); flex: none; width: 1.4rem; height: 1.4rem; border-radius: 50%;
+                      display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700;
+                      background: var(--acento-suave); color: var(--texto); }
+  #ota-mensaje { font-size: 0.8rem; margin: 0; }
   .error { color: var(--alerta); }
   .ok { color: var(--ok); }
-  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
-  nav a:hover { color: var(--acento); }
 </style>
 <script src="/comun.js"></script>
 </head>
 <body>
   <header class="topbar-simple">
-    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
-    <span>Actualizar firmware (OTA)</span>
+    <a class="marca-enlace" href="/" title="Inicio">
+      <img class="topbar-logo" src="/logo.png" alt="BraindLab">
+      <span>Actualizar firmware</span>
+    </a>
+    <nav class="nav-simple">
+      <a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/files.html">Archivos</a><a class="activo" href="/ota.html">Firmware</a><a href="/root.html">Contrasenas</a><a href="#" onclick="return salir()">Salir</a>
+    </nav>
   </header>
 
   <main>
-    <nav><a href="/">Panel</a><a href="/configurar.html">Configuracion</a><a href="/files.html">Archivos</a><a href="/root.html">Contrasenas</a><a href="#" onclick="return salir()">Salir</a></nav>
-
-    <p class="aviso">
-      Elegi el archivo <strong>.bin</strong> que genera <code>idf.py build</code>
-      (queda en <code>build/controlador_braindlab.bin</code>). El equipo lo valida
-      y, si esta bien, <strong>se reinicia solo</strong> con el firmware nuevo.
-      Si el firmware nuevo no arranca bien, el equipo vuelve solo al anterior.
-    </p>
-
-    <div class="subida">
+    <section class="tarjeta tarjeta-form">
+      <div>
+        <h2><i>&#10227;</i>Actualizar firmware (OTA)</h2>
+        <p class="sub">Carga un firmware nuevo sin cable.</p>
+      </div>
+      <ol class="pasos">
+        <li><span>Elegi el archivo <strong>.bin</strong> que genera <code>idf.py build</code> (<code>build/controlador_braindlab.bin</code>).</span></li>
+        <li><span>El equipo lo valida y, si esta bien, <strong>se reinicia solo</strong> con el firmware nuevo.</span></li>
+        <li><span>Si el firmware nuevo no arranca bien, el equipo vuelve solo al anterior.</span></li>
+      </ol>
       <input type="file" id="input-firmware" accept=".bin">
-      <button id="btn-subir-firmware">Actualizar firmware</button>
-    </div>
-    <p id="ota-mensaje"></p>
+      <div class="acciones">
+        <p id="ota-mensaje"></p>
+        <button class="guardar" id="btn-subir-firmware">Actualizar firmware</button>
+      </div>
+    </section>
   </main>
 
   <script>

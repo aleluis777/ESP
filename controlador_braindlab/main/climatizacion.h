@@ -28,12 +28,16 @@
 //   - "fails" se cuenta por indice de la unidad de reserva de esa semana
 //     cada vez que se escala a ALTA_TEMP -- generaliza failsArray[lead-1]
 //     del firmware viejo a N unidades.
-//   - La unidad de reserva puede rotar semanalmente (climatizacion_rotar_reserva)
-//     para repartir desgaste, generalizando la rotacion de "lead" del
-//     firmware viejo (que solo rotaba entre 2 posiciones).
+//   - La unidad de reserva rota semanalmente para repartir desgaste: la
+//     elige aire_alternar de config.json, y tarea_climatizacion (app_main.c)
+//     la avanza cada lunes->martes y reinicia el equipo. Aca solo se usa
+//     indice_reserva, que el que llama carga al arrancar.
+//   - Con 1 solo aire (1+0) no hay reserva: se enciende en la etapa normal
+//     y en alta temperatura no hay nada mas que encender (solo la alarma).
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 #include "config_braindlab.h"
 
 #ifdef __cplusplus
@@ -57,10 +61,10 @@ typedef struct {
     bool          bypass_auto_habilitado; // false = se supero fails_max_bypass, no se vuelve a pedir bypass solo
 } clima_estado_t;
 
-// Deja 'estado' en CLIMA_REPOSO, todo apagado, indice_reserva=0, fails en 0
-// y bypass_auto_habilitado=true. Llamar una vez al arrancar (o al limpiar
-// fallas manualmente, equivalente al boton=2 de /api/restart en neuvov2.ino).
-void climatizacion_iniciar(clima_estado_t *estado);
+// Deja 'estado' en CLIMA_REPOSO, todo apagado, fails en 0,
+// bypass_auto_habilitado=true e indice_reserva = cfg->aire_alternar - 1 (el
+// que descansa esta semana). Llamar una vez al arrancar.
+void climatizacion_iniciar(const config_climatizacion_t *cfg, clima_estado_t *estado);
 
 // Recalcula 'estado' en base a las 4 lecturas de temperatura (indices 0..3 =
 // T1..T4) y la config vigente. Para llamar cada vez que hay lecturas nuevas
@@ -69,13 +73,14 @@ void climatizacion_iniciar(clima_estado_t *estado);
 void climatizacion_actualizar(const float temperaturas[4], const config_climatizacion_t *cfg,
                                clima_estado_t *estado);
 
-// Avanza indice_reserva a la siguiente unidad (0..cantidad_aires-1, con
-// wraparound) si cfg->rotar_reserva esta activo. Para llamar desde el punto
-// donde se decida el limite de "semana" (por ejemplo comparando dia de
-// semana del RTC, igual que el semana/semana_last de neuvov2.ino) -- este
-// modulo no sabe nada de RTC ni de tiempo real a proposito, para que se
-// pueda probar sin hardware.
-void climatizacion_rotar_reserva(const config_climatizacion_t *cfg, clima_estado_t *estado);
+// Semana de rotacion a la que pertenece 'ahora': la fecha "AAAA-MM-DD" del
+// ultimo martes 00:00 (la rotacion es de lunes a martes). Dos instantes de
+// la misma semana dan el mismo texto; al pasar de lunes a martes cambia.
+// Las fechas en ese formato se pueden comparar con strcmp().
+void climatizacion_semana_rotacion(const struct tm *ahora, char salida[11]);
+
+// Aire que descansa la semana siguiente: 1..N, despues de N vuelve a 1.
+uint8_t climatizacion_siguiente_alternar(uint8_t aire_actual, uint8_t cantidad_aires);
 
 #ifdef __cplusplus
 }

@@ -32,13 +32,15 @@ typedef void (*servidor_web_cb_configurar_red_t)(const char *ip, const char *gat
 
 // Llego POST /configurar_climatizacion con
 // {"cantidad_aires":N,"temp_min":N,"temp_max":N,"temp_at":N,"temp_bypass":N,
-//  "fails_max_bypass":N,"rotar_reserva":bool} -- equivalente de
+//  "fails_max_bypass":N,"rotar_reserva":bool,"aire_alternar":N} -- aire_alternar
+// (1-N, el que descansa) es opcional: 0 si no vino. Equivalente de
 // on_configurar_equipo en controlador_labgeo, pero para los parametros de
 // climatizacion (ver config_climatizacion_t en config_braindlab.h) en vez
 // de los del equipo de ensayo de labgeo.
 typedef void (*servidor_web_cb_configurar_climatizacion_t)(uint8_t cantidad_aires, float temp_min, float temp_max,
                                                             float temp_at, float temp_bypass,
-                                                            uint8_t fails_max_bypass, bool rotar_reserva);
+                                                            uint8_t fails_max_bypass, bool rotar_reserva,
+                                                            uint8_t aire_alternar);
 
 // Llego POST /control_aire con {"indice":0-3,"encendido":bool} -- pide
 // forzar a mano la salida AA(indice+1). app_main.c decide como convive esto

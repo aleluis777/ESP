@@ -6,38 +6,32 @@
 <title>Braindlab - Contrasenas</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  nav a { color: var(--texto-tenue); text-decoration: none; margin-right: 1rem; font-size: 0.9rem; }
-  nav a:hover { color: var(--acento); }
-  main { max-width: 600px; gap: 1rem; }
-  form.tarjeta { display: flex; flex-direction: column; gap: 0.6rem; }
-  h2 { margin: 0 0 0.2rem; }
-  label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--texto-tenue); }
-  button.guardar {
-    background: var(--acento); color: var(--texto-sobre-acento); border: none; border-radius: 0.5rem;
-    padding: 0.5rem 1rem; font-weight: 600; cursor: pointer; align-self: flex-start; margin-top: 0.25rem;
-  }
-  button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
-  .mensaje { font-size: 0.85rem; min-height: 1.1em; margin: 0; }
-  .mensaje.ok { color: var(--ok); }
-  .mensaje.error { color: var(--alerta); }
-  .detalle { font-size: 0.8rem; color: var(--texto-tenue); margin: 0; }
-  .estado { font-size: 0.8rem; font-weight: 600; }
-  .estado.fabrica { color: var(--warning); }
-  .estado.propia { color: var(--ok); }
+  .estado { display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content; margin: 0;
+            font-size: 0.75rem; font-weight: 600; padding: 0.25rem 0.75rem; border-radius: 999px;
+            background: var(--superficie); color: var(--texto-tenue); }
+  .estado.fabrica { background: var(--warning-suave); color: var(--warning); }
+  .estado.propia { background: var(--ok-suave); color: var(--ok); }
 </style>
 <script src="/comun.js"></script>
 </head>
 <body>
   <header class="topbar-simple">
-    <img class="topbar-logo" src="/logo.png" alt="BraindLab">
-    <span>Contrasenas (root)</span>
+    <a class="marca-enlace" href="/" title="Inicio">
+      <img class="topbar-logo" src="/logo.png" alt="BraindLab">
+      <span>Contrasenas (root)</span>
+    </a>
+    <nav class="nav-simple">
+      <a href="/">Panel</a><a href="/files.html">Archivos</a><a href="/ota.html">Firmware</a><a class="activo" href="/root.html">Contrasenas</a><a href="#" onclick="return salir()">Salir</a>
+    </nav>
   </header>
 
-  <main>
-    <nav><a href="/">Panel</a><a href="/files.html">Archivos</a><a href="/ota.html">Firmware (OTA)</a><a href="#" onclick="return salir()">Salir</a></nav>
+  <main class="grilla-config">
 
-    <form class="tarjeta" id="form-admin">
-      <h2>Contrasena del cliente (admin)</h2>
+    <form class="tarjeta tarjeta-form" id="form-admin">
+      <div>
+        <h2><i>&#9787;</i>Contrasena del cliente (admin)</h2>
+        <p class="sub">Acceso al panel, historico y configuracion.</p>
+      </div>
       <p class="estado" id="estado-admin">--</p>
       <label>Contrasena nueva (6 a 64 caracteres)
         <input type="password" id="admin-nueva" autocomplete="new-password" minlength="6" maxlength="64" required>
@@ -45,17 +39,24 @@
       <label>Repetir contrasena nueva
         <input type="password" id="admin-repetir" autocomplete="new-password" minlength="6" maxlength="64" required>
       </label>
-      <button class="guardar" type="submit">Cambiar contrasena del cliente</button>
-      <p class="mensaje" id="admin-mensaje"></p>
-      <p class="detalle">
-        El cliente entra con el usuario <strong>admin</strong> (panel, historico y
-        configuracion). Sirve tambien para resetearla si la olvido. Al cambiarla
-        se cierran las sesiones de admin abiertas.
-      </p>
+      <details>
+        <summary>Como funciona</summary>
+        <p>
+          El cliente entra con el usuario <strong>admin</strong>. Sirve tambien para
+          resetearla si la olvido. Al cambiarla se cierran las sesiones de admin abiertas.
+        </p>
+      </details>
+      <div class="acciones">
+        <p class="mensaje" id="admin-mensaje"></p>
+        <button class="guardar" type="submit">Cambiar contrasena</button>
+      </div>
     </form>
 
-    <form class="tarjeta" id="form-root">
-      <h2>Contrasena maestra (root)</h2>
+    <form class="tarjeta tarjeta-form zona-peligro" id="form-root">
+      <div>
+        <h2><i>&#128273;</i>Contrasena maestra (root)</h2>
+        <p class="sub">Solo para este equipo (queda en su memoria NVS).</p>
+      </div>
       <p class="estado" id="estado-root">--</p>
       <label>Contrasena maestra actual
         <input type="password" id="root-actual" autocomplete="current-password" required>
@@ -66,13 +67,17 @@
       <label>Repetir contrasena maestra nueva
         <input type="password" id="root-repetir" autocomplete="new-password" minlength="12" maxlength="64" required>
       </label>
-      <button class="guardar" type="submit">Cambiar contrasena maestra</button>
-      <p class="mensaje" id="root-mensaje"></p>
-      <p class="detalle">
-        Cambia la maestra <strong>solo en este equipo</strong> (queda en su memoria
-        NVS). La de fabrica esta en el firmware; si se borra la NVS del equipo,
-        vuelve a la de fabrica.
-      </p>
+      <details>
+        <summary>Como funciona</summary>
+        <p>
+          La de fabrica esta en el firmware; si se borra la NVS del equipo, vuelve
+          a la de fabrica.
+        </p>
+      </details>
+      <div class="acciones">
+        <p class="mensaje" id="root-mensaje"></p>
+        <button class="guardar" type="submit">Cambiar maestra</button>
+      </div>
     </form>
   </main>
 
