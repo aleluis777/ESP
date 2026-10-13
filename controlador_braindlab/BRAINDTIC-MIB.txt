@@ -1,9 +1,8 @@
 BRAINDTIC-MIB DEFINITIONS ::= BEGIN
 
 -- MIB de los equipos BraindTIC. Hoy contiene controlador_braindlab
--- (main/snmp_braindlab.c). Cargar este archivo en el gestor SNMP
--- (iReasoning MIB Browser, Zabbix, PRTG, snmptrapd + snmptt, etc.) para
--- ver nombres en vez de OIDs.
+-- (main/snmp_braindlab.c). Cargar este archivo en el gestor SNMP para ver
+-- nombres en vez de OIDs.
 --
 --   braindtic                     raiz de la empresa
 --   braindtic.1                   productos
@@ -11,199 +10,401 @@ BRAINDTIC-MIB DEFINITIONS ::= BEGIN
 --   braindtic.1.2 ...             reservados para otros equipos
 --   braindtic.2                   reservado: objetos comunes a todos los equipos
 --
+-- controlador_braindlab (braindlabControlador):
+--   .0  notificaciones (traps SNMPv2c)
+--   .1  bdlControlTabla   aires acondicionados AA1..AA4 (una fila por aire)
+--   .2  bdlSensorTabla    sensores 1..6, temperatura y humedad
+--   .3  bdlEnergiaTabla   medidor de energia, fases R, S, T
+--   .4  bdlSistema        estado, mando, configuracion y destinos de trap
+--   .5  bdlAlarmas        alarmas vigentes (0/1), para polling
+--
 -- DEMO: braindtic cuelga hoy del "netSnmpPlaypen" de Net-SNMP
 -- (1.3.6.1.4.1.8072.9999.9999), rama reservada para pruebas. Cuando IANA
 -- asigne el Private Enterprise Number (PEN) de BraindTIC, cambiar SOLO el
 -- ::= de braindtic por { enterprises <PEN> } (y OID_BRAINDTIC en
 -- snmp_braindlab.c). El resto del arbol no cambia.
 --
--- Temperaturas y humedad en DECIMAS: 253 = 25.3 grados C / 25.3 %.
+-- Los objetos read-write responden noAccess mientras no se habilite
+-- "Permitir control por SNMP" en la web del equipo (apagado de fabrica).
+--
+-- SNMP no tiene decimales: temperatura y humedad van en DECIMAS
+-- (253 = 25.3 grados C / 25.3 %), voltaje en decimas de V (2205 = 220.5 V)
+-- y corriente en centesimas de A (1234 = 12.34 A).
 
 IMPORTS
     MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE,
     Integer32, IpAddress, enterprises
-        FROM SNMPv2-SMI;
+        FROM SNMPv2-SMI
+    DisplayString
+        FROM SNMPv2-TC;
 
 braindtic MODULE-IDENTITY
-    LAST-UPDATED "202609230000Z"
+    LAST-UPDATED "202610120000Z"
     ORGANIZATION "BraindTIC"
     CONTACT-INFO "BraindTIC"
     DESCRIPTION
         "Raiz de los equipos BraindTIC."
+    REVISION     "202610120000Z"
+    DESCRIPTION
+        "Arbol reorganizado en bloques: control (AA1..AA4), sensores
+         (1..6, temperatura y humedad) y energia (fases R, S, T) como
+         tablas; estado, mando, configuracion y destinos de trap bajo
+         sistema. Agrega el medidor de energia y el trap de prueba."
     REVISION     "202609230000Z"
     DESCRIPTION  "Version inicial (rama demo, sin PEN todavia)."
     ::= { enterprises 8072 9999 9999 }
 
 bdtProductos OBJECT IDENTIFIER ::= { braindtic 1 }
 
--- Controlador de climatizacion braindlab: 4 unidades de A/A, alarma de
--- alta temperatura y bypass.
+-- ---------------------------------------------------------------------
+-- controlador_braindlab
+-- ---------------------------------------------------------------------
+
 braindlabControlador OBJECT IDENTIFIER ::= { bdtProductos 1 }
 
 bdlNotificaciones OBJECT IDENTIFIER ::= { braindlabControlador 0 }
-bdlEntradas       OBJECT IDENTIFIER ::= { braindlabControlador 1 }
-bdlSalidas        OBJECT IDENTIFIER ::= { braindlabControlador 2 }
-bdlCalibracion    OBJECT IDENTIFIER ::= { braindlabControlador 3 }
-bdlConfiguracion  OBJECT IDENTIFIER ::= { braindlabControlador 4 }
-bdlTraps          OBJECT IDENTIFIER ::= { braindlabControlador 5 }
-bdlAlarmas        OBJECT IDENTIFIER ::= { braindlabControlador 6 }
+bdlSistema        OBJECT IDENTIFIER ::= { braindlabControlador 4 }
+bdlAlarmas        OBJECT IDENTIFIER ::= { braindlabControlador 5 }
 
--- ---------------------------------------------------------------------
--- .1 entradas (solo lectura)
--- ---------------------------------------------------------------------
+bdlEstado         OBJECT IDENTIFIER ::= { bdlSistema 1 }
+bdlMando          OBJECT IDENTIFIER ::= { bdlSistema 2 }
+bdlConfiguracion  OBJECT IDENTIFIER ::= { bdlSistema 3 }
+bdlTraps          OBJECT IDENTIFIER ::= { bdlSistema 4 }
+
+-- =====================================================================
+-- .1 control -- aires acondicionados AA1..AA4
+-- =====================================================================
+
+bdlControlTabla OBJECT-TYPE
+    SYNTAX      SEQUENCE OF BdlControlEntrada
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "Una fila por aire acondicionado (AA1..AA4). Las 4 filas existen
+         siempre; bdlControlInstalado dice cuales maneja el equipo."
+    ::= { braindlabControlador 1 }
+
+bdlControlEntrada OBJECT-TYPE
+    SYNTAX      BdlControlEntrada
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Un aire acondicionado."
+    INDEX       { bdlControlIndice }
+    ::= { bdlControlTabla 1 }
+
+BdlControlEntrada ::= SEQUENCE {
+    bdlControlIndice     Integer32,
+    bdlControlNombre     DisplayString,
+    bdlControlInstalado  INTEGER,
+    bdlControlEstado     INTEGER,
+    bdlControlModo       INTEGER,
+    bdlControlReserva    INTEGER,
+    bdlControlFallas     Integer32
+}
+
+bdlControlIndice OBJECT-TYPE
+    SYNTAX      Integer32 (1..4)
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Numero de aire: 1 = AA1 ... 4 = AA4."
+    ::= { bdlControlEntrada 1 }
+
+bdlControlNombre OBJECT-TYPE
+    SYNTAX      DisplayString (SIZE (0..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Nombre del aire en este sitio (Configuracion > Sitio). Por
+         defecto AA1..AA4."
+    ::= { bdlControlEntrada 2 }
+
+bdlControlInstalado OBJECT-TYPE
+    SYNTAX      INTEGER { no(0), si(1) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "si = el aire esta dentro de la cantidad configurada."
+    ::= { bdlControlEntrada 3 }
+
+bdlControlEstado OBJECT-TYPE
+    SYNTAX      INTEGER { apagado(0), encendido(1) }
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+        "GET: rele REALMENTE aplicado (automatico + manual). SET: fuerza
+         el aire a mano (= POST /control_aire); dura hasta que la
+         climatizacion cambie de etapa o hasta escribir
+         bdlModoManual = automatico. En un aire no instalado devuelve
+         inconsistentValue."
+    ::= { bdlControlEntrada 4 }
+
+bdlControlModo OBJECT-TYPE
+    SYNTAX      INTEGER { automatico(0), manual(1) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "manual = este aire tiene un override vigente."
+    ::= { bdlControlEntrada 5 }
+
+bdlControlReserva OBJECT-TYPE
+    SYNTAX      INTEGER { no(0), si(1) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "si = es el aire que descansa esta semana (solo entra en alta
+         temperatura). Rota cada lunes a martes."
+    ::= { bdlControlEntrada 6 }
+
+bdlControlFallas OBJECT-TYPE
+    SYNTAX      Integer32 (0..255)
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Veces que se llego a alta temperatura mientras este aire era la
+         reserva (desde el ultimo arranque)."
+    ::= { bdlControlEntrada 7 }
+
+-- =====================================================================
+-- .2 sensores -- 1..6, cada uno con temperatura y humedad
+-- =====================================================================
+
+bdlSensorTabla OBJECT-TYPE
+    SYNTAX      SEQUENCE OF BdlSensorEntrada
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "Una fila por sensor (1..6). Hoy: 1..4 = NTC de temperatura
+         (Operacion 1, Operacion 2, Inyeccion 1, Inyeccion 2),
+         5 = gabinete (temperatura + humedad), 6 = libre. Lo que un
+         sensor no mide (ver bdlSensorTipo) vale 0."
+    ::= { braindlabControlador 2 }
+
+bdlSensorEntrada OBJECT-TYPE
+    SYNTAX      BdlSensorEntrada
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Un sensor."
+    INDEX       { bdlSensorIndice }
+    ::= { bdlSensorTabla 1 }
+
+BdlSensorEntrada ::= SEQUENCE {
+    bdlSensorIndice              Integer32,
+    bdlSensorNombre              DisplayString,
+    bdlSensorTipo                INTEGER,
+    bdlSensorEstado              INTEGER,
+    bdlSensorTemperatura         Integer32,
+    bdlSensorHumedad             Integer32,
+    bdlSensorCalibTemperatura    Integer32,
+    bdlSensorCalibHumedad        Integer32,
+    bdlSensorReferenciaTemp      Integer32,
+    bdlSensorReferenciaHumedad   Integer32
+}
+
+bdlSensorIndice OBJECT-TYPE
+    SYNTAX      Integer32 (1..6)
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Numero de sensor."
+    ::= { bdlSensorEntrada 1 }
+
+bdlSensorNombre OBJECT-TYPE
+    SYNTAX      DisplayString (SIZE (0..32))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Nombre del sensor en este sitio (Configuracion > Sitio), el mismo
+         que muestra el panel web."
+    ::= { bdlSensorEntrada 2 }
+
+bdlSensorTipo OBJECT-TYPE
+    SYNTAX      INTEGER { noInstalado(0), temperatura(1), temperaturaHumedad(2) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Que mide el sensor."
+    ::= { bdlSensorEntrada 3 }
+
+bdlSensorEstado OBJECT-TYPE
+    SYNTAX      INTEGER { noInstalado(0), ok(1), falla(2) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "falla = no se pudo leer en la ultima vuelta (desconectado, en
+         corto o sin respuesta). Mientras falla, los valores son el
+         ultimo bueno y el sensor no cuenta para el control."
+    ::= { bdlSensorEntrada 4 }
+
+bdlSensorTemperatura OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "decimas de grado C"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Temperatura calibrada (253 = 25.3 grados C)."
+    ::= { bdlSensorEntrada 5 }
+
+bdlSensorHumedad OBJECT-TYPE
+    SYNTAX      Integer32 (0..1000)
+    UNITS       "decimas de %"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Humedad relativa calibrada (655 = 65.5 %). 0 si no mide humedad."
+    ::= { bdlSensorEntrada 6 }
+
+bdlSensorCalibTemperatura OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "decimas de grado C"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Constante de calibracion vigente de la temperatura."
+    ::= { bdlSensorEntrada 7 }
+
+bdlSensorCalibHumedad OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "decimas de %"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Constante de calibracion vigente de la humedad."
+    ::= { bdlSensorEntrada 8 }
+
+bdlSensorReferenciaTemp OBJECT-TYPE
+    SYNTAX      Integer32 (-400..1250)
+    UNITS       "decimas de grado C"
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+        "GET: lectura calibrada actual. SET: valor REAL medido con un
+         instrumento de referencia; se recalcula y guarda la constante
+         (= POST /calibrar_sensor). inconsistentValue si el sensor no
+         mide temperatura."
+    ::= { bdlSensorEntrada 9 }
+
+bdlSensorReferenciaHumedad OBJECT-TYPE
+    SYNTAX      Integer32 (0..1000)
+    UNITS       "decimas de %"
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+        "Igual que bdlSensorReferenciaTemp, para la humedad.
+         inconsistentValue si el sensor no mide humedad."
+    ::= { bdlSensorEntrada 10 }
+
+-- =====================================================================
+-- .3 energia -- medidor Modbus (RS-485), fases R, S, T
+-- =====================================================================
+
+bdlEnergiaTabla OBJECT-TYPE
+    SYNTAX      SEQUENCE OF BdlEnergiaEntrada
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "Una fila por fase del medidor de energia trifasico. Columnas
+         nuevas (potencia, energia...) se agregan al final sin mover
+         las existentes."
+    ::= { braindlabControlador 3 }
+
+bdlEnergiaEntrada OBJECT-TYPE
+    SYNTAX      BdlEnergiaEntrada
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "Una fase."
+    INDEX       { bdlEnergiaIndice }
+    ::= { bdlEnergiaTabla 1 }
+
+BdlEnergiaEntrada ::= SEQUENCE {
+    bdlEnergiaIndice     Integer32,
+    bdlEnergiaFase       DisplayString,
+    bdlEnergiaEstado     INTEGER,
+    bdlEnergiaVoltaje    Integer32,
+    bdlEnergiaCorriente  Integer32
+}
+
+bdlEnergiaIndice OBJECT-TYPE
+    SYNTAX      Integer32 (1..3)
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION "1 = R, 2 = S, 3 = T."
+    ::= { bdlEnergiaEntrada 1 }
+
+bdlEnergiaFase OBJECT-TYPE
+    SYNTAX      DisplayString (SIZE (0..4))
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "R, S o T."
+    ::= { bdlEnergiaEntrada 2 }
+
+bdlEnergiaEstado OBJECT-TYPE
+    SYNTAX      INTEGER { ok(1), sinLectura(2) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "sinLectura = el medidor no responde; voltaje y corriente son la
+         ultima lectura que hubo."
+    ::= { bdlEnergiaEntrada 3 }
+
+bdlEnergiaVoltaje OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "decimas de V"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Voltaje de la fase (2205 = 220.5 V)."
+    ::= { bdlEnergiaEntrada 4 }
+
+bdlEnergiaCorriente OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "centesimas de A"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Corriente de la fase (1234 = 12.34 A)."
+    ::= { bdlEnergiaEntrada 5 }
+
+-- =====================================================================
+-- .4 sistema
+-- =====================================================================
+
+-- .4.1 estado (solo lectura) ------------------------------------------
 
 bdlCicloClimatizacion OBJECT-TYPE
     SYNTAX      INTEGER { reposo(0), normal(1), altaTemperatura(2), bypass(3) }
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Etapa actual de la maquina de estados de climatizacion."
-    ::= { bdlEntradas 1 }
-
-bdlTemperatura1 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Sensor T1, calibrado."
-    ::= { bdlEntradas 2 }
-
-bdlTemperatura2 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Sensor T2, calibrado."
-    ::= { bdlEntradas 3 }
-
-bdlTemperatura3 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Sensor T3, calibrado."
-    ::= { bdlEntradas 4 }
-
-bdlTemperatura4 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Sensor T4, calibrado."
-    ::= { bdlEntradas 5 }
+    DESCRIPTION "Etapa actual de la climatizacion."
+    ::= { bdlEstado 1 }
 
 bdlTemperaturaMaxima OBJECT-TYPE
     SYNTAX      Integer32
     UNITS       "decimas de grado C"
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "La mayor de T1..T4."
-    ::= { bdlEntradas 6 }
+    DESCRIPTION "La mayor de las temperaturas de los sensores 1..4."
+    ::= { bdlEstado 2 }
 
-bdlTemperaturaGabinete OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas de grado C"
+bdlUnidadReserva OBJECT-TYPE
+    SYNTAX      Integer32 (1..4)
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "AM2301A del gabinete (ultimo valor bueno)."
-    ::= { bdlEntradas 7 }
-
-bdlHumedadGabinete OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas de %"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "AM2301A del gabinete (ultimo valor bueno)."
-    ::= { bdlEntradas 8 }
+    DESCRIPTION "Aire que descansa esta semana (ver bdlControlReserva)."
+    ::= { bdlEstado 3 }
 
 bdlBypassEstadoFisico OBJECT-TYPE
     SYNTAX      INTEGER { inactivo(0), activo(1) }
     MAX-ACCESS  read-only
     STATUS      current
     DESCRIPTION "BPS_STATUS: estado real del bypass leido del hardware."
-    ::= { bdlEntradas 9 }
-
-bdlUnidadReserva OBJECT-TYPE
-    SYNTAX      Integer32 (1..4)
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Unidad de A/A que queda de reserva esta semana."
-    ::= { bdlEntradas 10 }
+    ::= { bdlEstado 4 }
 
 bdlBypassAutoHabilitado OBJECT-TYPE
     SYNTAX      INTEGER { no(0), si(1) }
     MAX-ACCESS  read-only
     STATUS      current
     DESCRIPTION "no = se supero fails_max_bypass, el bypass ya no se pide solo."
-    ::= { bdlEntradas 11 }
-
-bdlSensoresTempOk OBJECT-TYPE
-    SYNTAX      INTEGER { falla(0), ok(1) }
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Resultado de la ultima lectura de T1..T4 (ADS1115)."
-    ::= { bdlEntradas 12 }
-
-bdlSensorGabineteOk OBJECT-TYPE
-    SYNTAX      INTEGER { falla(0), ok(1) }
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Resultado de la ultima lectura del AM2301A."
-    ::= { bdlEntradas 13 }
+    ::= { bdlEstado 5 }
 
 bdlRtcOk OBJECT-TYPE
     SYNTAX      INTEGER { falla(0), ok(1) }
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Resultado de la ultima lectura del DS1307."
-    ::= { bdlEntradas 14 }
+    DESCRIPTION "Resultado de la ultima lectura del reloj DS1307."
+    ::= { bdlEstado 6 }
 
--- ---------------------------------------------------------------------
--- .2 salidas -- GET = estado REALMENTE aplicado. SET = override manual,
--- igual que desde la web: dura hasta que la climatizacion cambie de
--- ciclo o hasta escribir bdlModoManual = 0.
--- ---------------------------------------------------------------------
-
-bdlAA1 OBJECT-TYPE
-    SYNTAX      INTEGER { apagado(0), encendido(1) }
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Rele AA1."
-    ::= { bdlSalidas 1 }
-
-bdlAA2 OBJECT-TYPE
-    SYNTAX      INTEGER { apagado(0), encendido(1) }
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Rele AA2."
-    ::= { bdlSalidas 2 }
-
-bdlAA3 OBJECT-TYPE
-    SYNTAX      INTEGER { apagado(0), encendido(1) }
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Rele AA3."
-    ::= { bdlSalidas 3 }
-
-bdlAA4 OBJECT-TYPE
-    SYNTAX      INTEGER { apagado(0), encendido(1) }
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Rele AA4."
-    ::= { bdlSalidas 4 }
-
-bdlAlarmaAltaTemp OBJECT-TYPE
-    SYNTAX      INTEGER { apagado(0), encendido(1) }
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Salida OUT_AT (contacto seco de alarma)."
-    ::= { bdlSalidas 5 }
-
-bdlBypassSolicitado OBJECT-TYPE
-    SYNTAX      INTEGER { apagado(0), encendido(1) }
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Salida BP_S. Confirmar el efecto con bdlBypassEstadoFisico."
-    ::= { bdlSalidas 6 }
+-- .4.2 mando -- GET = estado REALMENTE aplicado. SET = override manual,
+-- igual que desde la web. -----------------------------------------------
 
 bdlModoManual OBJECT-TYPE
     SYNTAX      INTEGER { automatico(0), manual(1) }
@@ -214,162 +415,44 @@ bdlModoManual OBJECT-TYPE
          cancela todos los overrides (= POST /control_automatico).
          Escribir manual(1) devuelve wrongValue: para forzar una salida se
          escribe esa salida."
-    ::= { bdlSalidas 7 }
+    ::= { bdlMando 1 }
 
-bdlAA1Manual OBJECT-TYPE
+bdlBypassSolicitado OBJECT-TYPE
     SYNTAX      INTEGER { no(0), si(1) }
-    MAX-ACCESS  read-only
+    MAX-ACCESS  read-write
     STATUS      current
-    DESCRIPTION "AA1 forzado a mano."
-    ::= { bdlSalidas 8 }
-
-bdlAA2Manual OBJECT-TYPE
-    SYNTAX      INTEGER { no(0), si(1) }
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "AA2 forzado a mano."
-    ::= { bdlSalidas 9 }
-
-bdlAA3Manual OBJECT-TYPE
-    SYNTAX      INTEGER { no(0), si(1) }
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "AA3 forzado a mano."
-    ::= { bdlSalidas 10 }
-
-bdlAA4Manual OBJECT-TYPE
-    SYNTAX      INTEGER { no(0), si(1) }
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "AA4 forzado a mano."
-    ::= { bdlSalidas 11 }
-
-bdlAlarmaAltaTempManual OBJECT-TYPE
-    SYNTAX      INTEGER { no(0), si(1) }
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "OUT_AT forzada a mano."
-    ::= { bdlSalidas 12 }
+    DESCRIPTION "Salida BP_S. Confirmar el efecto con bdlBypassEstadoFisico."
+    ::= { bdlMando 2 }
 
 bdlBypassManual OBJECT-TYPE
     SYNTAX      INTEGER { no(0), si(1) }
     MAX-ACCESS  read-only
     STATUS      current
     DESCRIPTION "BP_S forzado a mano."
-    ::= { bdlSalidas 13 }
+    ::= { bdlMando 3 }
 
--- ---------------------------------------------------------------------
--- .3 calibracion
--- ---------------------------------------------------------------------
-
-bdlCalibT1 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Constante de calibracion vigente de T1."
-    ::= { bdlCalibracion 1 }
-
-bdlCalibT2 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Constante de calibracion vigente de T2."
-    ::= { bdlCalibracion 2 }
-
-bdlCalibT3 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Constante de calibracion vigente de T3."
-    ::= { bdlCalibracion 3 }
-
-bdlCalibT4 OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Constante de calibracion vigente de T4."
-    ::= { bdlCalibracion 4 }
-
-bdlCalibTempGabinete OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Constante de calibracion vigente de la temperatura del gabinete."
-    ::= { bdlCalibracion 5 }
-
-bdlCalibHumedadGabinete OBJECT-TYPE
-    SYNTAX      Integer32
-    UNITS       "decimas"
-    MAX-ACCESS  read-only
-    STATUS      current
-    DESCRIPTION "Constante de calibracion vigente de la humedad del gabinete."
-    ::= { bdlCalibracion 6 }
-
-bdlReferenciaT1 OBJECT-TYPE
-    SYNTAX      Integer32 (-400..1250)
-    UNITS       "decimas de grado C"
+bdlAlarmaAltaTempSalida OBJECT-TYPE
+    SYNTAX      INTEGER { inactiva(0), activa(1) }
     MAX-ACCESS  read-write
     STATUS      current
-    DESCRIPTION
-        "GET: lectura calibrada actual de T1. SET: valor REAL medido con
-         un instrumento de referencia; se recalcula y guarda la constante
-         (= POST /calibrar_sensor)."
-    ::= { bdlCalibracion 7 }
+    DESCRIPTION "Salida OUT_AT (contacto seco de alarma)."
+    ::= { bdlMando 4 }
 
-bdlReferenciaT2 OBJECT-TYPE
-    SYNTAX      Integer32 (-400..1250)
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-write
+bdlAlarmaAltaTempManual OBJECT-TYPE
+    SYNTAX      INTEGER { no(0), si(1) }
+    MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Igual que bdlReferenciaT1, para T2."
-    ::= { bdlCalibracion 8 }
+    DESCRIPTION "OUT_AT forzada a mano."
+    ::= { bdlMando 5 }
 
-bdlReferenciaT3 OBJECT-TYPE
-    SYNTAX      Integer32 (-400..1250)
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Igual que bdlReferenciaT1, para T3."
-    ::= { bdlCalibracion 9 }
-
-bdlReferenciaT4 OBJECT-TYPE
-    SYNTAX      Integer32 (-400..1250)
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Igual que bdlReferenciaT1, para T4."
-    ::= { bdlCalibracion 10 }
-
-bdlReferenciaTempGabinete OBJECT-TYPE
-    SYNTAX      Integer32 (-400..1250)
-    UNITS       "decimas de grado C"
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Igual que bdlReferenciaT1, para la temperatura del gabinete."
-    ::= { bdlCalibracion 11 }
-
-bdlReferenciaHumedadGabinete OBJECT-TYPE
-    SYNTAX      Integer32 (0..1000)
-    UNITS       "decimas de %"
-    MAX-ACCESS  read-write
-    STATUS      current
-    DESCRIPTION "Igual que bdlReferenciaT1, para la humedad del gabinete."
-    ::= { bdlCalibracion 12 }
-
--- ---------------------------------------------------------------------
--- .4 configuracion (solo lectura: umbrales EN USO, cargados al arrancar)
--- ---------------------------------------------------------------------
+-- .4.3 configuracion -- umbrales EN USO (los cambios desde la web se
+-- ven aca despues de reiniciar el equipo) --------------------------------
 
 bdlCantidadAires OBJECT-TYPE
     SYNTAX      Integer32 (1..4)
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Cantidad de unidades de A/A manejadas."
+    DESCRIPTION "Cantidad de aires manejados."
     ::= { bdlConfiguracion 1 }
 
 bdlTempMin OBJECT-TYPE
@@ -377,7 +460,7 @@ bdlTempMin OBJECT-TYPE
     UNITS       "decimas de grado C"
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Por debajo de esto se apaga todo."
+    DESCRIPTION "Con todos los sensores por debajo de esto se apaga todo."
     ::= { bdlConfiguracion 2 }
 
 bdlTempMax OBJECT-TYPE
@@ -385,7 +468,7 @@ bdlTempMax OBJECT-TYPE
     UNITS       "decimas de grado C"
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Activa la etapa normal (N-1 unidades)."
+    DESCRIPTION "Activa la etapa normal (N-1 aires)."
     ::= { bdlConfiguracion 3 }
 
 bdlTempAltaTemp OBJECT-TYPE
@@ -393,7 +476,7 @@ bdlTempAltaTemp OBJECT-TYPE
     UNITS       "decimas de grado C"
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Activa la etapa de alta temperatura (N unidades + alarma)."
+    DESCRIPTION "Activa la etapa de alta temperatura (N aires + alarma)."
     ::= { bdlConfiguracion 4 }
 
 bdlTempBypass OBJECT-TYPE
@@ -404,9 +487,8 @@ bdlTempBypass OBJECT-TYPE
     DESCRIPTION "Activa el bypass."
     ::= { bdlConfiguracion 5 }
 
--- ---------------------------------------------------------------------
--- .5 traps -- destinos. Se guardan en config.json y se aplican en caliente.
--- ---------------------------------------------------------------------
+-- .4.4 destinos de trap -- se guardan en config.json y se aplican en
+-- caliente. Tambien se editan desde la web (Configuracion > SNMP). ------
 
 bdlTrapDestino1 OBJECT-TYPE
     SYNTAX      IpAddress
@@ -436,15 +518,15 @@ bdlTrapHabilitado2 OBJECT-TYPE
     DESCRIPTION "Habilita los traps hacia bdlTrapDestino2."
     ::= { bdlTraps 4 }
 
--- ---------------------------------------------------------------------
--- .6 alarmas vigentes (para polling: un trap perdido no se reintenta)
--- ---------------------------------------------------------------------
+-- =====================================================================
+-- .5 alarmas vigentes (para polling: un trap perdido no se reintenta)
+-- =====================================================================
 
 bdlAlarmaAltaTemperatura OBJECT-TYPE
     SYNTAX      INTEGER { normal(0), activa(1) }
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Ciclo en alta temperatura o bypass."
+    DESCRIPTION "Climatizacion en alta temperatura o bypass."
     ::= { bdlAlarmas 1 }
 
 bdlAlarmaBypassActivo OBJECT-TYPE
@@ -465,14 +547,16 @@ bdlAlarmaSensoresTemp OBJECT-TYPE
     SYNTAX      INTEGER { normal(0), activa(1) }
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Falla de lectura de T1..T4 hace mas de ~6 s."
+    DESCRIPTION
+        "Falla de lectura de algun sensor de temperatura 1..4 hace mas de
+         ~6 s (ver bdlSensorEstado para saber cual)."
     ::= { bdlAlarmas 4 }
 
 bdlAlarmaSensorGabinete OBJECT-TYPE
     SYNTAX      INTEGER { normal(0), activa(1) }
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "AM2301A sin respuesta hace mas de ~10 s."
+    DESCRIPTION "Sensor 5 (gabinete) sin respuesta hace mas de ~10 s."
     ::= { bdlAlarmas 5 }
 
 bdlAlarmaRtc OBJECT-TYPE
@@ -496,11 +580,19 @@ bdlAlarmaBypassAutoDeshabilitado OBJECT-TYPE
     DESCRIPTION "Se supero fails_max_bypass."
     ::= { bdlAlarmas 8 }
 
--- ---------------------------------------------------------------------
+bdlAlarmaMedidorEnergia OBJECT-TYPE
+    SYNTAX      INTEGER { normal(0), activa(1) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Medidor de energia (Modbus) sin lectura hace mas de ~6 s."
+    ::= { bdlAlarmas 9 }
+
+-- =====================================================================
 -- Notificaciones (traps SNMPv2c, snmpTrapOID = braindlabControlador.0.N)
 -- Ademas se envian coldStart (al arrancar) y linkUp (al volver el cable);
 -- en ambos casos se reenvian despues las alarmas que sigan activas.
--- ---------------------------------------------------------------------
+-- Cada alarma tiene un trap de activacion y otro de normalizacion (clear).
+-- =====================================================================
 
 bdlTrapAltaTemperatura NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaAltaTemperatura, bdlCicloClimatizacion, bdlTemperaturaMaxima }
@@ -511,7 +603,7 @@ bdlTrapAltaTemperatura NOTIFICATION-TYPE
 bdlTrapAltaTemperaturaNormal NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaAltaTemperatura, bdlCicloClimatizacion, bdlTemperaturaMaxima }
     STATUS      current
-    DESCRIPTION "La climatizacion salio de alta temperatura."
+    DESCRIPTION "La climatizacion salio de alta temperatura. Limpia bdlTrapAltaTemperatura."
     ::= { bdlNotificaciones 2 }
 
 bdlTrapBypassActivado NOTIFICATION-TYPE
@@ -523,7 +615,7 @@ bdlTrapBypassActivado NOTIFICATION-TYPE
 bdlTrapBypassDesactivado NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaBypassActivo, bdlBypassSolicitado, bdlBypassEstadoFisico }
     STATUS      current
-    DESCRIPTION "El bypass se desactivo."
+    DESCRIPTION "El bypass se desactivo. Limpia bdlTrapBypassActivado."
     ::= { bdlNotificaciones 4 }
 
 bdlTrapBypassFalla NOTIFICATION-TYPE
@@ -535,31 +627,31 @@ bdlTrapBypassFalla NOTIFICATION-TYPE
 bdlTrapBypassFallaNormal NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaBypassFalla, bdlBypassSolicitado, bdlBypassEstadoFisico }
     STATUS      current
-    DESCRIPTION "El bypass volvio a obedecer."
+    DESCRIPTION "El bypass volvio a obedecer. Limpia bdlTrapBypassFalla."
     ::= { bdlNotificaciones 6 }
 
 bdlTrapSensoresTempFalla NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaSensoresTemp }
     STATUS      current
-    DESCRIPTION "Falla de lectura de T1..T4."
+    DESCRIPTION "Falla de lectura de algun sensor de temperatura 1..4."
     ::= { bdlNotificaciones 7 }
 
 bdlTrapSensoresTempNormal NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaSensoresTemp }
     STATUS      current
-    DESCRIPTION "T1..T4 volvieron a leer bien."
+    DESCRIPTION "Los sensores 1..4 volvieron a leer bien. Limpia bdlTrapSensoresTempFalla."
     ::= { bdlNotificaciones 8 }
 
 bdlTrapSensorGabineteFalla NOTIFICATION-TYPE
-    OBJECTS     { bdlAlarmaSensorGabinete, bdlTemperaturaGabinete }
+    OBJECTS     { bdlAlarmaSensorGabinete, bdlSensorTemperatura }
     STATUS      current
-    DESCRIPTION "AM2301A sin respuesta."
+    DESCRIPTION "Sensor 5 (gabinete) sin respuesta. Trae su ultima temperatura buena."
     ::= { bdlNotificaciones 9 }
 
 bdlTrapSensorGabineteNormal NOTIFICATION-TYPE
-    OBJECTS     { bdlAlarmaSensorGabinete, bdlTemperaturaGabinete }
+    OBJECTS     { bdlAlarmaSensorGabinete, bdlSensorTemperatura }
     STATUS      current
-    DESCRIPTION "AM2301A volvio a responder."
+    DESCRIPTION "Sensor 5 (gabinete) volvio a responder. Limpia bdlTrapSensorGabineteFalla."
     ::= { bdlNotificaciones 10 }
 
 bdlTrapRtcFalla NOTIFICATION-TYPE
@@ -571,7 +663,7 @@ bdlTrapRtcFalla NOTIFICATION-TYPE
 bdlTrapRtcNormal NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaRtc }
     STATUS      current
-    DESCRIPTION "DS1307 volvio a responder."
+    DESCRIPTION "DS1307 volvio a responder. Limpia bdlTrapRtcFalla."
     ::= { bdlNotificaciones 12 }
 
 bdlTrapModoManualActivado NOTIFICATION-TYPE
@@ -583,7 +675,7 @@ bdlTrapModoManualActivado NOTIFICATION-TYPE
 bdlTrapModoManualDesactivado NOTIFICATION-TYPE
     OBJECTS     { bdlAlarmaModoManual }
     STATUS      current
-    DESCRIPTION "La automatica retomo el control de todo."
+    DESCRIPTION "La automatica retomo el control de todo. Limpia bdlTrapModoManualActivado."
     ::= { bdlNotificaciones 14 }
 
 bdlTrapBypassAutoDeshabilitado NOTIFICATION-TYPE
@@ -596,7 +688,28 @@ bdlTrapCalibracionModificada NOTIFICATION-TYPE
     STATUS      current
     DESCRIPTION
         "Cambio una constante de calibracion. El unico varbind es la
-         constante nueva (bdlCalibT1..bdlCalibHumedadGabinete)."
+         constante nueva: bdlSensorCalibTemperatura o
+         bdlSensorCalibHumedad del sensor que se calibro."
     ::= { bdlNotificaciones 16 }
+
+bdlTrapPrueba NOTIFICATION-TYPE
+    OBJECTS     { bdlCicloClimatizacion, bdlTemperaturaMaxima }
+    STATUS      current
+    DESCRIPTION
+        "Trap de prueba enviado a mano desde la web (Configuracion > SNMP)
+         para verificar que el gestor recibe. No indica ninguna alarma."
+    ::= { bdlNotificaciones 17 }
+
+bdlTrapMedidorEnergiaFalla NOTIFICATION-TYPE
+    OBJECTS     { bdlAlarmaMedidorEnergia }
+    STATUS      current
+    DESCRIPTION "El medidor de energia (Modbus) dejo de responder."
+    ::= { bdlNotificaciones 18 }
+
+bdlTrapMedidorEnergiaNormal NOTIFICATION-TYPE
+    OBJECTS     { bdlAlarmaMedidorEnergia }
+    STATUS      current
+    DESCRIPTION "El medidor de energia volvio a responder. Limpia bdlTrapMedidorEnergiaFalla."
+    ::= { bdlNotificaciones 19 }
 
 END

@@ -24,7 +24,7 @@ static const char *TAG = "CONFIG_BRAINDLAB";
 // 768 que habia antes quedaba justo y cortaba el archivo en silencio (JSON
 // corrupto => TODAS las secciones vuelven a sus defaults). Va al heap y no
 // al stack porque se llama desde tareas con stack chico.
-#define CONFIG_MAX_BYTES 2048
+#define CONFIG_MAX_BYTES 3072 // con la seccion "sensores" ronda 1.4 KB
 
 // Ver "Thread-safe" en config_braindlab.h. Se crea en config_braindlab_init().
 static SemaphoreHandle_t s_mutex = NULL;
@@ -365,6 +365,11 @@ void config_braindlab_cargar_snmp(config_snmp_t *cfg)
         const cJSON *hab = cJSON_GetObjectItemCaseSensitive(snmp, claves_hab[i]);
         cfg->trap_habilitado[i] = cJSON_IsBool(hab) ? cJSON_IsTrue(hab) : SNMP_TRAP_HABILITADO_DEFAULT;
     }
+    leer_campo_str(snmp, "nombre", cfg->nombre, sizeof(cfg->nombre), SNMP_NOMBRE_DEFAULT);
+    leer_campo_str(snmp, "ubicacion", cfg->ubicacion, sizeof(cfg->ubicacion), SNMP_UBICACION_DEFAULT);
+    leer_campo_str(snmp, "contacto", cfg->contacto, sizeof(cfg->contacto), SNMP_CONTACTO_DEFAULT);
+    const cJSON *escritura = cJSON_GetObjectItemCaseSensitive(snmp, "escritura_habilitada");
+    cfg->escritura_habilitada = cJSON_IsBool(escritura) ? cJSON_IsTrue(escritura) : SNMP_ESCRITURA_HABILITADA_DEFAULT;
 
     cJSON_Delete(raiz);
     desbloquear();
@@ -387,6 +392,10 @@ esp_err_t config_braindlab_guardar_snmp(const config_snmp_t *cfg)
     cJSON_AddBoolToObject(snmp, "trap1_habilitado", cfg->trap_habilitado[0]);
     cJSON_AddStringToObject(snmp, "trap2_ip", cfg->trap_ip[1]);
     cJSON_AddBoolToObject(snmp, "trap2_habilitado", cfg->trap_habilitado[1]);
+    cJSON_AddStringToObject(snmp, "nombre", cfg->nombre);
+    cJSON_AddStringToObject(snmp, "ubicacion", cfg->ubicacion);
+    cJSON_AddStringToObject(snmp, "contacto", cfg->contacto);
+    cJSON_AddBoolToObject(snmp, "escritura_habilitada", cfg->escritura_habilitada);
     cJSON_AddItemToObject(raiz, "snmp", snmp);
 
     esp_err_t err = guardar_json_archivo(raiz);
@@ -395,6 +404,79 @@ esp_err_t config_braindlab_guardar_snmp(const config_snmp_t *cfg)
 
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "SNMP guardado en %s", RUTA_CONFIG);
+    }
+    return err;
+}
+
+// ---------------------------------------------------------------------------
+// Secciones "sensores": [{"nombre":"...","instalado":bool}, ...] x 6 y
+// "aires": ["AA1", ...] x 4
+// ---------------------------------------------------------------------------
+
+void config_braindlab_cargar_sensores(config_sensores_t *cfg)
+{
+    static const char *const nombres[CONFIG_NUM_SENSORES] = SENSORES_NOMBRES_DEFAULT;
+    static const bool instalado[CONFIG_NUM_SENSORES] = SENSORES_INSTALADO_DEFAULT;
+
+    bloquear();
+    cJSON *raiz = cargar_json_archivo(RUTA_CONFIG);
+    const cJSON *lista = cJSON_GetObjectItemCaseSensitive(raiz, "sensores");
+    if (!cJSON_IsArray(lista)) {
+        lista = NULL;
+    }
+    for (int i = 0; i < CONFIG_NUM_SENSORES; i++) {
+        const cJSON *item = lista ? cJSON_GetArrayItem(lista, i) : NULL;
+        if (!cJSON_IsObject(item)) {
+            item = NULL;
+        }
+        leer_campo_str(item, "nombre", cfg->nombre[i], sizeof(cfg->nombre[i]), nombres[i]);
+        if (cfg->nombre[i][0] == '\0') {
+            strlcpy(cfg->nombre[i], nombres[i], sizeof(cfg->nombre[i]));
+        }
+        const cJSON *inst = cJSON_GetObjectItemCaseSensitive(item, "instalado");
+        cfg->instalado[i] = cJSON_IsBool(inst) ? cJSON_IsTrue(inst) : instalado[i];
+    }
+    cfg->instalado[CONFIG_NUM_SENSORES - 1] = false; // sensor 6: sin hardware todavia
+
+    static const char *const aires[4] = AIRES_NOMBRES_DEFAULT;
+    const cJSON *lista_aires = cJSON_GetObjectItemCaseSensitive(raiz, "aires");
+    for (int i = 0; i < 4; i++) {
+        const cJSON *item = cJSON_IsArray(lista_aires) ? cJSON_GetArrayItem(lista_aires, i) : NULL;
+        const char *nombre = (cJSON_IsString(item) && item->valuestring[0]) ? item->valuestring : aires[i];
+        strlcpy(cfg->nombre_aire[i], nombre, sizeof(cfg->nombre_aire[i]));
+    }
+    cJSON_Delete(raiz);
+    desbloquear();
+}
+
+esp_err_t config_braindlab_guardar_sensores(const config_sensores_t *cfg)
+{
+    bloquear();
+    cJSON *raiz = cargar_json_archivo(RUTA_CONFIG); // conserva las demas secciones
+
+    cJSON_DeleteItemFromObject(raiz, "sensores");
+    cJSON *lista = cJSON_CreateArray();
+    for (int i = 0; i < CONFIG_NUM_SENSORES; i++) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "nombre", cfg->nombre[i]);
+        cJSON_AddBoolToObject(item, "instalado", cfg->instalado[i]);
+        cJSON_AddItemToArray(lista, item);
+    }
+    cJSON_AddItemToObject(raiz, "sensores", lista);
+
+    cJSON_DeleteItemFromObject(raiz, "aires");
+    cJSON *aires = cJSON_CreateArray();
+    for (int i = 0; i < 4; i++) {
+        cJSON_AddItemToArray(aires, cJSON_CreateString(cfg->nombre_aire[i]));
+    }
+    cJSON_AddItemToObject(raiz, "aires", aires);
+
+    esp_err_t err = guardar_json_archivo(raiz);
+    cJSON_Delete(raiz);
+    desbloquear();
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Sensores guardados en %s", RUTA_CONFIG);
     }
     return err;
 }

@@ -70,7 +70,12 @@ void climatizacion_iniciar(const config_climatizacion_t *cfg, clima_estado_t *es
 // T1..T4) y la config vigente. Para llamar cada vez que hay lecturas nuevas
 // de sensores (no tiene noscion de tiempo propia, no hace falta llamarla a
 // una frecuencia fija).
-void climatizacion_actualizar(const float temperaturas[4], const config_climatizacion_t *cfg,
+// validas[i]=false (NTC desconectado, en corto o ADS1115 sin responder):
+// ese canal no cuenta para ningun umbral -- su valor es el ultimo bueno
+// congelado y podria quedar por encima de temp_min para siempre, impidiendo
+// apagar. Si ninguno es valido el ciclo no cambia (no se apaga a ciegas).
+void climatizacion_actualizar(const float temperaturas[4], const bool validas[4],
+                               const config_climatizacion_t *cfg,
                                clima_estado_t *estado);
 
 // Semana de rotacion a la que pertenece 'ahora': la fecha "AAAA-MM-DD" del

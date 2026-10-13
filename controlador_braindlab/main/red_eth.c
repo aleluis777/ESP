@@ -47,8 +47,8 @@ static esp_eth_netif_glue_handle_t s_eth_glue = NULL;
 // cargar_ip_info() abajo) y cacheados aca -- iniciar_hardware_eth() la usa
 // cada vez que corre (al arrancar, y de nuevo si tarea_vigilancia_eth() pide
 // reiniciar_eth()) sin volver a tocar el archivo. config_braindlab_cargar_red()
-// ya trae sus propios defaults (RED_IP_DEFAULT="192.168.5.95",
-// RED_GATEWAY_DEFAULT="192.168.5.1", RED_MASCARA_DEFAULT="255.255.255.0" --
+// ya trae sus propios defaults (RED_IP_DEFAULT="192.168.0.91",
+// RED_GATEWAY_DEFAULT="192.168.0.1", RED_MASCARA_DEFAULT="255.255.255.0" --
 // ver config_braindlab_defaults.h) si el archivo no existe o le falta el
 // campo, asi que no hace falta duplicarlos aca.
 static esp_netif_ip_info_t s_ip_info;
@@ -134,7 +134,7 @@ static void verificar_ip_activa(esp_netif_t *eth_netif, const char *momento)
     }
 }
 
-// Parsea un campo string ("192.168.5.95") de config_red_t a esp_ip4_addr_t.
+// Parsea un campo string ("192.168.0.91") de config_red_t a esp_ip4_addr_t.
 // Si el string esta vacio o no es una IP valida (por ejemplo config.json
 // corrupto o guardado a mano con algo raro), se queda con 'reserva' (el
 // default duro de config_braindlab_defaults.h) y avisa por que.
@@ -219,7 +219,7 @@ static esp_err_t iniciar_hardware_eth(void)
     // config_braindlab_cargar_red()) y cacheada en s_ip_info -- ver
     // cargar_ip_info(). Si config.json no tiene la seccion o no existe
     // todavia, config_braindlab_cargar_red() ya devuelve los defaults
-    // (192.168.5.95 / 255.255.255.0 / 192.168.5.1).
+    // (192.168.0.91 / 255.255.255.0 / 192.168.0.1).
     ESP_ERROR_CHECK(esp_netif_dhcpc_stop(s_eth_netif));
     cargar_ip_info();
     ESP_ERROR_CHECK(esp_netif_set_ip_info(s_eth_netif, &s_ip_info));

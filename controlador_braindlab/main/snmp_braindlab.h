@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
+#include "config_braindlab.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +28,7 @@ extern "C" {
 typedef struct {
     uint8_t ciclo;                  // clima_ciclo_t (0=reposo 1=normal 2=alta temp 3=bypass)
     float   temperaturas[4];        // T1..T4 calibradas, °C
+    bool    ntc_ok[4];              // T1..T4: ese canal se leyo bien esta vuelta
     bool    sensores_temp_ok;       // false si sensores_temp_leer() fallo esta vuelta
     bool    gestor_ok;              // false si el AM2301A fallo esta vuelta
     float   temp_gestor;            // gabinete, calibrada, °C (ultimo valor bueno)
@@ -41,6 +43,7 @@ typedef struct {
     bool    bypass_activo;          // BPS_STATUS (estado FISICO del bypass)
     bool    modo_manual;            // algun override manual vigente
     uint8_t indice_reserva;         // 0..N-1
+    uint8_t fails[4];               // fallas acumuladas por aire (clima_estado_t.fails)
     bool    bypass_auto_habilitado;
     uint8_t cantidad_aires;
     float   temp_min;
@@ -48,6 +51,9 @@ typedef struct {
     float   temp_at;
     float   temp_bypass;
     float   calibracion[6];         // constantes t1,t2,t3,t4,temp_gestor,humedad_gestor
+    bool    energia_ok;             // medidor Modbus con lectura vigente
+    float   voltajes[3];            // fases R,S,T [V]
+    float   corrientes[3];          // fases R,S,T [A]
 } snmp_braindlab_estado_t;
 
 // Mismas firmas que servidor_web_callbacks_t -- app_main.c pasa las mismas
@@ -81,6 +87,20 @@ void snmp_braindlab_publicar_estado(const snmp_braindlab_estado_t *estado);
 // nueva (venga de la web, de la pantalla o de SNMP). indice_sensor: 0..3 =
 // T1..T4, 4 = temp_gestor, 5 = humedad_gestor.
 void snmp_braindlab_notificar_calibracion(uint8_t indice_sensor, float constante);
+
+// Config SNMP nueva desde la web (POST /configurar_snmp). Guarda en
+// config.json y aplica en caliente destinos de trap y sysName/sysLocation/
+// sysContact. Las communities solo cambian al reiniciar:
+// *requiere_reinicio = true si alguna es distinta de la vigente.
+esp_err_t snmp_braindlab_configurar(const config_snmp_t *cfg, bool *requiere_reinicio);
+
+// Encola el trap bdlTrapPrueba (17). ESP_ERR_NOT_FOUND = ningun destino
+// habilitado; ESP_ERR_INVALID_STATE = agente sin arrancar o sin link.
+esp_err_t snmp_braindlab_trap_prueba(void);
+
+// Nombres e instalado de los sensores 1..6 (bdlSensorTabla). Se puede
+// llamar antes de snmp_braindlab_init() y cada vez que cambian.
+void snmp_braindlab_set_sensores(const config_sensores_t *sensores);
 
 #ifdef __cplusplus
 }

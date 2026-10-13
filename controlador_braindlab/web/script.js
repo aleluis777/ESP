@@ -330,15 +330,67 @@ const MODULOS = [
     { nombre: "ADC (T1-T4)", ok: (d) => d.adc_ok, falla: "ADS1115 sin respuesta por I2C -- temperaturas no validas" },
     // Solo si el ADS responde: sin NTC la entrada queda en ~3.3 V y el
     // firmware la rechaza -- es un sensor desconectado, no falla del chip.
+    // Solo los instalados (Configuracion > Sensores); ninguno = punto gris.
     { nombre: "Sensores NTC",
-      ok: (d) => (Array.isArray(d.ntc_ok) && d.adc_ok ? d.ntc_ok.every(Boolean) : undefined),
+      ok: (d) => {
+          if (!Array.isArray(d.ntc_ok) || !d.adc_ok) return undefined;
+          const usados = d.ntc_ok.filter((_, i) => sensorInstalado(d, i));
+          return usados.length ? usados.every(Boolean) : undefined;
+      },
       falla: (d) => "Sin sensor (desconectado o en corto): " +
-          d.ntc_ok.map((ok, i) => (ok ? null : "T" + (i + 1))).filter(Boolean).join(", ") },
-    { nombre: "Sensor HR", ok: (d) => d.gestor_ok, falla: "AM2301A fallo la ultima lectura" },
+          d.ntc_ok.map((ok, i) => (ok || !sensorInstalado(d, i) ? null : "T" + (i + 1))).filter(Boolean).join(", ") },
+    { nombre: "Sensor HR", ok: (d) => (sensorInstalado(d, 4) ? d.gestor_ok : undefined),
+      falla: "AM2301A fallo la ultima lectura" },
     { nombre: "Ethernet", ok: (d) => d.eth_conectado, falla: "Cable Ethernet sin link" },
     { nombre: "Medidor", ok: (d) => d.energia_ok, falla: "Medidor RS-485 sin respuesta" },
     { nombre: "Memoria SD", ok: (d) => (typeof d.sd_estado === "number" ? d.sd_estado === 0 : undefined), falla: null },
 ];
+
+// Firmware viejo sin sens_inst: todos instalados.
+function sensorInstalado(datos, i) {
+    return !Array.isArray(datos.sens_inst) || !!datos.sens_inst[i];
+}
+
+// Oculta los sensores y aires no instalados (Configuracion > Sensores y
+// Climatizacion > cantidad de aires) y pone los nombres del sitio. Solo
+// actua cuando cambia algo; los nombres se leen de config.json.
+let instalacionClave = "";
+function aplicarInstalacion(datos) {
+    const nAires = typeof datos.n_aires === "number" ? datos.n_aires : 4;
+    const clave = (Array.isArray(datos.sens_inst) ? datos.sens_inst.join("") : "") + "/" + nAires;
+    if (clave === instalacionClave) return;
+    instalacionClave = clave;
+    document.querySelectorAll("[data-sensor]").forEach((el) => {
+        el.hidden = !sensorInstalado(datos, Number(el.dataset.sensor) - 1);
+    });
+    document.querySelectorAll("[data-aire]").forEach((el) => {
+        el.hidden = Number(el.dataset.aire) > nAires;
+    });
+    fetch("/descargar?nombre=config.json")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((cfg) => {
+            if (!cfg) return;
+            const sensores = Array.isArray(cfg.sensores) ? cfg.sensores : [];
+            document.querySelectorAll("[data-nombre-sensor]").forEach((el) => {
+                const s = sensores[Number(el.dataset.nombreSensor) - 1];
+                if (s && s.nombre) el.textContent = (el.dataset.prefijo || "") + s.nombre;
+            });
+            const aires = Array.isArray(cfg.aires) ? cfg.aires : [];
+            document.querySelectorAll("[data-nombre-aire]").forEach((el) => {
+                const nombre = aires[Number(el.dataset.nombreAire) - 1];
+                if (nombre) {
+                    el.textContent = nombre;
+                    el.title = nombre; // nombre completo si no entra
+                }
+            });
+            const equipo = cfg.snmp && cfg.snmp.nombre;
+            if (equipo) {
+                document.getElementById("nombre-equipo").textContent = equipo;
+                document.title = equipo;
+            }
+        })
+        .catch(() => {});
+}
 
 function pintarModulos(datos) {
     const lista = document.getElementById("lista-modulos");
@@ -354,6 +406,7 @@ function pintarModulos(datos) {
 
 function pintar(datos) {
     ultimoMensajeEn = Date.now();
+    aplicarInstalacion(datos);
     pintarHoraRtc(datos.fecha_hora);
 
     // Canal sin NTC (o ADS sin respuesta) -> null: no se grafica el ultimo

@@ -45,8 +45,8 @@
 // aplique de verdad al W5500)
 // ---------------------------------------------------------------------------
 
-#define RED_IP_DEFAULT      "192.168.5.95"
-#define RED_GATEWAY_DEFAULT "192.168.5.1"
+#define RED_IP_DEFAULT      "192.168.0.91"
+#define RED_GATEWAY_DEFAULT "192.168.0.1"
 #define RED_MASCARA_DEFAULT "255.255.255.0"
 
 // ---------------------------------------------------------------------------
@@ -55,6 +55,15 @@
 // ---------------------------------------------------------------------------
 
 #define CALIBRACION_DEFAULT (0.0f)
+
+// ---------------------------------------------------------------------------
+// Sensores 1..6 (ver config_sensores_t). Los nombres son los del panel web.
+// ---------------------------------------------------------------------------
+
+#define SENSORES_NOMBRES_DEFAULT \
+    { "T. Operacion 1", "T. Operacion 2", "T. Inyeccion 1", "T. Inyeccion 2", "Gestor", "Sensor 6" }
+#define SENSORES_INSTALADO_DEFAULT { true, true, true, true, true, false }
+#define AIRES_NOMBRES_DEFAULT      { "AA1", "AA2", "AA3", "AA4" }
 
 // ---------------------------------------------------------------------------
 // SNMP (ver config_snmp_t / snmp_braindlab.c)
@@ -72,3 +81,13 @@
 // IP del gestor (config.json o SNMP SET sobre la rama .5 de BRAINDTIC-MIB).
 #define SNMP_TRAP_IP_DEFAULT         "0.0.0.0"
 #define SNMP_TRAP_HABILITADO_DEFAULT (false)
+
+// Grupo system de MIB-2 (lo que muestra el gestor al descubrir el equipo).
+#define SNMP_NOMBRE_DEFAULT    "controlador_braindlab"
+#define SNMP_UBICACION_DEFAULT ""
+#define SNMP_CONTACTO_DEFAULT  ""
+
+// SET por SNMP (prender/apagar aires, bypass, calibrar, destinos de trap).
+// Apagado de fabrica: con v2c la community viaja en texto plano, y un NOC
+// normalmente solo monitorea. Se habilita desde la web si hace falta.
+#define SNMP_ESCRITURA_HABILITADA_DEFAULT (false)

@@ -9,10 +9,12 @@
 // reservada para historial -- ver partitions.csv).
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include "registro_sd.h"
+#include "snmp_braindlab.h"
 #include "servidor_web.h"
 #include "auth_web.h"
 #include "esp_http_server.h"
@@ -373,6 +375,50 @@ static const httpd_uri_t s_uri_upload = {
     .uri = "/upload", .method = HTTP_POST, .handler = upload_handler,
 };
 
+// config.json para quien no es root: la community de escritura de SNMP
+// (permite apagar aires si el SET esta habilitado) se reemplaza por
+// "********". La web nunca la necesita: el campo se deja vacio a proposito.
+// Si el archivo no se puede leer o parsear no se manda nada (nunca crudo).
+static esp_err_t enviar_config_sin_secretos(httpd_req_t *req, const char *ruta)
+{
+    FILE *f = fopen(ruta, "r");
+    if (!f) {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    const size_t max = 4096;
+    char *buf = malloc(max);
+    if (!buf) {
+        fclose(f);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "sin memoria");
+        return ESP_FAIL;
+    }
+    size_t leidos = fread(buf, 1, max - 1, f);
+    fclose(f);
+    buf[leidos] = '\0';
+    cJSON *raiz = cJSON_Parse(buf);
+    free(buf);
+    if (!raiz) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "config.json invalido");
+        return ESP_FAIL;
+    }
+
+    cJSON *snmp = cJSON_GetObjectItemCaseSensitive(raiz, "snmp");
+    if (cJSON_IsObject(snmp) && cJSON_HasObjectItem(snmp, "community_escritura")) {
+        cJSON_ReplaceItemInObjectCaseSensitive(snmp, "community_escritura", cJSON_CreateString("********"));
+    }
+    char *texto = cJSON_PrintUnformatted(raiz);
+    cJSON_Delete(raiz);
+    if (!texto) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "sin memoria");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t err = httpd_resp_sendstr(req, texto);
+    cJSON_free(texto);
+    return err;
+}
+
 // GET /descargar?nombre=xxx -- para ver/bajar un archivo de /www que no
 // tenga ya su propia ruta fija arriba. Las rutas fijas siguen siendo la
 // forma normal de servir index.html/style.css/etc, esto es solo el
@@ -396,6 +442,12 @@ static esp_err_t descargar_handler(httpd_req_t *req)
 
     char ruta[80];
     snprintf(ruta, sizeof(ruta), "/www/%s", nombre);
+
+    // config.json (y su .tmp) solo sale completo para root (respaldo desde
+    // files.html); al resto se le entrega sin la community de escritura.
+    if (strncmp(nombre, "config.json", 11) == 0 && auth_web_nivel(req) != AUTH_NIVEL_ROOT) {
+        return enviar_config_sin_secretos(req, ruta);
+    }
 
     FILE *f = fopen(ruta, "r");
     if (!f) {
@@ -565,6 +617,270 @@ static esp_err_t configurar_climatizacion_handler(httpd_req_t *req)
 
 static const httpd_uri_t s_uri_configurar_climatizacion = {
     .uri = "/configurar_climatizacion", .method = HTTP_POST, .handler = configurar_climatizacion_handler,
+};
+
+// POST /configurar_snmp -- body JSON {"community_lectura","community_escritura",
+// "community_trap","trap1_ip","trap1_habilitado","trap2_ip","trap2_habilitado",
+// "nombre","ubicacion","contacto","escritura_habilitada"}. community_escritura
+// vacia = no cambiar.
+// Destinos y textos se aplican en caliente; las communities al reiniciar
+// (respuesta {"ok":true,"reiniciar":true}).
+
+// Community: 1..31 caracteres ASCII visibles, sin espacios.
+static bool community_valida(const char *s)
+{
+    size_t len = strlen(s);
+    if (len == 0 || len > 31) {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        if (s[i] <= ' ' || s[i] > '~') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Copia un string opcional del JSON; false si es demasiado largo.
+static bool copiar_texto_json(const cJSON *raiz, const char *clave, char *destino, size_t len)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(raiz, clave);
+    if (!cJSON_IsString(item)) {
+        return true; // ausente: se deja el valor actual
+    }
+    if (strlen(item->valuestring) >= len) {
+        return false;
+    }
+    strcpy(destino, item->valuestring);
+    return true;
+}
+
+static esp_err_t configurar_snmp_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
+
+    char body[512];
+    if (req->content_len >= sizeof(body)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body demasiado grande");
+        return ESP_FAIL;
+    }
+    int recibidos = 0;
+    while (recibidos < (int)req->content_len) {
+        int len = httpd_req_recv(req, body + recibidos, req->content_len - recibidos);
+        if (len <= 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+            return ESP_FAIL;
+        }
+        recibidos += len;
+    }
+    body[recibidos] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    if (!cJSON_IsObject(raiz)) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "JSON invalido");
+        return ESP_FAIL;
+    }
+
+    config_snmp_t cfg;
+    config_braindlab_cargar_snmp(&cfg); // base: lo vigente (campos ausentes no cambian)
+    const char *error = NULL;
+
+    static const char *const claves_ip[CONFIG_SNMP_NUM_DESTINOS] = { "trap1_ip", "trap2_ip" };
+    static const char *const claves_hab[CONFIG_SNMP_NUM_DESTINOS] = { "trap1_habilitado", "trap2_habilitado" };
+    for (int i = 0; i < CONFIG_SNMP_NUM_DESTINOS && !error; i++) {
+        const cJSON *ip = cJSON_GetObjectItemCaseSensitive(raiz, claves_ip[i]);
+        const cJSON *hab = cJSON_GetObjectItemCaseSensitive(raiz, claves_hab[i]);
+        if (cJSON_IsString(ip)) {
+            struct in_addr a;
+            const char *texto = ip->valuestring[0] ? ip->valuestring : "0.0.0.0";
+            if (inet_aton(texto, &a) == 0) {
+                error = "IP de gestor invalida";
+                break;
+            }
+            inet_ntoa_r(a, cfg.trap_ip[i], sizeof(cfg.trap_ip[i]));
+        }
+        if (cJSON_IsBool(hab)) {
+            cfg.trap_habilitado[i] = cJSON_IsTrue(hab);
+        }
+        if (cfg.trap_habilitado[i] && strcmp(cfg.trap_ip[i], "0.0.0.0") == 0) {
+            error = "un gestor habilitado necesita IP";
+        }
+    }
+
+    const cJSON *permitir_set = cJSON_GetObjectItemCaseSensitive(raiz, "escritura_habilitada");
+    if (cJSON_IsBool(permitir_set)) {
+        cfg.escritura_habilitada = cJSON_IsTrue(permitir_set);
+    }
+
+    if (!error) {
+        const cJSON *escritura = cJSON_GetObjectItemCaseSensitive(raiz, "community_escritura");
+        bool escritura_nueva = cJSON_IsString(escritura) && escritura->valuestring[0];
+        if (!copiar_texto_json(raiz, "community_lectura", cfg.community_lectura, sizeof(cfg.community_lectura)) ||
+            !copiar_texto_json(raiz, "community_trap", cfg.community_trap, sizeof(cfg.community_trap)) ||
+            (escritura_nueva && !copiar_texto_json(raiz, "community_escritura", cfg.community_escritura,
+                                                   sizeof(cfg.community_escritura)))) {
+            error = "community demasiado larga (max. 31)";
+        } else if (!community_valida(cfg.community_lectura) || !community_valida(cfg.community_escritura) ||
+                   !community_valida(cfg.community_trap)) {
+            error = "community invalida (1-31 caracteres, sin espacios)";
+        } else if (strcmp(cfg.community_lectura, cfg.community_escritura) == 0) {
+            error = "la community de escritura no puede ser igual a la de lectura";
+        } else if (!copiar_texto_json(raiz, "nombre", cfg.nombre, sizeof(cfg.nombre)) ||
+                   !copiar_texto_json(raiz, "ubicacion", cfg.ubicacion, sizeof(cfg.ubicacion)) ||
+                   !copiar_texto_json(raiz, "contacto", cfg.contacto, sizeof(cfg.contacto))) {
+            error = "nombre (max. 31), ubicacion o contacto (max. 47) demasiado largo";
+        }
+    }
+    cJSON_Delete(raiz);
+
+    if (error) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, error);
+        return ESP_FAIL;
+    }
+
+    bool reiniciar = false;
+    if (snmp_braindlab_configurar(&cfg, &reiniciar) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no se pudo guardar config.json");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, reiniciar ? "{\"ok\":true,\"reiniciar\":true}" : "{\"ok\":true,\"reiniciar\":false}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_configurar_snmp = {
+    .uri = "/configurar_snmp", .method = HTTP_POST, .handler = configurar_snmp_handler,
+};
+
+// Nombre del sitio: 1..31 caracteres ASCII visibles (SNMP DisplayString no
+// admite tildes ni ñ). Vacio = 'por_defecto'. NULL si es invalido.
+static const char *nombre_sitio(const cJSON *item, const char *por_defecto, const char **error)
+{
+    if (!cJSON_IsString(item)) {
+        *error = "falta un nombre (string)";
+        return NULL;
+    }
+    const char *nombre = item->valuestring[0] ? item->valuestring : por_defecto;
+    size_t largo = strlen(nombre);
+    if (largo > 31) {
+        *error = "nombre demasiado largo (max. 31)";
+        return NULL;
+    }
+    for (size_t j = 0; j < largo; j++) {
+        if (nombre[j] < ' ' || nombre[j] > '~') {
+            *error = "nombre invalido: sin tildes ni enie (SNMP solo admite ASCII)";
+            return NULL;
+        }
+    }
+    return nombre;
+}
+
+// POST /configurar_sitio -- body JSON {"equipo":"...","aires":["..." x 4],
+// "sensores":[{"nombre":"...","instalado":bool} x 6]}. "equipo" es el
+// sysName de SNMP y el titulo del panel.
+static esp_err_t configurar_sitio_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
+
+    char body[1024];
+    if (req->content_len >= sizeof(body)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body demasiado grande");
+        return ESP_FAIL;
+    }
+    int recibidos = 0;
+    while (recibidos < (int)req->content_len) {
+        int len = httpd_req_recv(req, body + recibidos, req->content_len - recibidos);
+        if (len <= 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body vacio o invalido");
+            return ESP_FAIL;
+        }
+        recibidos += len;
+    }
+    body[recibidos] = '\0';
+
+    cJSON *raiz = cJSON_Parse(body);
+    const cJSON *lista = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "sensores") : NULL;
+    const cJSON *aires = raiz ? cJSON_GetObjectItemCaseSensitive(raiz, "aires") : NULL;
+    if (!cJSON_IsArray(lista) || cJSON_GetArraySize(lista) != 6 ||
+        !cJSON_IsArray(aires) || cJSON_GetArraySize(aires) != 4) {
+        cJSON_Delete(raiz);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "faltan \"sensores\" (6) o \"aires\" (4)");
+        return ESP_FAIL;
+    }
+
+    static const char *const sensores_defecto[6] = { "T. Operacion 1", "T. Operacion 2", "T. Inyeccion 1",
+                                                      "T. Inyeccion 2", "Gestor", "Sensor 6" };
+    static const char *const aires_defecto[4] = { "AA1", "AA2", "AA3", "AA4" };
+    const char *error = NULL;
+    const char *equipo = nombre_sitio(cJSON_GetObjectItemCaseSensitive(raiz, "equipo"), "controlador_braindlab",
+                                      &error);
+    const char *nombres_aires[4];
+    for (int i = 0; i < 4 && !error; i++) {
+        nombres_aires[i] = nombre_sitio(cJSON_GetArrayItem(aires, i), aires_defecto[i], &error);
+    }
+    const char *nombres[6];
+    bool instalado[6];
+    for (int i = 0; i < 6 && !error; i++) {
+        const cJSON *item = cJSON_GetArrayItem(lista, i);
+        const cJSON *inst = cJSON_GetObjectItemCaseSensitive(item, "instalado");
+        nombres[i] = nombre_sitio(cJSON_GetObjectItemCaseSensitive(item, "nombre"), sensores_defecto[i], &error);
+        if (!error && !cJSON_IsBool(inst)) {
+            error = "cada sensor necesita \"instalado\" (bool)";
+        }
+        instalado[i] = cJSON_IsTrue(inst);
+    }
+
+    esp_err_t err = ESP_FAIL;
+    if (!error && s_callbacks.on_configurar_sitio) {
+        err = s_callbacks.on_configurar_sitio(equipo, nombres_aires, nombres, instalado);
+    }
+    cJSON_Delete(raiz); // despues del callback: los nombres apuntan adentro del JSON
+
+    if (error) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, error);
+        return ESP_FAIL;
+    }
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no se pudo guardar config.json");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_configurar_sitio = {
+    .uri = "/configurar_sitio", .method = HTTP_POST, .handler = configurar_sitio_handler,
+};
+
+// POST /snmp_prueba -- encola el trap de prueba hacia los gestores habilitados.
+static esp_err_t snmp_prueba_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
+    esp_err_t err = snmp_braindlab_trap_prueba();
+    httpd_resp_set_type(req, "application/json");
+    if (err == ESP_OK) {
+        httpd_resp_sendstr(req, "{\"ok\":true}");
+    } else if (err == ESP_ERR_NOT_FOUND) {
+        httpd_resp_sendstr(req, "{\"ok\":false,\"mensaje\":\"no hay ningun gestor habilitado (guardar primero)\"}");
+    } else {
+        httpd_resp_sendstr(req, "{\"ok\":false,\"mensaje\":\"agente SNMP sin arrancar o sin cable de red\"}");
+    }
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_snmp_prueba = {
+    .uri = "/snmp_prueba", .method = HTTP_POST, .handler = snmp_prueba_handler,
 };
 
 // POST /control_aire -- body JSON {"indice":0-3,"encendido":bool}. Fuerza a
@@ -1149,7 +1465,7 @@ esp_err_t servidor_web_init(void)
     // servidor_web_enviar_ws() corre en tarea_climatizacion: un cliente
     // que no recibe no debe trabarla los 5 s del default por cada envio.
     config.send_wait_timeout = 2;
-    config.max_uri_handlers = 40; // 34 rutas registradas (27 + login/root.html + comun.js + 4 de auth_web.c), con margen
+    config.max_uri_handlers = 40; // 37 rutas registradas (30 + login/root.html + comun.js + 4 de auth_web.c), con margen
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -1171,6 +1487,9 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_eliminar);
     httpd_register_uri_handler(s_servidor, &s_uri_configurar_red);
     httpd_register_uri_handler(s_servidor, &s_uri_configurar_climatizacion);
+    httpd_register_uri_handler(s_servidor, &s_uri_configurar_snmp);
+    httpd_register_uri_handler(s_servidor, &s_uri_snmp_prueba);
+    httpd_register_uri_handler(s_servidor, &s_uri_configurar_sitio);
     httpd_register_uri_handler(s_servidor, &s_uri_control_aire);
     httpd_register_uri_handler(s_servidor, &s_uri_control_bypass);
     httpd_register_uri_handler(s_servidor, &s_uri_control_at);

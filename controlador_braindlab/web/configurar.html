@@ -71,6 +71,89 @@
       </div>
     </form>
 
+    <form class="tarjeta tarjeta-form ancho" id="form-sitio" autocomplete="off">
+      <div>
+        <h2><i>&#9873;</i>Sitio</h2>
+        <p class="sub">Nombres que se ven en el panel y en SNMP, y que sensores hay conectados. Se aplica al guardar, sin reiniciar.</p>
+      </div>
+
+      <p class="grupo">Equipo</p>
+      <label>Nombre del equipo (titulo del panel y sysName de SNMP)
+        <input type="text" id="sitio-equipo" placeholder="controlador_braindlab" maxlength="31">
+      </label>
+
+      <p class="grupo">Aires</p>
+      <div class="campos cuatro">
+        <label>AA1 <input type="text" id="sitio-aire-1" placeholder="AA1" maxlength="31"></label>
+        <label>AA2 <input type="text" id="sitio-aire-2" placeholder="AA2" maxlength="31"></label>
+        <label>AA3 <input type="text" id="sitio-aire-3" placeholder="AA3" maxlength="31"></label>
+        <label>AA4 <input type="text" id="sitio-aire-4" placeholder="AA4" maxlength="31"></label>
+      </div>
+
+      <p class="grupo">Sensores</p>
+      <div class="destinos tres">
+        <div>
+          <p class="hw"><b>Sensor 1</b>NTC T1</p>
+          <label>Nombre
+            <input type="text" id="sens-nombre-1" maxlength="31">
+          </label>
+          <label class="interruptor"><input type="checkbox" id="sens-inst-1"> Instalado</label>
+        </div>
+        <div>
+          <p class="hw"><b>Sensor 2</b>NTC T2</p>
+          <label>Nombre
+            <input type="text" id="sens-nombre-2" maxlength="31">
+          </label>
+          <label class="interruptor"><input type="checkbox" id="sens-inst-2"> Instalado</label>
+        </div>
+        <div>
+          <p class="hw"><b>Sensor 3</b>NTC T3</p>
+          <label>Nombre
+            <input type="text" id="sens-nombre-3" maxlength="31">
+          </label>
+          <label class="interruptor"><input type="checkbox" id="sens-inst-3"> Instalado</label>
+        </div>
+        <div>
+          <p class="hw"><b>Sensor 4</b>NTC T4</p>
+          <label>Nombre
+            <input type="text" id="sens-nombre-4" maxlength="31">
+          </label>
+          <label class="interruptor"><input type="checkbox" id="sens-inst-4"> Instalado</label>
+        </div>
+        <div>
+          <p class="hw"><b>Sensor 5</b>AM2301A &middot; temperatura y humedad</p>
+          <label>Nombre
+            <input type="text" id="sens-nombre-5" maxlength="31">
+          </label>
+          <label class="interruptor"><input type="checkbox" id="sens-inst-5"> Instalado</label>
+        </div>
+        <div class="sin-hw">
+          <p class="hw"><b>Sensor 6</b>Sin hardware todavia</p>
+          <label>Nombre
+            <input type="text" id="sens-nombre-6" maxlength="31" disabled>
+          </label>
+          <label class="interruptor"><input type="checkbox" id="sens-inst-6" disabled> Instalado</label>
+        </div>
+      </div>
+
+      <details>
+        <summary>Como funciona</summary>
+        <p>
+          Un sensor no instalado se oculta del panel, no cuenta para encender o apagar
+          los aires y no genera alarmas ni traps. En SNMP su fila sigue existiendo
+          (los OIDs son iguales en todos los sitios) pero figura como noInstalado.
+          Los nombres se ven en el panel y en SNMP (sysName, bdlControlNombre,
+          bdlSensorNombre): sin tildes ni enie. Vacio = nombre por defecto. Cuantos
+          aires se usan se elige en Climatizacion.
+        </p>
+      </details>
+
+      <div class="acciones">
+        <p class="mensaje" id="sitio-mensaje"></p>
+        <button class="guardar" type="submit">Guardar sitio</button>
+      </div>
+    </form>
+
     <form class="tarjeta tarjeta-form" id="form-red">
       <div>
         <h2><i>&#8644;</i>Red</h2>
@@ -78,10 +161,10 @@
       </div>
       <div class="campos">
         <label>IP
-          <input type="text" id="red-ip" placeholder="192.168.5.95" required>
+          <input type="text" id="red-ip" placeholder="192.168.0.91" required>
         </label>
         <label>Gateway
-          <input type="text" id="red-gateway" placeholder="192.168.5.1" required>
+          <input type="text" id="red-gateway" placeholder="192.168.0.1" required>
         </label>
         <label>Mascara
           <input type="text" id="red-mascara" placeholder="255.255.255.0" required>
@@ -104,6 +187,75 @@
       <div class="acciones">
         <p class="mensaje" id="rtc-mensaje"></p>
         <button class="guardar" type="submit">Guardar hora</button>
+      </div>
+    </form>
+
+    <form class="tarjeta tarjeta-form ancho" id="form-snmp" autocomplete="off">
+      <div>
+        <h2><i>&#9993;</i>SNMP</h2>
+        <p class="sub">Agente v1/v2c en UDP 161. Los traps (v2c) salen al puerto 162 de cada gestor.</p>
+      </div>
+
+      <p class="grupo">Gestores (destino de traps)</p>
+      <div class="destinos">
+        <div>
+          <label>IP del gestor 1
+            <input type="text" id="snmp-trap1-ip" placeholder="192.168.0.10" inputmode="decimal">
+          </label>
+          <label class="interruptor"><input type="checkbox" id="snmp-trap1-hab"> Enviar traps</label>
+        </div>
+        <div>
+          <label>IP del gestor 2 (opcional)
+            <input type="text" id="snmp-trap2-ip" placeholder="0.0.0.0" inputmode="decimal">
+          </label>
+          <label class="interruptor"><input type="checkbox" id="snmp-trap2-hab"> Enviar traps</label>
+        </div>
+      </div>
+
+      <p class="grupo">Control remoto</p>
+      <label class="interruptor"><input type="checkbox" id="snmp-escritura-hab"> Permitir control por SNMP (SET)</label>
+      <p class="sub">Apagado = el gestor solo monitorea. Encendido = con la community de escritura se pueden
+        prender y apagar aires, forzar el bypass y calibrar. Activarlo solo si el NOC lo necesita.</p>
+
+      <p class="grupo">Communities (contrasenas SNMP)</p>
+      <div class="campos">
+        <label>Lectura (GET)
+          <input type="text" id="snmp-com-lectura" placeholder="public" maxlength="31">
+        </label>
+        <label>Escritura (SET)
+          <input type="password" id="snmp-com-escritura" placeholder="(sin cambios)" maxlength="31">
+        </label>
+        <label>Traps
+          <input type="text" id="snmp-com-trap" placeholder="public" maxlength="31">
+        </label>
+      </div>
+
+      <p class="grupo">Identificacion del equipo (el nombre se edita en Sitio)</p>
+      <div class="campos">
+        <label>Ubicacion (sysLocation)
+          <input type="text" id="snmp-ubicacion" placeholder="Sala de equipos, piso 2" maxlength="47">
+        </label>
+        <label>Contacto (sysContact)
+          <input type="text" id="snmp-contacto" placeholder="soporte@empresa.com" maxlength="47">
+        </label>
+      </div>
+
+      <details>
+        <summary>Como funciona</summary>
+        <p>
+          Los gestores, sus interruptores y la identificacion se aplican al guardar.
+          Las communities se aplican al reiniciar el equipo. La de escritura permite
+          prender y apagar los aires por SNMP: se deja vacia para no cambiarla y no
+          puede ser igual a la de lectura. Para ver nombres en vez de numeros, cargar
+          BRAINDTIC-MIB.txt en el gestor. "Enviar trap de prueba" manda bdlTrapPrueba
+          a los gestores habilitados (guardar antes).
+        </p>
+      </details>
+
+      <div class="acciones">
+        <p class="mensaje" id="snmp-mensaje"></p>
+        <button class="guardar secundario" type="button" id="btn-snmp-prueba">Enviar trap de prueba</button>
+        <button class="guardar" type="submit">Guardar SNMP</button>
       </div>
     </form>
 
@@ -183,6 +335,9 @@
     // existe (nunca se guardo nada) o no tiene seccion "red" -- primer
     // arranque del equipo, por ejemplo -- se deja el placeholder como esta,
     // no es un error.
+    // Nombres de los aires del sitio (config.json, clave "aires").
+    let nombresAires = ['AA1', 'AA2', 'AA3', 'AA4'];
+
     // Opciones del selector "aire que descansa": AA1..AA<cantidad>.
     function armarOpcionesAlternar(elegido) {
       const sel = document.getElementById('clima-alternar');
@@ -192,13 +347,37 @@
       for (let i = 1; i <= cantidad; i++) {
         const op = document.createElement('option');
         op.value = i;
-        op.textContent = 'AA' + i;
+        const nombre = nombresAires[i - 1];
+        op.textContent = nombre && nombre !== 'AA' + i ? 'AA' + i + ' - ' + nombre : 'AA' + i;
         sel.appendChild(op);
       }
       sel.value = actual <= cantidad ? actual : 1;
       sel.disabled = cantidad === 1; // 1+0: no hay reserva
     }
     document.getElementById('clima-cantidad').addEventListener('input', () => armarOpcionesAlternar());
+
+    // Sensores 1..6: mismos defaults que SENSORES_*_DEFAULT del firmware
+    // (config.json sin seccion "sensores" = primer arranque).
+    const SENSORES_DEFAULT = ['T. Operacion 1', 'T. Operacion 2', 'T. Inyeccion 1', 'T. Inyeccion 2', 'Gestor', 'Sensor 6'];
+    function precargarSensores(lista) {
+      SENSORES_DEFAULT.forEach((porDefecto, i) => {
+        const s = Array.isArray(lista) ? lista[i] : null;
+        document.getElementById('sens-nombre-' + (i + 1)).value = (s && s.nombre) || porDefecto;
+        document.getElementById('sens-inst-' + (i + 1)).checked = s ? s.instalado === true : i < 5;
+        // El selector de calibracion muestra el nombre del sitio.
+        const op = document.querySelector('#calib-sensor option[value="t' + (i + 1) + '"]');
+        if (op) op.textContent = 'Sensor ' + (i + 1) + ' - ' + ((s && s.nombre) || porDefecto);
+      });
+    }
+    precargarSensores(null);
+
+    function precargarAires(lista) {
+      if (Array.isArray(lista)) {
+        nombresAires = nombresAires.map((porDefecto, i) => (typeof lista[i] === 'string' && lista[i]) || porDefecto);
+      }
+      nombresAires.forEach((nombre, i) => { document.getElementById('sitio-aire-' + (i + 1)).value = nombre; });
+    }
+    precargarAires(null);
 
     function precargarRed() {
       fetch('/descargar?nombre=config.json')
@@ -224,7 +403,23 @@
                 'Ultima rotacion: semana del martes ' + c.ultima_rotacion + '.';
             }
           }
+          precargarAires(datos && datos.aires);
           armarOpcionesAlternar(c && c.aire_alternar);
+          precargarSensores(datos && datos.sensores);
+          const sn = datos && datos.snmp;
+          if (sn) {
+            const texto = (id, v) => { if (typeof v === 'string') document.getElementById(id).value = v; };
+            texto('snmp-trap1-ip', sn.trap1_ip === '0.0.0.0' ? '' : sn.trap1_ip);
+            texto('snmp-trap2-ip', sn.trap2_ip === '0.0.0.0' ? '' : sn.trap2_ip);
+            document.getElementById('snmp-trap1-hab').checked = sn.trap1_habilitado === true;
+            document.getElementById('snmp-trap2-hab').checked = sn.trap2_habilitado === true;
+            document.getElementById('snmp-escritura-hab').checked = sn.escritura_habilitada === true;
+            texto('snmp-com-lectura', sn.community_lectura);
+            texto('snmp-com-trap', sn.community_trap);
+            if (sn.nombre) document.getElementById('sitio-equipo').value = sn.nombre;
+            texto('snmp-ubicacion', sn.ubicacion);
+            texto('snmp-contacto', sn.contacto);
+          }
         })
         .catch(() => armarOpcionesAlternar()); // config.json no existe todavia -- se dejan los placeholders
     }
@@ -284,6 +479,72 @@
           mostrarMensaje(mensaje, 'Guardado.', 'ok');
         })
         .catch(() => mostrarMensaje(mensaje, 'No se pudo guardar (revisar los valores).', 'error'));
+    });
+
+    // Respuesta de error del controlador: httpd_resp_send_err manda el motivo como texto.
+    const motivo = (r) => r.text().then((t) => { throw new Error(t || 'error'); });
+
+    document.getElementById('form-sitio').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const mensaje = document.getElementById('sitio-mensaje');
+      const equipo = document.getElementById('sitio-equipo').value.trim();
+      const aires = [1, 2, 3, 4].map((n) => document.getElementById('sitio-aire-' + n).value.trim());
+      const sensores = SENSORES_DEFAULT.map((_, i) => ({
+        nombre: document.getElementById('sens-nombre-' + (i + 1)).value.trim(),
+        instalado: document.getElementById('sens-inst-' + (i + 1)).checked,
+      }));
+      const textos = [equipo, ...aires, ...sensores.map((s) => s.nombre)];
+      if (textos.some((t) => /[^\x20-\x7e]/.test(t))) {
+        mostrarMensaje(mensaje, 'Los nombres no pueden llevar tildes ni enie (SNMP solo admite ASCII).', 'error');
+        return;
+      }
+      fetch('/configurar_sitio', { method: 'POST', body: JSON.stringify({ equipo, aires, sensores }) })
+        .then((r) => (r.ok ? r.json() : motivo(r)))
+        .then(() => {
+          precargarSensores(sensores.map((s, i) => ({ nombre: s.nombre || SENSORES_DEFAULT[i], instalado: s.instalado })));
+          precargarAires(aires.map((a, i) => a || 'AA' + (i + 1)));
+          armarOpcionesAlternar();
+          mostrarMensaje(mensaje, 'Guardado y aplicado.', 'ok');
+        })
+        .catch((e) => mostrarMensaje(mensaje, 'No se pudo guardar: ' + e.message, 'error'));
+    });
+
+    document.getElementById('form-snmp').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const mensaje = document.getElementById('snmp-mensaje');
+      const valor = (id) => document.getElementById(id).value.trim();
+      const cuerpo = {
+        trap1_ip: valor('snmp-trap1-ip'),
+        trap1_habilitado: document.getElementById('snmp-trap1-hab').checked,
+        trap2_ip: valor('snmp-trap2-ip'),
+        trap2_habilitado: document.getElementById('snmp-trap2-hab').checked,
+        escritura_habilitada: document.getElementById('snmp-escritura-hab').checked,
+        ubicacion: valor('snmp-ubicacion'),
+        contacto: valor('snmp-contacto'),
+      };
+      // Communities vacias no se mandan: el controlador conserva la actual.
+      [['community_lectura', 'snmp-com-lectura'], ['community_escritura', 'snmp-com-escritura'],
+       ['community_trap', 'snmp-com-trap']].forEach(([clave, id]) => { if (valor(id)) cuerpo[clave] = valor(id); });
+
+      fetch('/configurar_snmp', { method: 'POST', body: JSON.stringify(cuerpo) })
+        .then((r) => (r.ok ? r.json() : motivo(r)))
+        .then((d) => {
+          document.getElementById('snmp-com-escritura').value = '';
+          mostrarMensaje(mensaje, d.reiniciar
+            ? 'Guardado. Las communities nuevas se aplican al reiniciar el equipo.'
+            : 'Guardado y aplicado.', 'ok');
+        })
+        .catch((e) => mostrarMensaje(mensaje, 'No se pudo guardar: ' + e.message, 'error'));
+    });
+
+    document.getElementById('btn-snmp-prueba').addEventListener('click', () => {
+      const mensaje = document.getElementById('snmp-mensaje');
+      fetch('/snmp_prueba', { method: 'POST' })
+        .then((r) => r.json())
+        .then((d) => mostrarMensaje(mensaje, d.ok
+          ? 'Trap de prueba enviado. Revisar que llego al gestor.'
+          : 'No se envio: ' + d.mensaje, d.ok ? 'ok' : 'error'))
+        .catch(() => mostrarMensaje(mensaje, 'Sin respuesta del controlador.', 'error'));
     });
 
     document.getElementById('form-calibracion').addEventListener('submit', (ev) => {

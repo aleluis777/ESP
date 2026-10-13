@@ -77,6 +77,19 @@ static volatile float s_calib_ntc[4];
 static volatile float s_calib_temp_gestor;
 static volatile float s_calib_humedad_gestor;
 
+// Sensores 1..6 instalados y sus nombres (config.json, seccion "sensores").
+// Los cambia on_configurar_sitio() en caliente desde el servidor web;
+// tarea_climatizacion solo copia instalado[] a cada vuelta.
+static config_sensores_t s_sensores;
+static portMUX_TYPE s_lock_sensores = portMUX_INITIALIZER_UNLOCKED;
+
+static void leer_sensores_instalados(bool instalado[CONFIG_NUM_SENSORES])
+{
+    taskENTER_CRITICAL(&s_lock_sensores);
+    memcpy(instalado, s_sensores.instalado, sizeof(s_sensores.instalado));
+    taskEXIT_CRITICAL(&s_lock_sensores);
+}
+
 // Ultimas lecturas CRUDAS (sin calibrar) de cada sensor, actualizadas por
 // tarea_climatizacion cada 2s -- la unica que le pega al hardware
 // (sensores_temp_leer() no es segura para llamarse desde dos tareas a la
@@ -119,11 +132,12 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
                                 const bool salida_aplicada[4], bool bypass_aplicado, bool alarma_at_aplicada,
                                 const char *fecha_hora, bool gestor_ok, float temp_gestor, float humedad_gestor,
                                 const modbus_lectura_t *energia, bool rtc_ok, bool rtc_detenido, bool adc_ok,
-                                const bool ntc_ok[4])
+                                const bool ntc_ok[4], uint8_t cantidad_aires,
+                                const bool sensor_instalado[CONFIG_NUM_SENSORES])
 {
     bool modo_manual = hay_algun_override_manual();
 
-    char json[860];
+    char json[960];
     snprintf(json, sizeof(json),
              "{\"ciclo\":%d,"
              "\"temperaturas\":[%.1f,%.1f,%.1f,%.1f],"
@@ -149,7 +163,9 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
              "\"rtc_ok\":%s,"
              "\"rtc_detenido\":%s,"
              "\"adc_ok\":%s,"
-             "\"ntc_ok\":[%s,%s,%s,%s]}",
+             "\"ntc_ok\":[%s,%s,%s,%s],"
+             "\"n_aires\":%u,"
+             "\"sens_inst\":[%d,%d,%d,%d,%d,%d]}",
              (int)estado->ciclo,
              temperaturas[0], temperaturas[1], temperaturas[2], temperaturas[3],
              salida_aplicada[0] ? "true" : "false",
@@ -182,7 +198,10 @@ static void publicar_estado_ws(const float temperaturas[4], const clima_estado_t
              ntc_ok[0] ? "true" : "false",
              ntc_ok[1] ? "true" : "false",
              ntc_ok[2] ? "true" : "false",
-             ntc_ok[3] ? "true" : "false");
+             ntc_ok[3] ? "true" : "false",
+             (unsigned)cantidad_aires,
+             sensor_instalado[0], sensor_instalado[1], sensor_instalado[2],
+             sensor_instalado[3], sensor_instalado[4], sensor_instalado[5]);
     servidor_web_enviar_ws(json);
 }
 
@@ -283,12 +302,28 @@ static void tarea_climatizacion(void *arg)
         // sensores_temp_ok (SNMP): todo bien, chip y los 4 NTC.
         bool ntc_ok[4];
         bool adc_ok = sensores_temp_leer(temperaturas_crudas, sin_calibrar, ntc_ok) == ESP_OK;
-        bool sensores_temp_ok = adc_ok && ntc_ok[0] && ntc_ok[1] && ntc_ok[2] && ntc_ok[3];
+        // Solo cuentan los sensores instalados (Configuracion > Sensores): uno
+        // no instalado no genera alarma ni participa del control.
+        bool instalado[CONFIG_NUM_SENSORES];
+        leer_sensores_instalados(instalado);
+        bool hay_ntc_instalado = false;
+        bool ntc_instalados_ok = true;
+        for (int i = 0; i < 4; i++) {
+            if (instalado[i]) {
+                hay_ntc_instalado = true;
+                ntc_instalados_ok = ntc_instalados_ok && ntc_ok[i];
+            }
+        }
+        bool sensores_temp_ok = !hay_ntc_instalado || (adc_ok && ntc_instalados_ok);
         for (int i = 0; i < 4; i++) {
             s_ultimas_temperaturas_crudas[i] = temperaturas_crudas[i];
             temperaturas[i] = temperaturas_crudas[i] + s_calib_ntc[i];
         }
-        climatizacion_actualizar(temperaturas, &cfg, &estado);
+        bool validas[4];
+        for (int i = 0; i < 4; i++) {
+            validas[i] = ntc_ok[i] && instalado[i]; // instalado y leido bien en esta vuelta
+        }
+        climatizacion_actualizar(temperaturas, validas, &cfg, &estado);
 
         float temp_gestor_leido, humedad_gestor_leido;
         gestor_ok = sensor_gestor_leer(&temp_gestor_leido, &humedad_gestor_leido, 0.0f, 0.0f) == ESP_OK;
@@ -344,15 +379,15 @@ static void tarea_climatizacion(void *arg)
 
         publicar_estado_ws(temperaturas, &estado, salida_aplicada, bypass_aplicado, alarma_at_aplicada,
                            fecha_hora, gestor_ok, temp_gestor, humedad_gestor, &energia,
-                           rtc_ok, rtc_braindlab_detenido(), adc_ok, ntc_ok);
+                           rtc_ok, rtc_braindlab_detenido(), adc_ok, ntc_ok, cfg.cantidad_aires, instalado);
 
         // Estado de cada modulo en tiempo real, para la pantalla (bitmask,
         // ver BRAINDLAB_FALLA_* en protocolo_braindlab.h). La web recibe lo
         // mismo pero como campos sueltos en el JSON.
         uint8_t fallas = 0;
         if (!rtc_ok || rtc_braindlab_detenido())       fallas |= BRAINDLAB_FALLA_RTC;
-        if (!adc_ok)                                   fallas |= BRAINDLAB_FALLA_ADC;
-        if (!gestor_ok)                                fallas |= BRAINDLAB_FALLA_GESTOR;
+        if (!adc_ok && hay_ntc_instalado)              fallas |= BRAINDLAB_FALLA_ADC;
+        if (!gestor_ok && instalado[4])                fallas |= BRAINDLAB_FALLA_GESTOR;
         if (!red_eth_esta_conectado())                 fallas |= BRAINDLAB_FALLA_ETH;
         if (!energia.ok)                               fallas |= BRAINDLAB_FALLA_MODBUS;
         if (registro_sd_estado() != REGISTRO_SD_OK)    fallas |= BRAINDLAB_FALLA_SD;
@@ -385,7 +420,7 @@ static void tarea_climatizacion(void *arg)
         snmp_braindlab_estado_t estado_snmp = {
             .ciclo = (uint8_t)estado.ciclo,
             .sensores_temp_ok = sensores_temp_ok,
-            .gestor_ok = gestor_ok,
+            .gestor_ok = gestor_ok || !instalado[4], // no instalado: sin alarma de gabinete
             .temp_gestor = temp_gestor,
             .humedad_gestor = humedad_gestor,
             .rtc_ok = rtc_ok,
@@ -404,8 +439,15 @@ static void tarea_climatizacion(void *arg)
             .temp_bypass = cfg.temp_bypass,
             .calibracion = { s_calib_ntc[0], s_calib_ntc[1], s_calib_ntc[2], s_calib_ntc[3],
                              s_calib_temp_gestor, s_calib_humedad_gestor },
+            .energia_ok = energia.ok,
         };
+        for (int i = 0; i < MODBUS_NUM_FASES && i < 3; i++) {
+            estado_snmp.voltajes[i] = energia.voltajes[i];
+            estado_snmp.corrientes[i] = energia.corrientes[i];
+        }
         for (int i = 0; i < 4; i++) {
+            estado_snmp.ntc_ok[i] = ntc_ok[i];
+            estado_snmp.fails[i] = estado.fails[i];
             estado_snmp.temperaturas[i] = temperaturas[i];
             estado_snmp.salida_aire[i] = salida_aplicada[i];
             estado_snmp.aire_manual[i] = aire_manual_actual[i];
@@ -615,6 +657,47 @@ static void on_calibrar_sensor(const char *sensor, float valor_referencia)
     snmp_braindlab_notificar_calibracion(indice_sensor, nueva_constante);
 }
 
+// POST /configurar_sitio: nombre del equipo (= sysName de SNMP), nombres de
+// los aires y nombres/instalado de los sensores 1..6 (ya validados por
+// servidor_web.c). Se guarda y se aplica en caliente: el control, las
+// alarmas, el panel y SNMP lo usan desde la proxima vuelta.
+static esp_err_t on_configurar_sitio(const char *equipo, const char *const aires[4],
+                                     const char *const nombres[CONFIG_NUM_SENSORES],
+                                     const bool instalado[CONFIG_NUM_SENSORES])
+{
+    config_sensores_t nuevo;
+    for (int i = 0; i < CONFIG_NUM_SENSORES; i++) {
+        strlcpy(nuevo.nombre[i], nombres[i], sizeof(nuevo.nombre[i]));
+        nuevo.instalado[i] = instalado[i];
+    }
+    nuevo.instalado[CONFIG_NUM_SENSORES - 1] = false; // sensor 6: sin hardware todavia
+    for (int i = 0; i < 4; i++) {
+        strlcpy(nuevo.nombre_aire[i], aires[i], sizeof(nuevo.nombre_aire[i]));
+    }
+
+    taskENTER_CRITICAL(&s_lock_sensores);
+    s_sensores = nuevo;
+    taskEXIT_CRITICAL(&s_lock_sensores);
+    snmp_braindlab_set_sensores(&nuevo);
+
+    esp_err_t err = config_braindlab_guardar_sensores(&nuevo);
+
+    // El nombre del equipo vive en la seccion "snmp" (sysName).
+    config_snmp_t snmp;
+    config_braindlab_cargar_snmp(&snmp);
+    if (strcmp(snmp.nombre, equipo) != 0) {
+        strlcpy(snmp.nombre, equipo, sizeof(snmp.nombre));
+        bool reiniciar; // solo aplica a communities, aca no cambian
+        if (snmp_braindlab_configurar(&snmp, &reiniciar) != ESP_OK) {
+            err = ESP_FAIL;
+        }
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "configurar_sitio: no se pudo guardar config.json (queda aplicado en RAM igual)");
+    }
+    return err;
+}
+
 // POST /sd_formatear (la confirmacion ya la valido servidor_web.c). 60 s
 // de margen: formatear una tarjeta grande por SPI tarda varios segundos.
 static esp_err_t on_formatear_sd(void)
@@ -666,7 +749,11 @@ void app_main(void)
         ESP_LOGE(TAG, "modbus_braindlab_init() fallo (%s) -- sigue sin medidor", esp_err_to_name(err_mb));
     }
 
-    xTaskCreate(tarea_climatizacion, "tarea_climatizacion", 4096, NULL, 5, NULL);
+    config_braindlab_cargar_sensores(&s_sensores);
+    snmp_braindlab_set_sensores(&s_sensores);
+
+    // 6144: el JSON del WS (960 B) + snprintf con floats + la foto SNMP van en stack.
+    xTaskCreate(tarea_climatizacion, "tarea_climatizacion", 6144, NULL, 5, NULL);
 
     // Registrar los callbacks ANTES de levantar el servidor web, mismo
     // criterio que controlador_labgeo.
@@ -680,6 +767,7 @@ void app_main(void)
         .on_configurar_rtc = on_configurar_rtc,
         .on_calibrar_sensor = on_calibrar_sensor,
         .on_formatear_sd = on_formatear_sd,
+        .on_configurar_sitio = on_configurar_sitio,
     };
     servidor_web_set_callbacks(web_cbs);
 
@@ -714,7 +802,7 @@ void app_main(void)
     } else {
         esp_err_t err_web = servidor_web_init();
         if (err_web == ESP_OK) {
-            ESP_LOGI(TAG, "servidor_web_init() OK -- probar http://192.168.5.95/");
+            ESP_LOGI(TAG, "servidor_web_init() OK -- probar http://192.168.0.91/");
         } else {
             ESP_LOGE(TAG, "servidor_web_init() fallo (%s)", esp_err_to_name(err_web));
         }

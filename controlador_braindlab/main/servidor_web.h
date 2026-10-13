@@ -92,6 +92,13 @@ typedef void (*servidor_web_cb_calibrar_sensor_t)(const char *sensor, float valo
 // navegador (ESP_ERR_NOT_FOUND = no hay tarjeta, ver registro_sd_formatear()).
 typedef esp_err_t (*servidor_web_cb_formatear_sd_t)(void);
 
+// Llego POST /configurar_sitio con {"equipo":"...","aires":["..." x 4],
+// "sensores":[{"nombre":"...","instalado":bool} x 6]} (servidor_web.c ya
+// valido largos y caracteres). Los punteros valen solo durante la llamada.
+// Se aplica en caliente.
+typedef esp_err_t (*servidor_web_cb_configurar_sitio_t)(const char *equipo, const char *const aires[4],
+                                                         const char *const sensores[6], const bool instalado[6]);
+
 typedef struct {
     servidor_web_cb_configurar_red_t on_configurar_red;                       // llego POST /configurar_red
     servidor_web_cb_configurar_climatizacion_t on_configurar_climatizacion;   // llego POST /configurar_climatizacion
@@ -102,6 +109,7 @@ typedef struct {
     servidor_web_cb_configurar_rtc_t on_configurar_rtc;                       // llego POST /configurar_rtc
     servidor_web_cb_calibrar_sensor_t on_calibrar_sensor;                     // llego POST /calibrar_sensor
     servidor_web_cb_formatear_sd_t on_formatear_sd;                           // llego POST /sd_formatear
+    servidor_web_cb_configurar_sitio_t on_configurar_sitio;                   // llego POST /configurar_sitio
 } servidor_web_callbacks_t;
 
 // Registrar ANTES de llamar a servidor_web_init(), mismo criterio que

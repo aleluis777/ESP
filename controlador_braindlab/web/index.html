@@ -22,8 +22,8 @@
 
     <main>
         <section class="fila-gauges">
-            <article class="tarjeta tarjeta-gauge" data-color="op1">
-                <header><i class="icono-metrica">&#127777;</i> T. Operacion 1</header>
+            <article class="tarjeta tarjeta-gauge" data-color="op1" data-sensor="1">
+                <header><i class="icono-metrica">&#127777;</i> <span data-nombre-sensor="1">T. Operacion 1</span></header>
                 <p class="valor-metrica" id="op1-valor">-- &deg;C</p>
                 <svg class="gauge sin-dato" viewBox="0 0 200 110" aria-hidden="true">
                     <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
@@ -38,8 +38,8 @@
                 <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
             </article>
 
-            <article class="tarjeta tarjeta-gauge" data-color="op2">
-                <header><i class="icono-metrica">&#127777;</i> T. Operacion 2</header>
+            <article class="tarjeta tarjeta-gauge" data-color="op2" data-sensor="2">
+                <header><i class="icono-metrica">&#127777;</i> <span data-nombre-sensor="2">T. Operacion 2</span></header>
                 <p class="valor-metrica" id="op2-valor">-- &deg;C</p>
                 <svg class="gauge sin-dato" viewBox="0 0 200 110" aria-hidden="true">
                     <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
@@ -54,8 +54,8 @@
                 <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
             </article>
 
-            <article class="tarjeta tarjeta-gauge" data-color="iny1">
-                <header><i class="icono-metrica">&#127777;</i> T. Inyeccion 1</header>
+            <article class="tarjeta tarjeta-gauge" data-color="iny1" data-sensor="3">
+                <header><i class="icono-metrica">&#127777;</i> <span data-nombre-sensor="3">T. Inyeccion 1</span></header>
                 <p class="valor-metrica" id="iny1-valor">-- &deg;C</p>
                 <svg class="gauge sin-dato" viewBox="0 0 200 110" aria-hidden="true">
                     <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
@@ -70,8 +70,8 @@
                 <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
             </article>
 
-            <article class="tarjeta tarjeta-gauge" data-color="iny2">
-                <header><i class="icono-metrica">&#127777;</i> T. Inyeccion 2</header>
+            <article class="tarjeta tarjeta-gauge" data-color="iny2" data-sensor="4">
+                <header><i class="icono-metrica">&#127777;</i> <span data-nombre-sensor="4">T. Inyeccion 2</span></header>
                 <p class="valor-metrica" id="iny2-valor">-- &deg;C</p>
                 <svg class="gauge sin-dato" viewBox="0 0 200 110" aria-hidden="true">
                     <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
@@ -86,8 +86,8 @@
                 <div class="chispa-ejes"><span>-60m</span><span>-45m</span><span>-30m</span><span>-15m</span><span>0m</span></div>
             </article>
 
-            <article class="tarjeta tarjeta-gauge" id="tarjeta-gestor-t" data-color="gestor-t">
-                <header><i class="icono-metrica">&#127777;</i> T. Gestor</header>
+            <article class="tarjeta tarjeta-gauge" id="tarjeta-gestor-t" data-color="gestor-t" data-sensor="5">
+                <header><i class="icono-metrica">&#127777;</i> <span data-nombre-sensor="5" data-prefijo="T. ">T. Gestor</span></header>
                 <p class="valor-metrica" id="gestor-t-valor">N/D</p>
                 <svg class="gauge sin-dato" viewBox="0 0 200 110" aria-hidden="true">
                     <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
@@ -99,8 +99,8 @@
                 <p class="nd-nota" id="gestor-t-nota">Esperando lectura del AM2301A...</p>
             </article>
 
-            <article class="tarjeta tarjeta-gauge" id="tarjeta-gestor-h" data-color="gestor-h">
-                <header><i class="icono-metrica">&#128167;</i> H. Gestor</header>
+            <article class="tarjeta tarjeta-gauge" id="tarjeta-gestor-h" data-color="gestor-h" data-sensor="5">
+                <header><i class="icono-metrica">&#128167;</i> <span data-nombre-sensor="5" data-prefijo="H. ">H. Gestor</span></header>
                 <p class="valor-metrica" id="gestor-h-valor">N/D</p>
                 <svg class="gauge sin-dato" viewBox="0 0 200 110" aria-hidden="true">
                     <path class="gauge-pista" pathLength="100" d="M20,100 A80,80 0 1 1 180,100"/>
@@ -127,10 +127,10 @@
                 <button class="btn-auto" id="btn-volver-automatico">Volver a automatico</button>
             </header>
             <div class="grilla-actuadores">
-                <div class="actuador editable" id="act-aa1" data-tipo="aire" data-indice="0"><span>AA1</span><em>--</em><i class="toggle"></i></div>
-                <div class="actuador editable" id="act-aa2" data-tipo="aire" data-indice="1"><span>AA2</span><em>--</em><i class="toggle"></i></div>
-                <div class="actuador editable" id="act-aa3" data-tipo="aire" data-indice="2"><span>AA3</span><em>--</em><i class="toggle"></i></div>
-                <div class="actuador editable" id="act-aa4" data-tipo="aire" data-indice="3"><span>AA4</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-aa1" data-aire="1" data-tipo="aire" data-indice="0"><span data-nombre-aire="1">AA1</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-aa2" data-aire="2" data-tipo="aire" data-indice="1"><span data-nombre-aire="2">AA2</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-aa3" data-aire="3" data-tipo="aire" data-indice="2"><span data-nombre-aire="3">AA3</span><em>--</em><i class="toggle"></i></div>
+                <div class="actuador editable" id="act-aa4" data-aire="4" data-tipo="aire" data-indice="3"><span data-nombre-aire="4">AA4</span><em>--</em><i class="toggle"></i></div>
                 <div class="actuador editable" id="act-at" data-tipo="at"><span>AT</span><em>--</em><i class="toggle"></i></div>
                 <div class="actuador editable" id="act-bypass" data-tipo="bypass"><span>Bypass</span><em>--</em><i class="toggle"></i></div>
             </div>
@@ -143,17 +143,17 @@
                     <div class="nodo-sensores">
                         SENSORES
                         <div class="sensores-grilla">
-                            <span>T1 <b id="d-t1">--</b></span>
-                            <span>T2 <b id="d-t2">--</b></span>
-                            <span>T3 <b id="d-t3">--</b></span>
-                            <span>T4 <b id="d-t4">--</b></span>
+                            <span data-sensor="1">T1 <b id="d-t1">--</b></span>
+                            <span data-sensor="2">T2 <b id="d-t2">--</b></span>
+                            <span data-sensor="3">T3 <b id="d-t3">--</b></span>
+                            <span data-sensor="4">T4 <b id="d-t4">--</b></span>
                         </div>
                     </div>
                     <div class="flecha">&#8594;</div>
                     <div class="nodo-gestor">
                         GESTOR
-                        <span class="gestor-linea">&#127777; <b id="d-gestor-t">N/D</b></span>
-                        <span class="gestor-linea">&#128167; <b id="d-gestor-h">N/D</b></span>
+                        <span class="gestor-linea" data-sensor="5">&#127777; <b id="d-gestor-t">N/D</b></span>
+                        <span class="gestor-linea" data-sensor="5">&#128167; <b id="d-gestor-h">N/D</b></span>
                     </div>
                     <div class="flecha">&#8594;</div>
                     <div class="col-bypass-at">
@@ -162,10 +162,10 @@
                     </div>
                     <div class="flecha">&#8594;</div>
                     <div class="col-salidas">
-                        <div class="nodo-chico" id="d-aa1">AA1<br><span>--</span></div>
-                        <div class="nodo-chico" id="d-aa2">AA2<br><span>--</span></div>
-                        <div class="nodo-chico" id="d-aa3">AA3<br><span>--</span></div>
-                        <div class="nodo-chico" id="d-aa4">AA4<br><span>--</span></div>
+                        <div class="nodo-chico" id="d-aa1" data-aire="1"><b data-nombre-aire="1">AA1</b><br><span>--</span></div>
+                        <div class="nodo-chico" id="d-aa2" data-aire="2"><b data-nombre-aire="2">AA2</b><br><span>--</span></div>
+                        <div class="nodo-chico" id="d-aa3" data-aire="3"><b data-nombre-aire="3">AA3</b><br><span>--</span></div>
+                        <div class="nodo-chico" id="d-aa4" data-aire="4"><b data-nombre-aire="4">AA4</b><br><span>--</span></div>
                     </div>
                 </div>
             </article>
@@ -177,13 +177,13 @@
         </section>
 
         <section class="fila-inferior">
-            <article class="tarjeta stat" data-color="iny1">
-                <p class="stat-titulo">T. Inyeccion 1</p>
+            <article class="tarjeta stat" data-color="iny1" data-sensor="3">
+                <p class="stat-titulo" data-nombre-sensor="3">T. Inyeccion 1</p>
                 <p class="stat-valor" id="iny1-mini-valor">-- &deg;C</p>
                 <svg class="chispa-chica" id="iny1-mini-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny1-mini-linea"/></svg>
             </article>
-            <article class="tarjeta stat" data-color="iny2">
-                <p class="stat-titulo">T. Inyeccion 2</p>
+            <article class="tarjeta stat" data-color="iny2" data-sensor="4">
+                <p class="stat-titulo" data-nombre-sensor="4">T. Inyeccion 2</p>
                 <p class="stat-valor" id="iny2-mini-valor">-- &deg;C</p>
                 <svg class="chispa-chica" id="iny2-mini-chispa" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><polyline id="iny2-mini-linea"/></svg>
             </article>

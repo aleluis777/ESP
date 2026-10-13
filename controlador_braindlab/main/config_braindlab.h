@@ -78,7 +78,27 @@ typedef struct {
     char community_trap[32];
     char trap_ip[CONFIG_SNMP_NUM_DESTINOS][16];
     bool trap_habilitado[CONFIG_SNMP_NUM_DESTINOS];
+    char nombre[32];     // sysName     (MIB-2) -- se aplica en caliente
+    char ubicacion[48];  // sysLocation (MIB-2) -- se aplica en caliente
+    char contacto[48];   // sysContact  (MIB-2) -- se aplica en caliente
+    bool escritura_habilitada; // false = todo SET responde noAccess (solo monitoreo)
 } config_snmp_t;
+
+// Sensores 1..6 (ver snmp_braindlab.c / web). Hardware fijo: 1..4 = NTC
+// T1..T4 (solo temperatura), 5 = AM2301A del gabinete (temperatura +
+// humedad), 6 = sin hardware todavia (siempre no instalado). Un sensor no
+// instalado no cuenta para el control, no genera alarmas y se oculta del
+// panel. Se aplica en caliente.
+#define CONFIG_NUM_SENSORES 6
+#define CONFIG_SENSOR_NOMBRE_MAX 32
+
+// Tambien guarda los nombres de los aires AA1..AA4 (clave "aires" de
+// config.json): son los nombres del sitio que ven el panel y SNMP.
+typedef struct {
+    char nombre[CONFIG_NUM_SENSORES][CONFIG_SENSOR_NOMBRE_MAX];
+    bool instalado[CONFIG_NUM_SENSORES];
+    char nombre_aire[4][CONFIG_SENSOR_NOMBRE_MAX];
+} config_sensores_t;
 
 // Monta la particion SPIFFS "www". Idempotente.
 esp_err_t config_braindlab_init(void);
@@ -94,6 +114,9 @@ esp_err_t config_braindlab_guardar_calibracion(const config_calibracion_t *cfg);
 
 void      config_braindlab_cargar_snmp(config_snmp_t *cfg);
 esp_err_t config_braindlab_guardar_snmp(const config_snmp_t *cfg);
+
+void      config_braindlab_cargar_sensores(config_sensores_t *cfg);
+esp_err_t config_braindlab_guardar_sensores(const config_sensores_t *cfg);
 
 #ifdef __cplusplus
 }

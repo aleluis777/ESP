@@ -56,15 +56,18 @@ static void recalcular_bypass_habilitado(const config_climatizacion_t *cfg, clim
     estado->bypass_auto_habilitado = estado->fails[estado->indice_reserva] <= cfg->fails_max_bypass;
 }
 
-void climatizacion_actualizar(const float temperaturas[4], const config_climatizacion_t *cfg,
-                               clima_estado_t *estado)
+void climatizacion_actualizar(const float temperaturas[4], const bool validas[4],
+                               const config_climatizacion_t *cfg, clima_estado_t *estado)
 {
     bool todas_bajo_tmin = true;
     bool alguna_sobre_tmax = false;
     bool alguna_sobre_at = false;
     bool alguna_sobre_bypass = false;
+    int cuantas_validas = 0;
 
     for (int i = 0; i < 4; i++) {
+        if (!validas[i]) continue;
+        cuantas_validas++;
         if (temperaturas[i] >= cfg->temp_min) todas_bajo_tmin = false;
         if (temperaturas[i] > cfg->temp_max) alguna_sobre_tmax = true;
         if (temperaturas[i] > cfg->temp_at) alguna_sobre_at = true;
@@ -72,6 +75,12 @@ void climatizacion_actualizar(const float temperaturas[4], const config_climatiz
     }
 
     clima_ciclo_t ciclo_anterior = estado->ciclo;
+
+    // Sin ningun sensor valido "todas bajo tmin" seria true por vacio:
+    // se mantiene el ciclo actual en vez de apagar todo.
+    if (cuantas_validas == 0) {
+        todas_bajo_tmin = false;
+    }
 
     switch (estado->ciclo) {
         case CLIMA_REPOSO:

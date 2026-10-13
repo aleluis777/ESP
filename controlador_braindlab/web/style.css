@@ -593,6 +593,19 @@ button.guardar:hover { filter: brightness(1.08); }
 button.guardar:disabled { opacity: 0.6; cursor: not-allowed; }
 button.guardar.peligro { background: transparent; color: var(--alerta); border: 1px solid var(--alerta); }
 button.guardar.peligro:hover { background: var(--alerta); color: #fff; }
+button.guardar.secundario { background: transparent; color: var(--acento); border: 1px solid var(--acento); }
+button.guardar.secundario:hover { background: var(--acento-suave); filter: none; }
+button.guardar.secundario + button.guardar { margin-left: 0; }
+.destinos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; }
+.destinos > div { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border-radius: 0.9rem;
+                  background: var(--superficie); }
+@media (max-width: 700px) { .destinos { grid-template-columns: 1fr; } }
+.destinos.tres { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 960px) { .destinos.tres { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .destinos.tres { grid-template-columns: 1fr; } }
+.destinos .hw { margin: 0; font-size: 0.72rem; color: var(--texto-tenue); }
+.destinos .hw b { color: var(--texto); font-size: 0.8rem; margin-right: 0.3rem; }
+.destinos > div.sin-hw { opacity: 0.55; }
 .mensaje { font-size: 0.8rem; margin: 0; }
 .mensaje:empty { display: none; }
 .mensaje.ok { color: var(--ok); }
@@ -660,3 +673,13 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .gauge-centro { fill: var(--c, var(--acento)); stroke: var(--tarjeta); stroke-width: 3; }
 .gauge.sin-dato .gauge-valor { opacity: 0; }
 .gauge.sin-dato .gauge-aguja { opacity: 0.3; }
+
+/* Sensores/aires no instalados (script.js pone hidden): gana sobre el
+   display:flex/grid de las tarjetas. */
+[hidden] { display: none !important; }
+
+/* Nombres del sitio largos (Configuracion > Sitio): se recortan con "...". */
+.actuador span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nodo-chico { max-width: 9rem; }
+.nodo-chico b { font-weight: inherit; display: inline-block; max-width: 100%; overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
