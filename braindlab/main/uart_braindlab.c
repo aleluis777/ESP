@@ -19,6 +19,8 @@ static const char *TAG = "UART_BRAINDLAB";
 #define COLOR_VERDE    lv_color_hex(0x22C55E)
 #define COLOR_ROJO     lv_color_hex(0xEF4444)
 #define COLOR_NARANJA  lv_color_hex(0xF59E0B)
+#define COLOR_BLANCO   lv_color_white()
+#define COLOR_AZUL     lv_color_hex(0x3B9EFF) // = COLOR_VALOR_AZUL de ui_dashboard.c
 
 static ui_dashboard_t *s_ui = NULL;
 static ui_energia_t *s_energia = NULL;
@@ -104,6 +106,7 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     int16_t temps_decimas[4]  = { braindlab_leer_i16(&p[1]), braindlab_leer_i16(&p[3]),
                                   braindlab_leer_i16(&p[5]), braindlab_leer_i16(&p[7]) };
     uint8_t bitmask_salida    = p[9];
+    uint8_t bitmask_manual    = p[10];
     uint8_t indice_reserva    = p[11];
     bool alarma_at            = p[12] != 0;
     bool bypass_solicitado    = p[14] != 0;
@@ -112,14 +115,23 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     int16_t humedad_decimas   = braindlab_leer_i16(&p[22]);
     uint16_t anio             = braindlab_leer_u16(&p[28]);
     uint8_t mes = p[30], dia = p[31], hora = p[32], minuto = p[33], segundo = p[34];
-    (void) indice_reserva; // sin widget propio en el dashboard todavia
+    bool gestor_ok            = p[19] != 0;
 
     bool hay_energia = len >= 48;
     // Controlador viejo (sin el campo): se asume OK para no mostrar una
     // alarma de SD que no se puede saber.
     uint8_t sd_estado = len >= 49 ? p[48] : BRAINDLAB_SD_OK;
     // Idem para 'fallas': sin el campo, no se muestra la fila MOD.
-    uint8_t fallas = len >= BRAINDLAB_ESTADO_UPDATE_LEN ? p[49] : 0;
+    uint8_t fallas = len >= BRAINDLAB_ESTADO_UPDATE_LEN_V2 ? p[49] : 0;
+    // Instalacion (offset 50-52). Controlador viejo: todo leido bien, todo
+    // instalado y 4 aires -- lo mismo que se mostraba antes.
+    bool hay_instalacion = len >= BRAINDLAB_ESTADO_UPDATE_LEN;
+    uint8_t ntc_ok    = hay_instalacion ? p[50] : 0x0F;
+    uint8_t sens_inst = hay_instalacion ? p[51] : 0x3F;
+    uint8_t n_aires   = hay_instalacion ? p[52] : UI_DASH_NUM_AIRES;
+    if (n_aires < 1 || n_aires > UI_DASH_NUM_AIRES) {
+        n_aires = UI_DASH_NUM_AIRES;
+    }
     bool energia_ok = hay_energia && p[35] != 0;
     uint16_t voltajes[3] = { 0 }, corrientes[3] = { 0 };
     if (hay_energia) {
@@ -147,26 +159,41 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
                  (unsigned)energia_ok, voltajes[0], voltajes[1], voltajes[2],
                  corrientes[0], corrientes[1], corrientes[2]);
     }
-    ESP_LOGI(TAG, "   sd_estado=%u fallas=0x%02X", (unsigned)sd_estado, (unsigned)fallas);
+    ESP_LOGI(TAG, "   sd_estado=%u fallas=0x%02X ntc_ok=0x%02X sens_inst=0x%02X n_aires=%u",
+             (unsigned)sd_estado, (unsigned)fallas, (unsigned)ntc_ok, (unsigned)sens_inst, (unsigned)n_aires);
 
     if (!lvgl_port_lock(0)) {
         ESP_LOGW(TAG, "No se pudo tomar el lock de LVGL, trama recibida pero no aplicada a la UI");
         return;
     }
 
-    // ---- Aires (encendido/apagado real) ----
+    // ---- Que se muestra (sensores instalados / aires en uso) ----
+    ui_dashboard_set_instalacion(s_ui, sens_inst, n_aires);
+
+    // ---- Aires (encendido/apagado real, principal/reserva, manual) ----
     for (int i = 0; i < UI_DASH_NUM_AIRES; i++) {
         ui_dashboard_aire_set_encendido(&s_ui->aires[i], (bitmask_salida >> i) & 1);
+        ui_dashboard_aire_set_rol(&s_ui->aires[i], i == indice_reserva, n_aires > 1, (bitmask_manual >> i) & 1);
     }
+    static const char *const nombres_ciclo[] = { "Reposo", "Normal", "Alta temperatura", "Bypass" };
+    lv_label_set_text_fmt(s_ui->lbl_ciclo, "Ciclo: %s", ciclo < 4 ? nombres_ciclo[ciclo] : "?");
 
     // ---- Sensores ambientales (T1-T4) ----
+    // Sin lectura (NTC desconectado/en corto o ADS1115 sin respuesta): "--"
+    // en rojo, no el ultimo valor -- igual que el panel web.
     for (int i = 0; i < UI_DASH_NUM_SENSORES; i++) {
-        char texto[16];
-        formatear_decimas(texto, sizeof(texto), temps_decimas[i], "\xC2\xB0" "C");
+        bool leido = (ntc_ok >> i) & 1;
+        char texto[16] = "--";
+        if (leido) {
+            formatear_decimas(texto, sizeof(texto), temps_decimas[i], "\xC2\xB0" "C");
+        }
         lv_label_set_text(s_ui->sensores[i].lbl_valor, texto);
+        lv_obj_set_style_text_color(s_ui->sensores[i].lbl_valor, leido ? COLOR_BLANCO : COLOR_ROJO, 0);
     }
 
     // ---- Temperatura y humedad del gabinete ----
+    // El AM2301A falla una lectura de vez en cuando: igual que la web se
+    // sigue mostrando el ultimo valor bueno, pero en naranja mientras falle.
     char texto_temp_gestor[16];
     formatear_decimas(texto_temp_gestor, sizeof(texto_temp_gestor), temp_gestor_decimas, "\xC2\xB0" "C");
     lv_label_set_text(s_ui->lbl_temp_gestor, texto_temp_gestor);
@@ -174,6 +201,9 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     char texto_hum[16];
     formatear_decimas(texto_hum, sizeof(texto_hum), humedad_decimas, " %RH");
     lv_label_set_text(s_ui->lbl_humedad, texto_hum);
+    lv_color_t color_gestor = gestor_ok ? COLOR_AZUL : COLOR_NARANJA;
+    lv_obj_set_style_text_color(s_ui->lbl_temp_gestor, color_gestor, 0);
+    lv_obj_set_style_text_color(s_ui->lbl_humedad, color_gestor, 0);
 
     // ---- Controles Bypass / AT (resincroniza el boton con el estado real
     // ya aplicado -- por si la automatica lo cambio, o por si el pedido
@@ -255,12 +285,41 @@ static void aplicar_estado_update(const uint8_t *p, uint16_t len)
     lvgl_port_unlock();
 }
 
+// BRAINDLAB_CMD_NOMBRE: tipo + indice + texto sin '\0' (ver
+// protocolo_braindlab.h). Caracteres fuera de ASCII imprimible se cambian
+// por '?' (la fuente no los tiene y el controlador ya los rechaza).
+static void aplicar_nombre(const uint8_t *p, uint16_t len)
+{
+    if (len < 2 || len > 2 + BRAINDLAB_NOMBRE_MAX || !s_ui) {
+        ESP_LOGW(TAG, "NOMBRE invalido (len=%u)", (unsigned)len);
+        return;
+    }
+    char texto[BRAINDLAB_NOMBRE_MAX + 1];
+    uint16_t largo = len - 2;
+    for (uint16_t i = 0; i < largo; i++) {
+        uint8_t c = p[2 + i];
+        texto[i] = (c >= 0x20 && c <= 0x7E) ? (char)c : '?';
+    }
+    texto[largo] = '\0';
+    ESP_LOGD(TAG, "<- NOMBRE tipo=%u indice=%u \"%s\"", (unsigned)p[0], (unsigned)p[1], texto);
+
+    if (!lvgl_port_lock(0)) {
+        return;
+    }
+    ui_dashboard_set_nombre(s_ui, p[0], p[1], texto);
+    lvgl_port_unlock();
+}
+
 static void procesar_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
 {
     switch (cmd) {
     case BRAINDLAB_CMD_ESTADO_UPDATE:
         s_ultimo_frame_ok = xTaskGetTickCount();
         aplicar_estado_update(payload, len);
+        break;
+    case BRAINDLAB_CMD_NOMBRE:
+        s_ultimo_frame_ok = xTaskGetTickCount();
+        aplicar_nombre(payload, len);
         break;
     default:
         ESP_LOGW(TAG, "Comando desconocido 0x%02X", (unsigned)cmd);

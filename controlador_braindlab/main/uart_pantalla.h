@@ -52,7 +52,10 @@ void uart_pantalla_init(void);
 // energia_ok=false la pantalla muestra "--". 'sd_estado' es un
 // registro_sd_estado_t (0=OK, 1=sin tarjeta, 2=sin formato, 3=error
 // escritura). 'fallas' es el bitmask BRAINDLAB_FALLA_* de
-// protocolo_braindlab.h (0 = todos los modulos OK).
+// protocolo_braindlab.h (0 = todos los modulos OK). 'ntc_ok'/'sensor_instalado'
+// /'cantidad_aires': que sensores leyeron bien, cuales estan instalados y
+// cuantos aires se usan -- la pantalla oculta lo no instalado y muestra "--"
+// en los sensores sin lectura.
 void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
                                   const bool salida_aire[4], const bool aire_manual[4],
                                   uint8_t indice_reserva, bool alarma_at, bool alarma_at_manual,
@@ -63,7 +66,14 @@ void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
                                   uint16_t anio, uint8_t mes, uint8_t dia,
                                   uint8_t hora, uint8_t minuto, uint8_t segundo,
                                   bool energia_ok, const float voltajes[3], const float corrientes[3],
-                                  uint8_t sd_estado, uint8_t fallas);
+                                  uint8_t sd_estado, uint8_t fallas,
+                                  const bool ntc_ok[4], const bool sensor_instalado[6],
+                                  uint8_t cantidad_aires);
+
+// Manda BRAINDLAB_CMD_NOMBRE: un nombre del sitio. 'tipo' es
+// BRAINDLAB_NOMBRE_EQUIPO/_AIRE/_SENSOR, 'indice' 0.. (ver
+// protocolo_braindlab.h). Textos de mas de 31 caracteres se recortan.
+void uart_pantalla_enviar_nombre(uint8_t tipo, uint8_t indice, const char *texto);
 
 #ifdef __cplusplus
 }

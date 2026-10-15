@@ -25,14 +25,42 @@ static const char *TAG = "BRAINDLAB";
 static ui_dashboard_t *ui;
 static ui_energia_t *energia;
 
-// Placeholder de navegacion para las vistas que todavia no existen
-// (Ajustes, Red, Fecha/Hora). Cuando se agregue cada una esto pasa a
-// ocultar ui->cont y mostrar la vista correspondiente, igual que
-// ver_energia_cb/volver_dashboard_cb de abajo.
-static void nav_pendiente_cb(lv_event_t *e)
+// ---------- Apagado del brillo por inactividad ----------
+// Tras REPOSO_MS sin tocar la pantalla se apaga el backlight (LVGL sigue
+// dibujando, al prender todo esta al dia). El toque que la prende lo atrapa
+// una capa transparente encima de todo, asi no se aprieta un boton a oscuras.
+#define REPOSO_MS 60000
+
+static lv_obj_t *s_capa_reposo;
+static bool s_brillo_apagado = false;
+
+// PRESSED y no CLICKED: prende apenas se apoya el dedo. El resto de ese
+// toque (soltar/click) sigue yendo a esta capa aunque ya este oculta.
+static void despertar_cb(lv_event_t *e)
 {
-    const char *nombre = (const char *)lv_event_get_user_data(e);
-    ESP_LOGI(TAG, "Nav '%s': vista todavia no implementada", nombre);
+    gpio_set_level(PIN_BL, 1);
+    lv_obj_add_flag(s_capa_reposo, LV_OBJ_FLAG_HIDDEN);
+    s_brillo_apagado = false;
+}
+
+static void revisar_reposo_cb(lv_timer_t *t)
+{
+    if (!s_brillo_apagado && lv_display_get_inactive_time(NULL) >= REPOSO_MS) {
+        gpio_set_level(PIN_BL, 0);
+        lv_obj_remove_flag(s_capa_reposo, LV_OBJ_FLAG_HIDDEN);
+        s_brillo_apagado = true;
+    }
+}
+
+static void iniciar_reposo(void)
+{
+    s_capa_reposo = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(s_capa_reposo); // transparente
+    lv_obj_set_size(s_capa_reposo, LV_PCT(100), LV_PCT(100));
+    lv_obj_add_flag(s_capa_reposo, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(s_capa_reposo, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(s_capa_reposo, despertar_cb, LV_EVENT_PRESSED, NULL);
+    lv_timer_create(revisar_reposo_cb, 1000, NULL);
 }
 
 // ---------- Navegacion entre vistas (dashboard <-> parametros electricos) ----------
@@ -171,11 +199,10 @@ void app_main(void)
         energia = ui_energia_create(lv_screen_active());
         lv_obj_add_flag(energia->cont, LV_OBJ_FLAG_HIDDEN);   // arranca en el dashboard
 
-        lv_obj_add_event_cb(ui->btn_nav_graficas, ver_energia_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(ui->btn_nav_energia, ver_energia_cb, LV_EVENT_CLICKED, NULL);
         lv_obj_add_event_cb(energia->btn_volver, volver_dashboard_cb, LV_EVENT_CLICKED, NULL);
-        lv_obj_add_event_cb(ui->btn_nav_ajustes, nav_pendiente_cb, LV_EVENT_CLICKED, "AJUSTES");
-        lv_obj_add_event_cb(ui->btn_nav_red, nav_pendiente_cb, LV_EVENT_CLICKED, "RED");
-        lv_obj_add_event_cb(ui->btn_nav_fecha_hora, nav_pendiente_cb, LV_EVENT_CLICKED, "FECHA/HORA");
+
+        iniciar_reposo();
 
         // Un callback mas por boton de aire (ademas del toggle visual que ya
         // registra ui_dashboard.c) -- este manda el pedido real por UART.

@@ -81,7 +81,33 @@ static volatile float s_calib_humedad_gestor;
 // Los cambia on_configurar_sitio() en caliente desde el servidor web;
 // tarea_climatizacion solo copia instalado[] a cada vuelta.
 static config_sensores_t s_sensores;
+static char s_nombre_equipo[32]; // snmp.nombre (sysName = titulo del panel y de la pantalla)
 static portMUX_TYPE s_lock_sensores = portMUX_INITIALIZER_UNLOCKED;
+
+// Nombres del sitio hacia la pantalla UART: los manda tarea_climatizacion
+// (la unica que escribe en ese UART) al arrancar, apenas se guardan desde
+// la web (este flag) y cada NOMBRES_PANTALLA_CADA vueltas, por si la
+// pantalla se reinicio y se los perdio (el protocolo no tiene ACK).
+static volatile bool s_nombres_pantalla_pendientes = true;
+#define NOMBRES_PANTALLA_CADA 15 // vueltas de 2 s = ~30 s
+
+static void enviar_nombres_pantalla(void)
+{
+    config_sensores_t sens;
+    char equipo[sizeof(s_nombre_equipo)];
+    taskENTER_CRITICAL(&s_lock_sensores);
+    sens = s_sensores;
+    memcpy(equipo, s_nombre_equipo, sizeof(equipo));
+    taskEXIT_CRITICAL(&s_lock_sensores);
+
+    uart_pantalla_enviar_nombre(BRAINDLAB_NOMBRE_EQUIPO, 0, equipo);
+    for (int i = 0; i < 4; i++) {
+        uart_pantalla_enviar_nombre(BRAINDLAB_NOMBRE_AIRE, (uint8_t)i, sens.nombre_aire[i]);
+    }
+    for (int i = 0; i < CONFIG_NUM_SENSORES; i++) {
+        uart_pantalla_enviar_nombre(BRAINDLAB_NOMBRE_SENSOR, (uint8_t)i, sens.nombre[i]);
+    }
+}
 
 static void leer_sensores_instalados(bool instalado[CONFIG_NUM_SENSORES])
 {
@@ -275,6 +301,7 @@ static void tarea_climatizacion(void *arg)
     bool rotacion_pendiente_fallo = false; // si no se pudo guardar, no reintentar cada 2 s
     clima_ciclo_t ciclo_previo = estado.ciclo;
     int ultimo_minuto_registrado = -1; // registro_sd: una fila por minuto
+    unsigned vueltas_nombres = 0;      // ver NOMBRES_PANTALLA_CADA
 
     // Crudas: por debajo de cualquier temp_min razonable -- si
     // sensores_temp_leer() fallara en la primerisima vuelta (antes de tener
@@ -399,6 +426,10 @@ static void tarea_climatizacion(void *arg)
         for (int i = 0; i < SALIDAS_NUM_AIRES; i++) {
             aire_manual_actual[i] = s_aire_manual_activo[i];
         }
+        bool ntc_leido[4]; // sin ADS1115 ningun NTC tiene lectura valida
+        for (int i = 0; i < 4; i++) {
+            ntc_leido[i] = adc_ok && ntc_ok[i];
+        }
         uart_pantalla_enviar_estado(
             (uint8_t)estado.ciclo, temperaturas, salida_aplicada, aire_manual_actual,
             estado.indice_reserva, alarma_at_aplicada, s_at_manual_activo,
@@ -413,7 +444,14 @@ static void tarea_climatizacion(void *arg)
             rtc_ok ? (uint8_t)ahora.tm_min : 0,
             rtc_ok ? (uint8_t)ahora.tm_sec : 0,
             energia.ok, energia.voltajes, energia.corrientes,
-            (uint8_t)registro_sd_estado(), fallas);
+            (uint8_t)registro_sd_estado(), fallas,
+            ntc_leido, instalado, cfg.cantidad_aires);
+
+        if (s_nombres_pantalla_pendientes || ++vueltas_nombres >= NOMBRES_PANTALLA_CADA) {
+            s_nombres_pantalla_pendientes = false;
+            vueltas_nombres = 0;
+            enviar_nombres_pantalla();
+        }
 
         // Misma foto para el agente SNMP (GET) -- ademas detecta ahi los
         // eventos que generan traps (ver snmp_braindlab.c). No bloquea.
@@ -677,7 +715,9 @@ static esp_err_t on_configurar_sitio(const char *equipo, const char *const aires
 
     taskENTER_CRITICAL(&s_lock_sensores);
     s_sensores = nuevo;
+    strlcpy(s_nombre_equipo, equipo, sizeof(s_nombre_equipo));
     taskEXIT_CRITICAL(&s_lock_sensores);
+    s_nombres_pantalla_pendientes = true;
     snmp_braindlab_set_sensores(&nuevo);
 
     esp_err_t err = config_braindlab_guardar_sensores(&nuevo);
@@ -751,6 +791,9 @@ void app_main(void)
 
     config_braindlab_cargar_sensores(&s_sensores);
     snmp_braindlab_set_sensores(&s_sensores);
+    config_snmp_t snmp_inicial;
+    config_braindlab_cargar_snmp(&snmp_inicial);
+    strlcpy(s_nombre_equipo, snmp_inicial.nombre, sizeof(s_nombre_equipo));
 
     // 6144: el JSON del WS (960 B) + snprintf con floats + la foto SNMP van en stack.
     xTaskCreate(tarea_climatizacion, "tarea_climatizacion", 6144, NULL, 5, NULL);
@@ -782,6 +825,9 @@ void app_main(void)
     };
     uart_pantalla_set_callbacks(uart_cbs);
     uart_pantalla_init();
+    // tarea_climatizacion ya pudo dar su primera vuelta antes de que el UART
+    // existiera: se vuelven a mandar los nombres en la proxima.
+    s_nombres_pantalla_pendientes = true;
 
     // Red + servidor web al final: no bloquean el arranque de la
     // climatizacion (esa tarea ya esta corriendo arriba) ni dependen de

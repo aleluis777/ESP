@@ -17,18 +17,18 @@ extern "C" {
 #define UI_DASH_NUM_VIENTO 3
 
 // Tarjeta de una unidad de aire acondicionado (ver "AIRES ACONDICIONADOS" en
-// el mockup). Todo esto es solo vista: la logica que decide temperatura,
-// velocidad o estado real vive afuera (todavia no existe, ver braindlab.c).
-// El encendido/apagado (boton ON/OFF) si se maneja aca mismo porque es un
-// efecto puramente visual (animar el "viento"), sin dato real detras todavia.
+// el mockup). Todo lo que muestra llega por UART en ESTADO_UPDATE (ver
+// uart_braindlab.c): encendido, si es la de reserva de la semana y si esta
+// forzada a mano. El controlador no sabe temperatura ni setpoint de cada
+// equipo (solo lo prende/apaga por rele), por eso no se muestran.
 typedef struct {
-    lv_obj_t *led_estado;       // punto verde/gris: online/offline
-    lv_obj_t *lbl_nombre;       // "Oficina 1", etc.
+    lv_obj_t *card;             // tarjeta completa (se oculta si el aire no se usa)
+    lv_obj_t *led_estado;       // punto verde/gris: encendido/apagado
+    lv_obj_t *lbl_nombre;       // nombre del sitio ("AA1" por defecto)
     lv_obj_t *img_unidad;       // icono del equipo (air-conditioner.png)
     lv_obj_t *viento[UI_DASH_NUM_VIENTO]; // franjas animadas de "aire fluyendo"
-    lv_obj_t *lbl_temp_actual;  // "24.0" (numero grande)
-    lv_obj_t *lbl_set;          // "Set: 24.0°C"
-    lv_obj_t *lbl_velocidad;    // "Auto" / "1" / "2" / "3"
+    lv_obj_t *lbl_rol;          // "Principal" / "Reserva"
+    lv_obj_t *lbl_modo;         // "Automatico" / "Manual"
     lv_obj_t *btn_power;        // boton ON/OFF
     lv_obj_t *lbl_btn_power;    // texto del boton ("ON"/"OFF")
     bool      encendido;
@@ -36,24 +36,31 @@ typedef struct {
 
 // Tarjeta de un sensor ambiental (T1..T4).
 typedef struct {
-    lv_obj_t *lbl_nombre;  // "Oficina 1"
-    lv_obj_t *lbl_valor;   // "23.6°C"
+    lv_obj_t *card;        // tarjeta completa (se oculta si no esta instalado)
+    lv_obj_t *lbl_nombre;  // nombre del sitio ("T1" por defecto)
+    lv_obj_t *lbl_valor;   // "23.6°C", o "--" en rojo si no hay lectura
 } ui_dash_sensor_t;
 
 typedef struct {
     lv_obj_t *cont;  // Contenedor raiz de esta vista (para mostrarla/ocultarla completa)
 
     // ---- Barra superior ----
+    lv_obj_t *lbl_titulo;          // nombre del equipo ("SISTEMA DE MONITOREO" por defecto)
     lv_obj_t *led_estado_sistema;  // punto verde: "Sistema OK"
     lv_obj_t *lbl_estado_sistema;
     lv_obj_t *lbl_hora;
     lv_obj_t *lbl_fecha;
 
     // ---- Aires acondicionados ----
+    lv_obj_t *lbl_ciclo;        // ciclo de la automatica, al lado del titulo de la seccion
     ui_dash_aire_t aires[UI_DASH_NUM_AIRES];
 
     // ---- Sensores ambientales ----
+    lv_obj_t *titulo_sensores;  // titulo + grilla: se ocultan si no hay ningun NTC instalado
+    lv_obj_t *grid_sensores;
     ui_dash_sensor_t sensores[UI_DASH_NUM_SENSORES];
+    lv_obj_t *titulo_gabinete;  // titulo (= nombre del sensor 5) + tarjeta del AM2301A
+    lv_obj_t *card_gabinete;
     lv_obj_t *lbl_humedad;      // "55 %RH"
     lv_obj_t *lbl_temp_gestor;  // "28.0°C" -- temperatura del gabinete (AM2301A)
 
@@ -83,18 +90,11 @@ typedef struct {
     bool      at_activo;
 
     // ---- Barra inferior de navegacion ----
-    // Inicio / Graficas / Ajustes / Red / Fecha-Hora. "Graficas" abre la
-    // vista de Parametros Electricos (ver ui_energia.c: se saco de aca
-    // porque las 6 tarjetas no entraban con texto legible). Los otros 3
-    // botones quedan creados y con su callback enganchable, pero sin vista
-    // propia todavia (cada una se va a agregar como su propio ui_*.c, igual
-    // que ui_grafica en el proyecto blink, para no bloquear el trabajo de
-    // las demas).
+    // Inicio / Energia. "Energia" abre la vista de Parametros Electricos
+    // (ver ui_energia.c: se saco de aca porque las 6 tarjetas no entraban
+    // con texto legible).
     lv_obj_t *btn_nav_inicio;
-    lv_obj_t *btn_nav_graficas;
-    lv_obj_t *btn_nav_ajustes;
-    lv_obj_t *btn_nav_red;
-    lv_obj_t *btn_nav_fecha_hora;
+    lv_obj_t *btn_nav_energia;
 } ui_dashboard_t;
 
 // Construye la interfaz completa dentro de 'parent' (normalmente lv_screen_active()).
@@ -112,6 +112,19 @@ void ui_dashboard_aire_set_encendido(ui_dash_aire_t *aire, bool encendido);
 // botones de Bypass y AT (un solo boton cada uno, no hace falta indice).
 void ui_dashboard_bypass_set_activo(ui_dashboard_t *ui, bool activo);
 void ui_dashboard_at_set_activo(ui_dashboard_t *ui, bool activo);
+
+// Rol del aire esta semana y si esta forzado a mano (ESTADO_UPDATE:
+// indice_reserva y aire_manual). 'hay_reserva'=false con 1 solo aire.
+void ui_dashboard_aire_set_rol(ui_dash_aire_t *aire, bool es_reserva, bool hay_reserva, bool manual);
+
+// Nombre del sitio recibido por UART (BRAINDLAB_CMD_NOMBRE): 'tipo' es
+// BRAINDLAB_NOMBRE_EQUIPO/_AIRE/_SENSOR de protocolo_braindlab.h. Texto
+// vacio = nombre por defecto. Sensores 0..3 = T1..T4, 4 = gabinete.
+void ui_dashboard_set_nombre(ui_dashboard_t *ui, uint8_t tipo, uint8_t indice, const char *texto);
+
+// Oculta los sensores no instalados ('sens_inst': bit i = sensor i+1) y los
+// aires por encima de 'n_aires'. Solo toca LVGL si algo cambio.
+void ui_dashboard_set_instalacion(ui_dashboard_t *ui, uint8_t sens_inst, uint8_t n_aires);
 
 #ifdef __cplusplus
 }

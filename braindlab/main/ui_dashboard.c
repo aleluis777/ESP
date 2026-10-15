@@ -1,13 +1,13 @@
+#include <string.h>
 #include "ui_dashboard.h"
 #include "ui_img_air_conditioner.h"
+#include "protocolo_braindlab.h"
 
 // ---------------------------------------------------------------------
 // Vista "Inicio": dashboard de aires acondicionados + sensores + energia.
-// Solo vista -- todos los valores de abajo son de ejemplo (los mismos del
-// mockup). La logica que los actualice con datos reales todavia no existe;
-// cuando se agregue, va a escribir sobre los handles guardados en
-// ui_dashboard_t (ver ui_dashboard.h), igual que hace uart_labgeo.c con
-// ui_labgeo_t en el proyecto controlador_labgeo/blink.
+// Arranca con "--" y los nombres por defecto; uart_braindlab.c escribe los
+// datos reales (ESTADO_UPDATE) y los nombres del sitio (NOMBRE) sobre los
+// handles guardados en ui_dashboard_t (ver ui_dashboard.h).
 // ---------------------------------------------------------------------
 
 #define COLOR_BG_ROOT        lv_color_hex(0x0A0E17)
@@ -86,10 +86,14 @@ static void crear_barra_superior(lv_obj_t *parent)
     lv_label_set_text(lbl_menu, LV_SYMBOL_BARS);
     lv_obj_set_style_text_color(lbl_menu, COLOR_TEXTO_PRINC, 0);
 
-    lv_obj_t *lbl_titulo = lv_label_create(grupo_titulo);
-    lv_label_set_text(lbl_titulo, "SISTEMA DE MONITOREO");
-    lv_obj_set_style_text_color(lbl_titulo, COLOR_TEXTO_PRINC, 0);
-    lv_obj_set_style_text_font(lbl_titulo, &lv_font_montserrat_16, 0);
+    ui.lbl_titulo = lv_label_create(grupo_titulo);
+    lv_label_set_text(ui.lbl_titulo, "SISTEMA DE MONITOREO");
+    lv_obj_set_style_text_color(ui.lbl_titulo, COLOR_TEXTO_PRINC, 0);
+    lv_obj_set_style_text_font(ui.lbl_titulo, &lv_font_montserrat_16, 0);
+    // Nombre del equipo de hasta 31 caracteres: se recorta con "..." para no
+    // empujar el estado y la hora fuera de la barra.
+    lv_label_set_long_mode(ui.lbl_titulo, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_style_max_width(ui.lbl_titulo, 290, 0);
 
     // Grupo central: estado del sistema
     lv_obj_t *grupo_estado = lv_obj_create(barra);
@@ -192,11 +196,26 @@ static void toggle_power_cb(lv_event_t *e)
     ui_dashboard_aire_set_encendido(aire, !aire->encendido);
 }
 
-static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numero,
-                                const char *nombre, const char *temp, const char *set,
-                                const char *velocidad)
+// Rol y modo del aire: "Principal"/"Reserva" (indice_reserva de la
+// automatica) y "Automatico"/"Manual" (forzado desde la web o la pantalla).
+void ui_dashboard_aire_set_rol(ui_dash_aire_t *aire, bool es_reserva, bool hay_reserva, bool manual)
+{
+    const char *rol = !hay_reserva ? "Unico" : es_reserva ? "Reserva" : "Principal";
+    if (strcmp(lv_label_get_text(aire->lbl_rol), rol) != 0) {
+        lv_label_set_text(aire->lbl_rol, rol);
+        lv_obj_set_style_text_color(aire->lbl_rol, es_reserva && hay_reserva ? COLOR_NARANJA : COLOR_VALOR_AZUL, 0);
+    }
+    const char *modo = manual ? LV_SYMBOL_EDIT " Manual" : "Automatico";
+    if (strcmp(lv_label_get_text(aire->lbl_modo), modo) != 0) {
+        lv_label_set_text(aire->lbl_modo, modo);
+        lv_obj_set_style_text_color(aire->lbl_modo, manual ? COLOR_NARANJA : COLOR_TEXTO_SEC, 0);
+    }
+}
+
+static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numero)
 {
     lv_obj_t *card = crear_tarjeta_base(parent);
+    aire->card = card;
     lv_obj_set_flex_grow(card, 1);
     lv_obj_set_height(card, LV_PCT(100));
     lv_obj_set_style_pad_row(card, 2, 0);   // comprimido, ver conversacion -- todo mas pegado (header, set/vel, boton)
@@ -213,6 +232,7 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     lv_obj_t *grupo_id = lv_obj_create(fila_header);
     lv_obj_remove_style_all(grupo_id);
     lv_obj_set_size(grupo_id, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(grupo_id, 1); // ocupa lo que deja el led: el nombre se recorta ahi
     lv_obj_set_flex_flow(grupo_id, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(grupo_id, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(grupo_id, 6, 0);
@@ -223,8 +243,10 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     lv_obj_set_style_text_font(lbl_numero, &lv_font_montserrat_16, 0);
 
     aire->lbl_nombre = lv_label_create(grupo_id);
-    lv_label_set_text(aire->lbl_nombre, nombre);
+    lv_label_set_text_fmt(aire->lbl_nombre, "AA%d", numero);
     lv_obj_set_style_text_color(aire->lbl_nombre, COLOR_TEXTO_SEC, 0);
+    lv_obj_set_flex_grow(aire->lbl_nombre, 1);
+    lv_label_set_long_mode(aire->lbl_nombre, LV_LABEL_LONG_MODE_DOTS);
 
     aire->led_estado = crear_led(fila_header, COLOR_VERDE, 10);
 
@@ -260,39 +282,20 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
         aire->viento[i] = franja;
     }
 
-    // Temperatura actual
-    lv_obj_t *fila_temp = lv_obj_create(card);
-    lv_obj_remove_style_all(fila_temp);
-    lv_obj_set_flex_flow(fila_temp, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(fila_temp, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_size(fila_temp, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_column(fila_temp, 2, 0);
+    // Rol (Principal/Reserva) + modo (Automatico/Manual). Arrancan en "--"
+    // hasta el primer ESTADO_UPDATE.
+    aire->lbl_rol = lv_label_create(card);
+    lv_label_set_text(aire->lbl_rol, "--");
+    lv_obj_set_style_text_color(aire->lbl_rol, COLOR_VALOR_AZUL, 0);
+    lv_obj_set_style_text_font(aire->lbl_rol, &lv_font_montserrat_16, 0);
+    lv_obj_set_width(aire->lbl_rol, LV_PCT(100));
+    lv_obj_set_style_text_align(aire->lbl_rol, LV_TEXT_ALIGN_CENTER, 0);
 
-    aire->lbl_temp_actual = lv_label_create(fila_temp);
-    lv_label_set_text(aire->lbl_temp_actual, temp);
-    lv_obj_set_style_text_color(aire->lbl_temp_actual, COLOR_VALOR_AZUL, 0);
-    lv_obj_set_style_text_font(aire->lbl_temp_actual, &lv_font_montserrat_24, 0);
-
-    lv_obj_t *lbl_grado = lv_label_create(fila_temp);
-    lv_label_set_text(lbl_grado, "\xC2\xB0" "C");
-    lv_obj_set_style_text_color(lbl_grado, COLOR_VALOR_AZUL, 0);
-
-    // Setpoint + velocidad en UNA sola fila (antes eran 2 filas separadas --
-    // no entraban, ver comentario de pad_row arriba).
-    lv_obj_t *fila_set_vel = lv_obj_create(card);
-    lv_obj_remove_style_all(fila_set_vel);
-    lv_obj_set_size(fila_set_vel, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(fila_set_vel, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(fila_set_vel, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    lv_obj_t *lbl_set_prefijo = lv_label_create(fila_set_vel);
-    lv_obj_set_style_text_color(lbl_set_prefijo, COLOR_TEXTO_SEC, 0);
-    aire->lbl_set = lbl_set_prefijo;
-    lv_label_set_text_fmt(aire->lbl_set, "Set: %s\xC2\xB0" "C", set);
-
-    aire->lbl_velocidad = lv_label_create(fila_set_vel);
-    lv_label_set_text(aire->lbl_velocidad, velocidad);
-    lv_obj_set_style_text_color(aire->lbl_velocidad, COLOR_TEXTO_PRINC, 0);
+    aire->lbl_modo = lv_label_create(card);
+    lv_label_set_text(aire->lbl_modo, "--");
+    lv_obj_set_style_text_color(aire->lbl_modo, COLOR_TEXTO_SEC, 0);
+    lv_obj_set_width(aire->lbl_modo, LV_PCT(100));
+    lv_obj_set_style_text_align(aire->lbl_modo, LV_TEXT_ALIGN_CENTER, 0);
 
     // Boton ON/OFF
     aire->btn_power = lv_button_create(card);
@@ -318,14 +321,11 @@ static void crear_fila_aires(lv_obj_t *parent)
     lv_obj_set_flex_flow(fila, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(fila, 10, 0);
 
-    // "temp"/"set"/"velocidad" quedan en "--" -- no hay dato real de setpoint
-    // ni velocidad por unidad en el protocolo (solo ON/OFF, ver
-    // uart_braindlab.c), asi que nunca se van a actualizar solos. Mostrar un
-    // numero fijo ahi seria un dato inventado.
-    crear_tarjeta_aire(fila, &ui.aires[0], 1, "Aire 1", "--", "--", "--");
-    crear_tarjeta_aire(fila, &ui.aires[1], 2, "Aire 2", "--", "--", "--");
-    crear_tarjeta_aire(fila, &ui.aires[2], 3, "Aire 3", "--", "--", "--");
-    crear_tarjeta_aire(fila, &ui.aires[3], 4, "Aire 4", "--", "--", "--");
+    // Los aires que no se usan (n_aires) se ocultan y los demas se reparten
+    // el ancho (flex_grow).
+    for (int i = 0; i < UI_DASH_NUM_AIRES; i++) {
+        crear_tarjeta_aire(fila, &ui.aires[i], i + 1);
+    }
 }
 
 // ---------- Columna izquierda ----------
@@ -339,8 +339,15 @@ static void crear_columna_izquierda(lv_obj_t *parent)
     lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(col, 8, 0);
 
-    lv_obj_t *titulo_aires = crear_titulo_seccion(col, "AIRES ACONDICIONADOS");
-    lv_obj_set_width(titulo_aires, LV_PCT(100));
+    lv_obj_t *fila_titulo = lv_obj_create(col);
+    lv_obj_remove_style_all(fila_titulo);
+    lv_obj_set_size(fila_titulo, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(fila_titulo, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fila_titulo, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    crear_titulo_seccion(fila_titulo, "AIRES ACONDICIONADOS");
+    ui.lbl_ciclo = lv_label_create(fila_titulo);
+    lv_label_set_text(ui.lbl_ciclo, "");
+    lv_obj_set_style_text_color(ui.lbl_ciclo, COLOR_TEXTO_SEC, 0);
 
     crear_fila_aires(col);
 }
@@ -353,10 +360,13 @@ static void crear_tarjeta_sensor(lv_obj_t *parent, ui_dash_sensor_t *sensor,
     lv_obj_t *card = crear_tarjeta_base(parent);
     lv_obj_set_flex_grow(card, 1);
     lv_obj_set_height(card, LV_PCT(100));
+    sensor->card = card;
 
     sensor->lbl_nombre = lv_label_create(card);
     lv_label_set_text(sensor->lbl_nombre, nombre);
     lv_obj_set_style_text_color(sensor->lbl_nombre, COLOR_TEXTO_SEC, 0);
+    lv_obj_set_width(sensor->lbl_nombre, LV_PCT(100));
+    lv_label_set_long_mode(sensor->lbl_nombre, LV_LABEL_LONG_MODE_DOTS);
 
     sensor->lbl_valor = lv_label_create(card);
     lv_label_set_text(sensor->lbl_valor, valor);
@@ -368,8 +378,10 @@ static void crear_panel_sensores(lv_obj_t *parent)
 {
     lv_obj_t *titulo = crear_titulo_seccion(parent, "SENSORES AMBIENTALES");
     lv_obj_set_width(titulo, LV_PCT(100));
+    ui.titulo_sensores = titulo;
 
     lv_obj_t *grid = lv_obj_create(parent);
+    ui.grid_sensores = grid;
     lv_obj_remove_style_all(grid);
     lv_obj_set_width(grid, LV_PCT(100));
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_COLUMN);
@@ -425,9 +437,12 @@ static void crear_panel_gabinete(lv_obj_t *parent)
 {
     lv_obj_t *titulo = crear_titulo_seccion(parent, "GABINETE");
     lv_obj_set_width(titulo, LV_PCT(100));
+    lv_label_set_long_mode(titulo, LV_LABEL_LONG_MODE_DOTS);
+    ui.titulo_gabinete = titulo;
 
     lv_obj_t *card = crear_tarjeta_base(parent);
     lv_obj_set_width(card, LV_PCT(100));
+    ui.card_gabinete = card;
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_AROUND, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -595,6 +610,84 @@ static void crear_panel_controles(lv_obj_t *parent)
     lv_obj_add_event_cb(ui.btn_at, toggle_at_cb, LV_EVENT_CLICKED, NULL);
 }
 
+// ---------- Nombres del sitio e instalacion ----------
+
+static void set_texto_si_cambio(lv_obj_t *lbl, const char *texto)
+{
+    if (strcmp(lv_label_get_text(lbl), texto) != 0) {
+        lv_label_set_text(lbl, texto);
+    }
+}
+
+void ui_dashboard_set_nombre(ui_dashboard_t *dash, uint8_t tipo, uint8_t indice, const char *texto)
+{
+    char por_defecto[8];
+    bool vacio = texto[0] == '\0';
+
+    if (tipo == BRAINDLAB_NOMBRE_EQUIPO) {
+        set_texto_si_cambio(dash->lbl_titulo, vacio ? "SISTEMA DE MONITOREO" : texto);
+    } else if (tipo == BRAINDLAB_NOMBRE_AIRE && indice < UI_DASH_NUM_AIRES) {
+        lv_snprintf(por_defecto, sizeof(por_defecto), "AA%u", (unsigned)indice + 1);
+        set_texto_si_cambio(dash->aires[indice].lbl_nombre, vacio ? por_defecto : texto);
+    } else if (tipo == BRAINDLAB_NOMBRE_SENSOR && indice < UI_DASH_NUM_SENSORES) {
+        lv_snprintf(por_defecto, sizeof(por_defecto), "T%u", (unsigned)indice + 1);
+        set_texto_si_cambio(dash->sensores[indice].lbl_nombre, vacio ? por_defecto : texto);
+    } else if (tipo == BRAINDLAB_NOMBRE_SENSOR && indice == UI_DASH_NUM_SENSORES) {
+        // Sensor 5 = AM2301A: su nombre va como titulo de la seccion, en
+        // mayusculas como los demas titulos.
+        char titulo[BRAINDLAB_NOMBRE_MAX + 1];
+        size_t i = 0;
+        for (; texto[i] != '\0' && i < sizeof(titulo) - 1; i++) {
+            char c = texto[i];
+            titulo[i] = (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+        }
+        titulo[i] = '\0';
+        set_texto_si_cambio(dash->titulo_gabinete, vacio ? "GABINETE" : titulo);
+    }
+}
+
+static void mostrar(lv_obj_t *obj, bool visible)
+{
+    if (visible) {
+        lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void ui_dashboard_set_instalacion(ui_dashboard_t *dash, uint8_t sens_inst, uint8_t n_aires)
+{
+    static int ultima = -1; // sens_inst | n_aires << 8 ya aplicado
+    int clave = sens_inst | (n_aires << 8);
+    if (clave == ultima) {
+        return;
+    }
+    ultima = clave;
+
+    for (int i = 0; i < UI_DASH_NUM_AIRES; i++) {
+        mostrar(dash->aires[i].card, i < n_aires);
+    }
+
+    // T1..T4 van de a dos por fila: una fila sin ninguno instalado se oculta
+    // entera (si no, queda un hueco), y si no hay ninguno, toda la seccion.
+    bool alguno = false;
+    for (int i = 0; i < UI_DASH_NUM_SENSORES; i++) {
+        bool inst = (sens_inst >> i) & 1;
+        alguno = alguno || inst;
+        mostrar(dash->sensores[i].card, inst);
+    }
+    for (int fila = 0; fila < UI_DASH_NUM_SENSORES / 2; fila++) {
+        bool alguno_fila = ((sens_inst >> (fila * 2)) & 3) != 0;
+        mostrar(lv_obj_get_parent(dash->sensores[fila * 2].card), alguno_fila);
+    }
+    mostrar(dash->titulo_sensores, alguno);
+    mostrar(dash->grid_sensores, alguno);
+
+    bool gabinete = (sens_inst >> UI_DASH_NUM_SENSORES) & 1;
+    mostrar(dash->titulo_gabinete, gabinete);
+    mostrar(dash->card_gabinete, gabinete);
+}
+
 // ---------- Columna derecha ----------
 
 static void crear_columna_derecha(lv_obj_t *parent)
@@ -654,11 +747,8 @@ static void crear_barra_inferior(lv_obj_t *parent)
     lv_obj_set_flex_flow(barra, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(barra, 8, 0);
 
-    ui.btn_nav_inicio      = crear_boton_nav(barra, LV_SYMBOL_HOME, "INICIO", true);
-    ui.btn_nav_graficas    = crear_boton_nav(barra, LV_SYMBOL_IMAGE, "GRAFICAS", false);
-    ui.btn_nav_ajustes     = crear_boton_nav(barra, LV_SYMBOL_SETTINGS, "AJUSTES", false);
-    ui.btn_nav_red         = crear_boton_nav(barra, LV_SYMBOL_WIFI, "RED", false);
-    ui.btn_nav_fecha_hora  = crear_boton_nav(barra, LV_SYMBOL_LOOP, "FECHA/HORA", false);
+    ui.btn_nav_inicio  = crear_boton_nav(barra, LV_SYMBOL_HOME, "INICIO", true);
+    ui.btn_nav_energia = crear_boton_nav(barra, LV_SYMBOL_CHARGE, "ENERGIA", false);
 }
 
 // ---------- Ensamblado ----------

@@ -74,7 +74,9 @@ void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
                                   uint16_t anio, uint8_t mes, uint8_t dia,
                                   uint8_t hora, uint8_t minuto, uint8_t segundo,
                                   bool energia_ok, const float voltajes[3], const float corrientes[3],
-                                  uint8_t sd_estado, uint8_t fallas)
+                                  uint8_t sd_estado, uint8_t fallas,
+                                  const bool ntc_ok[4], const bool sensor_instalado[6],
+                                  uint8_t cantidad_aires)
 {
     uint8_t payload[BRAINDLAB_ESTADO_UPDATE_LEN];
     uint16_t idx = 0;
@@ -121,7 +123,28 @@ void uart_pantalla_enviar_estado(uint8_t ciclo, const float temperaturas[4],
     braindlab_put_u8(payload, &idx, sd_estado);
     braindlab_put_u8(payload, &idx, fallas);
 
+    uint8_t bitmask_ntc = 0, bitmask_inst = 0;
+    for (int i = 0; i < 4; i++) {
+        if (ntc_ok[i]) bitmask_ntc |= (1 << i);
+    }
+    for (int i = 0; i < 6; i++) {
+        if (sensor_instalado[i]) bitmask_inst |= (1 << i);
+    }
+    braindlab_put_u8(payload, &idx, bitmask_ntc);
+    braindlab_put_u8(payload, &idx, bitmask_inst);
+    braindlab_put_u8(payload, &idx, cantidad_aires);
+
     enviar_frame(BRAINDLAB_CMD_ESTADO_UPDATE, payload, idx);
+}
+
+void uart_pantalla_enviar_nombre(uint8_t tipo, uint8_t indice, const char *texto)
+{
+    uint8_t payload[2 + BRAINDLAB_NOMBRE_MAX];
+    size_t largo = strnlen(texto, BRAINDLAB_NOMBRE_MAX);
+    payload[0] = tipo;
+    payload[1] = indice;
+    memcpy(&payload[2], texto, largo);
+    enviar_frame(BRAINDLAB_CMD_NOMBRE, payload, (uint16_t)(2 + largo));
 }
 
 // ---------- Recepcion ----------

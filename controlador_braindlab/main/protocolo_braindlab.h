@@ -18,6 +18,7 @@
 typedef enum {
     // Controlador -> Pantalla
     BRAINDLAB_CMD_ESTADO_UPDATE     = 0x01, // estado completo (climatizacion + sensores + red + hora), periodico
+    BRAINDLAB_CMD_NOMBRE            = 0x02, // un nombre del sitio (equipo, aire o sensor), ver abajo
 
     // Pantalla -> Controlador (mismo pedido que hacen /control_aire,
     // /control_bypass, /control_at, /control_automatico de servidor_web.c --
@@ -87,7 +88,7 @@ static inline uint32_t braindlab_leer_u32(const uint8_t *p)
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-// ---------- Payload de BRAINDLAB_CMD_ESTADO_UPDATE (50 bytes) ----------
+// ---------- Payload de BRAINDLAB_CMD_ESTADO_UPDATE (53 bytes) ----------
 //
 // Todos los campos son los mismos que ya se mandan por WebSocket (ver
 // publicar_estado_ws() en app_main.c) -- la pantalla es, en los hechos, otro
@@ -126,17 +127,29 @@ static inline uint32_t braindlab_leer_u32(const uint8_t *p)
 //                                         4=formateando
 // 49      1       fallas             u8   bitmask, bit en 1 = modulo con falla
 //                                         AHORA (ver BRAINDLAB_FALLA_*)
+// 50      1       ntc_ok             u8   bitmask, bit i = T(i+1) leido bien
+//                                         esta vuelta (0 = desconectado/en
+//                                         corto o ADS1115 sin respuesta:
+//                                         mostrar "--", no el valor)
+// 51      1       sens_inst          u8   bitmask, bit i = sensor i+1 (1..6)
+//                                         instalado (Configuracion > Sitio);
+//                                         0..3 = T1..T4, 4 = gestor (AM2301A)
+// 52      1       n_aires            u8   aires en uso (1..4); AA(n+1).. no
+//                                         se muestran
 //
 // anio=0 (mes=dia=hora=minuto=segundo=0) significa "RTC no disponible",
 // equivalente al fecha_hora="----" del JSON del WS. energia_ok=0 significa
 // que el medidor no responde: ignorar voltajes/corrientes y mostrar "--".
 //
-// Los campos de energia (offset 35+), sd_estado (48) y fallas (49) se agregaron al final
-// a proposito: una pantalla con firmware viejo (que espera 35 bytes) sigue
-// funcionando, solo ignora lo que sobra. BRAINDLAB_ESTADO_UPDATE_LEN_V1 es
-// ese minimo viejo; cada campo nuevo se lee solo si LEN lo alcanza.
+// Los campos de energia (offset 35+), sd_estado (48), fallas (49) y los de
+// instalacion (50-52) se agregaron al final a proposito: una pantalla con
+// firmware viejo sigue funcionando, solo ignora lo que sobra.
+// BRAINDLAB_ESTADO_UPDATE_LEN_V1 es el minimo viejo; cada campo nuevo se
+// lee solo si LEN lo alcanza. Controlador sin los campos 50-52 (LEN 50):
+// todos los sensores OK e instalados y 4 aires.
 #define BRAINDLAB_ESTADO_UPDATE_LEN_V1 35
-#define BRAINDLAB_ESTADO_UPDATE_LEN    50
+#define BRAINDLAB_ESTADO_UPDATE_LEN_V2 50
+#define BRAINDLAB_ESTADO_UPDATE_LEN    53
 
 #define BRAINDLAB_SD_OK              0
 #define BRAINDLAB_SD_SIN_TARJETA     1
@@ -153,6 +166,26 @@ static inline uint32_t braindlab_leer_u32(const uint8_t *p)
 #define BRAINDLAB_FALLA_ETH      (1 << 3) // Ethernet sin link
 #define BRAINDLAB_FALLA_MODBUS   (1 << 4) // medidor JSY-MK-333G sin respuesta
 #define BRAINDLAB_FALLA_SD       (1 << 5) // MicroSD != OK (detalle en sd_estado)
+
+// ---------- Payload de BRAINDLAB_CMD_NOMBRE (2..33 bytes) ----------
+//
+// Offset  Tamano  Campo   Tipo
+// 0       1       tipo    u8   BRAINDLAB_NOMBRE_* (equipo, aire, sensor)
+// 1       1       indice  u8   equipo: 0; aire: 0..3 (AA1..AA4); sensor:
+//                              0..5 (sensor 1..6, mismo orden que sens_inst)
+// 2       0..31   texto   ASCII imprimible, SIN '\0' al final (el largo
+//                         sale de LEN - 2). Vacio = usar el nombre por
+//                         defecto de la pantalla.
+//
+// Son los nombres de Configuracion > Sitio en la web (config.json). Uno por
+// trama porque los 11 juntos (31 caracteres c/u) no entran en 255 bytes. El
+// controlador los manda todos al arrancar, apenas se guardan desde la web y
+// despues cada ~30 s (por si la pantalla se reinicio y se los perdio). Una
+// pantalla con firmware viejo ignora el comando (comando desconocido).
+#define BRAINDLAB_NOMBRE_EQUIPO 0
+#define BRAINDLAB_NOMBRE_AIRE   1
+#define BRAINDLAB_NOMBRE_SENSOR 2
+#define BRAINDLAB_NOMBRE_MAX    31
 
 // ---------- Payloads de los comandos Pantalla -> Controlador ----------
 //

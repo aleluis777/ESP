@@ -40,6 +40,7 @@ descarta y se pierde.
 | CMD    | Nombre         | Cuando se manda |
 |--------|----------------|------------------|
 | `0x01` | ESTADO_UPDATE  | Periodico, una vez por vuelta de `tarea_climatizacion` (~cada 2s). |
+| `0x02` | NOMBRE         | Los 11 nombres del sitio, uno por trama: al arrancar, apenas se guardan desde la web y cada ~30 s. |
 
 ### Pantalla -> Controlador
 
@@ -94,8 +95,11 @@ de WS/JSON. Temperaturas y humedad van como `i16` en **decimas** de unidad
 | 42     | 6      | corrientes[3]       | u16 x3 | centesimas de A, fases R, S, T |
 | 48     | 1      | sd_estado           | u8   | MicroSD: 0=OK, 1=sin tarjeta, 2=sin formato (no FAT32), 3=error de escritura, 4=formateando |
 | 49     | 1      | fallas              | u8   | bitmask, 1 = modulo con falla ahora: bit0 RTC, bit1 ADC (ADS1115), bit2 AM2301A, bit3 Ethernet sin link, bit4 medidor Modbus, bit5 SD (detalle en `sd_estado`) |
+| 50     | 1      | ntc_ok              | u8   | bitmask, bit i = T(i+1) leido bien esta vuelta (0 = desconectado/en corto o ADS1115 sin respuesta: mostrar "--") |
+| 51     | 1      | sens_inst           | u8   | bitmask, bit i = sensor i+1 instalado (Configuracion > Sitio): bits 0-3 = T1..T4, bit 4 = gestor (AM2301A), bit 5 = sensor 6 |
+| 52     | 1      | n_aires             | u8   | aires en uso (1..4); los demas no se muestran |
 
-Payload total: **50 bytes**. `anio=0` (con mes/dia/hora/minuto/segundo en 0)
+Payload total: **53 bytes**. `anio=0` (con mes/dia/hora/minuto/segundo en 0)
 significa "RTC no disponible", equivalente a `fecha_hora="----"` en el JSON
 del WS. `energia_ok=0` significa que el medidor no responde: ignorar
 voltajes/corrientes y mostrar "--".
@@ -103,14 +107,20 @@ voltajes/corrientes y mostrar "--".
 **Compatibilidad:** los campos de energia (offset 35 en adelante) se
 agregaron al final. Una pantalla con firmware viejo acepta cualquier
 `LEN >= 35` e ignora lo que sobra; la pantalla nueva lee la energia solo si
-`LEN >= 48`, `sd_estado` solo si `LEN >= 49` y `fallas` solo si `LEN >= 50`
-(`BRAINDLAB_ESTADO_UPDATE_LEN_V1` = 35, `BRAINDLAB_ESTADO_UPDATE_LEN` = 50
-en `protocolo_braindlab.h`).
+`LEN >= 48`, `sd_estado` solo si `LEN >= 49`, `fallas` solo si `LEN >= 50`
+y los de instalacion (50-52) solo si `LEN >= 53`; sin ellos asume todo
+leido bien, todo instalado y 4 aires (`BRAINDLAB_ESTADO_UPDATE_LEN_V1` = 35,
+`_LEN_V2` = 50, `BRAINDLAB_ESTADO_UPDATE_LEN` = 53 en `protocolo_braindlab.h`).
 
 **Aplicado hoy en el dashboard** (`uart_braindlab.c`): `salida_aire` ->
 encendido/apagado + animacion de viento de cada tarjeta de aire;
-`temperaturas` -> las 4 tarjetas de "SENSORES AMBIENTALES";
-`humedad_gestor` -> tarjeta de "HUMEDAD RELATIVA"; `alarma_at`/`ciclo` ->
+`indice_reserva`/`aire_manual` -> "Principal/Reserva" y "Automatico/Manual"
+de cada tarjeta de aire; `ciclo` -> "Ciclo: ..." al lado del titulo de aires;
+`temperaturas` + `ntc_ok` -> las 4 tarjetas de "SENSORES AMBIENTALES" ("--"
+en rojo si no hay lectura); `temp_gestor`/`humedad_gestor` -> tarjeta del
+gabinete (en naranja si `gestor_ok`=0: ultimo valor bueno);
+`sens_inst`/`n_aires` -> se ocultan los sensores no instalados y los aires
+que no se usan; `alarma_at`/`ciclo` ->
 LED + texto de "Sistema OK/Bypass Activo/Alta Temperatura" y las filas de
 "ALARMAS ACTIVAS" (se muestran solo si `alarma_at`/`bypass_activo` estan
 realmente activos); `anio..segundo` -> hora/fecha de la barra superior;
@@ -120,8 +130,27 @@ realmente activos); `anio..segundo` -> hora/fecha de la barra superior;
 `fallas` -> fila "MOD" con la lista de modulos caidos. Ademas la pantalla
 muestra la fila "COM" si no recibe un `ESTADO_UPDATE` valido en 6 s (el
 controlador no puede saber si la pantalla esta, el protocolo no tiene ACK).
-`temp_gestor`, `indice_reserva`, `modo_manual`, `eth_conectado`, `uptime_s`
-llegan pero todavia no tienen un widget propio en el dashboard.
+`modo_manual`, `eth_conectado`, `uptime_s` llegan pero todavia no tienen un
+widget propio en el dashboard.
+
+### `0x02` NOMBRE (Controlador -> Pantalla)
+
+Payload: 2..33 bytes, `tipo` (u8) + `indice` (u8) + `texto` (0..31 bytes
+ASCII imprimible, **sin** `\0`; el largo sale de `LEN - 2`).
+
+| tipo | Que es | indice | Donde se ve en la pantalla |
+|------|--------|--------|-----------------------------|
+| 0    | Nombre del equipo (= sysName SNMP, titulo del panel web) | 0 | Titulo de la barra superior |
+| 1    | Nombre de un aire | 0..3 (AA1..AA4) | Cabecera de cada tarjeta de aire |
+| 2    | Nombre de un sensor | 0..5 (sensor 1..6) | 0..3: tarjetas T1..T4; 4: titulo del gabinete (en mayusculas) |
+
+Texto vacio = nombre por defecto de la pantalla ("SISTEMA DE MONITOREO",
+"AA1", "T1", "GABINETE"). Son los nombres de Configuracion > Sitio en la web
+(`config.json`). Va un nombre por trama porque los 11 juntos (31 caracteres
+c/u) no entran en los 255 bytes de payload. Como el protocolo no tiene ACK,
+el controlador los repite cada ~30 s: una pantalla que se reinicio los
+recupera sola. Una pantalla con firmware viejo los ignora (comando
+desconocido).
 
 ---
 
@@ -165,7 +194,5 @@ Sin payload. Cancela cualquier override manual vigente (AA1-4, bypass, AT).
 - Widgets en el dashboard para forzar bypass/AT a mano y para "volver a
   automatico" (equivalentes a los botones ya agregados en `configurar.html`
   del lado web).
-- Mostrar `temp_gestor` en algun lado del dashboard (hoy solo se aplica
-  `humedad_gestor`, no hay una tarjeta de "T. Gestor" dedicada).
 - Confirmar el pinout fisico real una vez que ambas placas esten cableadas
   entre si (TX/RX cruzados + GND comun).
