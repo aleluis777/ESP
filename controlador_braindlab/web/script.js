@@ -203,12 +203,21 @@ function actualizarEstadoSistema(datos) {
 
     let clase = "ok", texto = "Operacion normal", nota = "Todos los sistemas funcionando correctamente.", icono = "✓";
 
+    // Bypass de cualquier origen: la automatica (ciclo 3), un pedido manual
+    // (web/pantalla/SNMP) o el input fisico BPS_STATUS (GPIO34). La nota dice
+    // si la placa lo confirmo, porque el pedido no garantiza el bypass real.
+    const bypassPedido = datos.ciclo === 3 || !!datos.bypass_solicitado;
+    const bypassFisico = !!datos.bypass_activo;
     if (datos.alarma_at) {
         clase = "critical"; texto = "Alta temperatura"; icono = "⚠";
         nota = "Alarma de alta temperatura activa.";
-    } else if (datos.ciclo === 3) {
+    } else if (bypassPedido || bypassFisico) {
         clase = "warning"; texto = "Bypass activo"; icono = "⇄";
-        nota = "El equipo de A/A esta puenteado.";
+        const origen = !bypassPedido ? "por el contacto externo"
+                     : datos.bypass_manual ? "en manual" : "por la automatica";
+        nota = bypassFisico
+            ? `El equipo de A/A esta puenteado (${origen}).`
+            : `Bypass pedido ${origen}, pero la placa no confirma el bypass fisico (BPS_STATUS).`;
     }
 
     titulo.textContent = texto;

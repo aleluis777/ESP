@@ -53,6 +53,16 @@ static lv_obj_t *crear_titulo_seccion(lv_obj_t *parent, const char *texto)
     return lbl;
 }
 
+// Nombre en UNA sola linea, cortado con "..." si no entra. LVGL solo corta
+// con puntos si el label tiene alto fijo: con alto automatico el texto largo
+// baja a una segunda linea y empuja lo que esta debajo (la temperatura).
+// Llamar despues de ponerle la fuente.
+static void una_linea_con_puntos(lv_obj_t *lbl)
+{
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_height(lbl, lv_font_get_line_height(lv_obj_get_style_text_font(lbl, LV_PART_MAIN)));
+}
+
 static lv_obj_t *crear_led(lv_obj_t *parent, lv_color_t color, int size)
 {
     lv_obj_t *led = lv_obj_create(parent);
@@ -92,7 +102,7 @@ static void crear_barra_superior(lv_obj_t *parent)
     lv_obj_set_style_text_font(ui.lbl_titulo, &lv_font_montserrat_16, 0);
     // Nombre del equipo de hasta 31 caracteres: se recorta con "..." para no
     // empujar el estado y la hora fuera de la barra.
-    lv_label_set_long_mode(ui.lbl_titulo, LV_LABEL_LONG_MODE_DOTS);
+    una_linea_con_puntos(ui.lbl_titulo);
     lv_obj_set_style_max_width(ui.lbl_titulo, 290, 0);
 
     // Grupo central: estado del sistema
@@ -246,7 +256,7 @@ static void crear_tarjeta_aire(lv_obj_t *parent, ui_dash_aire_t *aire, int numer
     lv_label_set_text_fmt(aire->lbl_nombre, "AA%d", numero);
     lv_obj_set_style_text_color(aire->lbl_nombre, COLOR_TEXTO_SEC, 0);
     lv_obj_set_flex_grow(aire->lbl_nombre, 1);
-    lv_label_set_long_mode(aire->lbl_nombre, LV_LABEL_LONG_MODE_DOTS);
+    una_linea_con_puntos(aire->lbl_nombre);
 
     aire->led_estado = crear_led(fila_header, COLOR_VERDE, 10);
 
@@ -366,7 +376,7 @@ static void crear_tarjeta_sensor(lv_obj_t *parent, ui_dash_sensor_t *sensor,
     lv_label_set_text(sensor->lbl_nombre, nombre);
     lv_obj_set_style_text_color(sensor->lbl_nombre, COLOR_TEXTO_SEC, 0);
     lv_obj_set_width(sensor->lbl_nombre, LV_PCT(100));
-    lv_label_set_long_mode(sensor->lbl_nombre, LV_LABEL_LONG_MODE_DOTS);
+    una_linea_con_puntos(sensor->lbl_nombre);
 
     sensor->lbl_valor = lv_label_create(card);
     lv_label_set_text(sensor->lbl_valor, valor);
@@ -437,7 +447,7 @@ static void crear_panel_gabinete(lv_obj_t *parent)
 {
     lv_obj_t *titulo = crear_titulo_seccion(parent, "GABINETE");
     lv_obj_set_width(titulo, LV_PCT(100));
-    lv_label_set_long_mode(titulo, LV_LABEL_LONG_MODE_DOTS);
+    una_linea_con_puntos(titulo);
     ui.titulo_gabinete = titulo;
 
     lv_obj_t *card = crear_tarjeta_base(parent);

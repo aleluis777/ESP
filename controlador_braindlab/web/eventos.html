@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braindlab - Eventos</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  main { max-width: 1100px; }
+  .mensaje { font-size: 0.85rem; min-height: 1.1em; color: var(--texto-tenue); margin: 0.5rem 0 0; }
+  .mensaje.error { color: var(--alerta); }
+
+  /* ---------- barra y filtros ---------- */
+  .barra { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .barra label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--texto-tenue); }
+  .barra .espacio { flex: 1; }
+  .filtros { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.85rem; }
+  .chip {
+    border: 1px solid var(--borde-input); background: var(--superficie); color: var(--texto);
+    border-radius: 999px; padding: 0.3rem 0.8rem; font-size: 0.8rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.4rem;
+  }
+  .chip .n { color: var(--texto-tenue); font-size: 0.75rem; }
+  .chip.activo { border-color: var(--acento); background: var(--acento-suave); font-weight: 600; }
+  .chip i { width: 0.55rem; height: 0.55rem; border-radius: 50%; display: inline-block; }
+  .filtros select, .filtros input { font-size: 0.85rem; }
+  .filtros input { flex: 1; min-width: 10rem; }
+  .resumen { font-size: 0.8rem; color: var(--texto-tenue); margin: 0.75rem 0 0; }
+
+  /* ---------- lista ---------- */
+  .dia { font-size: 0.78rem; font-weight: 700; color: var(--texto-tenue); text-transform: capitalize;
+         margin: 1rem 0 0.35rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--tarjeta-borde); }
+  .dia:first-child { margin-top: 0; }
+  .ev {
+    display: grid; grid-template-columns: 4.2rem 6.2rem 6.8rem 7.5rem 1fr; gap: 0.6rem; align-items: baseline;
+    padding: 0.45rem 0.4rem; border-radius: 0.5rem; font-size: 0.85rem;
+  }
+  .ev:hover { background: var(--superficie); }
+  .ev .hora { font-variant-numeric: tabular-nums; color: var(--texto-tenue); }
+  .ev .cat, .ev .origen { color: var(--texto-tenue); font-size: 0.78rem; }
+  .ev .detalle { overflow-wrap: anywhere; }
+  .nivel { display: inline-block; border-radius: 999px; padding: 0.1rem 0.55rem; font-size: 0.72rem; font-weight: 700; }
+  .nivel.critico { background: var(--alerta-suave); color: var(--alerta); }
+  .nivel.aviso   { background: var(--warning-suave); color: var(--warning); }
+  .nivel.ok      { background: var(--ok-suave); color: var(--ok); }
+  .nivel.info    { background: var(--superficie); color: var(--texto-tenue); }
+  .vacio { color: var(--texto-tenue); font-size: 0.9rem; text-align: center; padding: 1.5rem 0; }
+  .mas { display: flex; justify-content: center; margin-top: 0.75rem; }
+
+  @media (max-width: 640px) {
+    .ev { grid-template-columns: auto auto 1fr; gap: 0.25rem 0.5rem; }
+    .ev .detalle { grid-column: 1 / -1; }
+    .ev .cat { display: none; }
+    .ev .origen { text-align: right; }
+  }
+</style>
+<script src="/comun.js"></script>
+</head>
+<body class="con-menu">
+ <div class="contenido">
+  <header class="topbar">
+    <h1>Eventos</h1>
+  </header>
+
+  <main>
+    <!-- Un GET a /api/eventos/meses trae los meses con eventos y otro a
+         /api/eventos?mes=AAAA-MM el CSV del mes; se filtra y dibuja aca,
+         el ESP32 no procesa nada. -->
+    <section class="tarjeta">
+      <div class="barra">
+        <label>Mes <select id="mes"></select></label>
+        <button class="btn" id="btn-actualizar" title="Volver a leer el mes de la SD">&#8635; Actualizar</button>
+        <span class="espacio"></span>
+        <a class="btn" id="btn-descargar" href="#">Descargar CSV</a>
+      </div>
+      <div class="filtros">
+        <button class="chip activo" data-nivel="">Todos <span class="n" id="n-todos">0</span></button>
+        <button class="chip" data-nivel="critico"><i style="background:var(--alerta)"></i>Criticos <span class="n" id="n-critico">0</span></button>
+        <button class="chip" data-nivel="aviso"><i style="background:var(--warning)"></i>Avisos <span class="n" id="n-aviso">0</span></button>
+        <button class="chip" data-nivel="ok"><i style="background:var(--ok)"></i>Normalizados <span class="n" id="n-ok">0</span></button>
+        <button class="chip" data-nivel="info"><i style="background:var(--texto-tenue)"></i>Info <span class="n" id="n-info">0</span></button>
+        <select id="categoria" title="Categoria">
+          <option value="">Todas las categorias</option>
+          <option value="arranque">Arranques</option>
+          <option value="alarma">Alarmas</option>
+          <option value="control">Control y red</option>
+          <option value="manual">Acciones manuales</option>
+          <option value="config">Configuracion</option>
+          <option value="seguridad">Seguridad (accesos)</option>
+        </select>
+        <input type="text" id="buscar" placeholder="Buscar en el detalle...">
+      </div>
+      <p class="resumen" id="resumen"></p>
+      <p class="mensaje" id="mensaje"></p>
+    </section>
+
+    <section class="tarjeta">
+      <div id="lista"></div>
+      <div class="mas" id="mas" hidden><button class="btn" id="btn-mas">Mostrar mas</button></div>
+    </section>
+  </main>
+ </div>
+
+  <script>
+    const NIVELES = { critico: "Critico", aviso: "Aviso", ok: "Normalizado", info: "Info" };
+    const CATEGORIAS = { arranque: "Arranque", alarma: "Alarma", control: "Control", manual: "Manual",
+                         config: "Configuracion", seguridad: "Seguridad" };
+    const ORIGENES = { sistema: "Sistema", automatica: "Automatica", pantalla: "Pantalla", snmp: "SNMP",
+                       contacto: "Contacto externo", manual: "Manual", web: "Web",
+                       "web:admin": "Web (admin)", "web:root": "Web (root)" };
+    const POR_PAGINA = 300;
+    const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                   "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+    let eventos = [];        // del mes, del mas nuevo al mas viejo
+    let filtroNivel = "";
+    let mostrados = POR_PAGINA;
+
+    const $ = (id) => document.getElementById(id);
+    const escapar = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+    function mostrar(texto, error = false) {
+      $("mensaje").textContent = texto;
+      $("mensaje").className = "mensaje" + (error ? " error" : "");
+    }
+
+    function textoMes(m) {
+      const [a, mm] = m.split("-");
+      return `${MESES[+mm - 1]} ${a}`;
+    }
+
+    // ------------------------------------------------------------- carga
+
+    async function cargarMeses() {
+      mostrar("Consultando la SD...");
+      try {
+        const r = await fetch("/api/eventos/meses");
+        if (!r.ok) throw new Error();
+        const d = await r.json();
+        if (!d.sd_ok) {
+          mostrar("La tarjeta SD no esta disponible -- revisar el estado en el panel.", true);
+          return;
+        }
+        const sel = $("mes");
+        sel.innerHTML = d.meses.map((m) => `<option value="${m.mes}">${textoMes(m.mes)} (${m.kb} KB)</option>`).join("");
+        if (!d.meses.length) {
+          sel.innerHTML = "<option>Sin eventos</option>";
+          mostrar("Todavia no hay eventos registrados.");
+          dibujar();
+          return;
+        }
+        const pedido = location.hash.slice(1);
+        if (d.meses.some((m) => m.mes === pedido)) sel.value = pedido;
+        cargarMes();
+      } catch {
+        mostrar("No se pudo consultar el controlador.", true);
+      }
+    }
+
+    // Columnas del CSV (eventos.c): fecha_hora,nivel,categoria,origen,detalle.
+    // El detalle nunca trae comas (el firmware las cambia por ';').
+    function parsearCsv(texto) {
+      const filas = [];
+      for (const linea of texto.trim().split(/\r?\n/).slice(1)) {
+        const c = linea.split(",");
+        if (c.length < 5) continue;
+        filas.push({ fecha: c[0], nivel: c[1], categoria: c[2], origen: c[3], detalle: c.slice(4).join(",") });
+      }
+      // Del mas nuevo al mas viejo. Por fecha y no por orden de archivo: dos
+      // eventos casi simultaneos de tareas distintas pueden quedar cruzados.
+      // sort es estable: los del mismo segundo conservan su orden.
+      return filas.reverse().sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
+    }
+
+    async function cargarMes() {
+      const mes = $("mes").value;
+      if (!/^\d{4}-\d{2}$/.test(mes)) return;
+      history.replaceState(null, "", "#" + mes);
+      $("btn-descargar").href = `/api/eventos?mes=${mes}&descargar=1`;
+      mostrar("Leyendo los eventos de la SD...");
+      try {
+        const r = await fetch(`/api/eventos?mes=${mes}`);
+        if (!r.ok) throw new Error(r.status === 404 ? "No hay eventos de ese mes." : "Error leyendo la SD.");
+        eventos = parsearCsv(await r.text());
+        mostrar("");
+      } catch (e) {
+        eventos = [];
+        mostrar(e.message || "No se pudo leer el mes.", true);
+      }
+      mostrados = POR_PAGINA;
+      dibujar();
+    }
+
+    // ------------------------------------------------------------- dibujo
+
+    function filtrados() {
+      const cat = $("categoria").value;
+      const texto = $("buscar").value.trim().toLowerCase();
+      return eventos.filter((e) =>
+        (!filtroNivel || e.nivel === filtroNivel) &&
+        (!cat || e.categoria === cat) &&
+        (!texto || e.detalle.toLowerCase().includes(texto) || e.origen.toLowerCase().includes(texto)));
+    }
+
+    function dibujar() {
+      // Cuentas por nivel (de todo el mes, sin filtros).
+      const cuenta = { critico: 0, aviso: 0, ok: 0, info: 0 };
+      for (const e of eventos) if (e.nivel in cuenta) cuenta[e.nivel]++;
+      $("n-todos").textContent = eventos.length;
+      for (const n in cuenta) $("n-" + n).textContent = cuenta[n];
+
+      const lista = filtrados();
+      const arranques = eventos.filter((e) => e.categoria === "arranque").length;
+      $("resumen").textContent = eventos.length
+        ? `${eventos.length} eventos en el mes · ${cuenta.critico} criticos · ${cuenta.aviso} avisos · ` +
+          `${arranques} arranque(s)` + (lista.length !== eventos.length ? ` · mostrando ${lista.length} con los filtros` : "")
+        : "";
+
+      const cont = $("lista");
+      if (!lista.length) {
+        cont.innerHTML = `<p class="vacio">${eventos.length ? "Ningun evento coincide con los filtros." : "Sin eventos."}</p>`;
+        $("mas").hidden = true;
+        return;
+      }
+
+      let html = "", diaPrevio = "";
+      for (const e of lista.slice(0, mostrados)) {
+        const dia = e.fecha.slice(0, 10);
+        if (dia !== diaPrevio) {
+          diaPrevio = dia;
+          const [a, m, d] = dia.split("-").map(Number);
+          const nombre = new Date(a, m - 1, d).toLocaleDateString("es", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+          html += `<div class="dia">${escapar(nombre)}</div>`;
+        }
+        html += `<div class="ev">` +
+          `<span class="hora">${escapar(e.fecha.slice(11, 19))}</span>` +
+          `<span><span class="nivel ${escapar(e.nivel)}">${escapar(NIVELES[e.nivel] || e.nivel)}</span></span>` +
+          `<span class="cat">${escapar(CATEGORIAS[e.categoria] || e.categoria)}</span>` +
+          `<span class="origen">${escapar(ORIGENES[e.origen] || e.origen)}</span>` +
+          `<span class="detalle">${escapar(e.detalle)}</span></div>`;
+      }
+      cont.innerHTML = html;
+      $("mas").hidden = lista.length <= mostrados;
+      $("btn-mas").textContent = `Mostrar mas (${lista.length - mostrados} restantes)`;
+    }
+
+    // ---------------------------------------------------------------- init
+
+    document.querySelectorAll(".chip").forEach((chip) => chip.addEventListener("click", () => {
+      document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("activo", c === chip));
+      filtroNivel = chip.dataset.nivel;
+      mostrados = POR_PAGINA;
+      dibujar();
+    }));
+    $("categoria").addEventListener("change", () => { mostrados = POR_PAGINA; dibujar(); });
+    $("buscar").addEventListener("input", () => { mostrados = POR_PAGINA; dibujar(); });
+    $("mes").addEventListener("change", cargarMes);
+    $("btn-actualizar").addEventListener("click", cargarMes);
+    $("btn-mas").addEventListener("click", () => { mostrados += POR_PAGINA; dibujar(); });
+
+    cargarMeses();
+  </script>
+</body>
+</html>

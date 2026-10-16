@@ -113,6 +113,7 @@
     const PAGINAS = [
         { href: "/", icono: "&#8962;", texto: "Inicio", rutas: ["/", "/index.html"] },
         { href: "/historico.html", icono: "&#9650;", texto: "Historico", rutas: ["/historico.html"] },
+        { href: "/eventos.html", icono: "&#9776;", texto: "Eventos", rutas: ["/eventos.html"] },
         { href: "/configurar.html", icono: "&#9881;", texto: "Configuracion", rutas: ["/configurar.html"] },
     ];
 

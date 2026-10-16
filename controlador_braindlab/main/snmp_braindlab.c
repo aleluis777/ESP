@@ -42,6 +42,7 @@
 #include "config_braindlab.h"
 #include "climatizacion.h"
 #include "red_eth.h"
+#include "eventos.h"
 #include "snmp_braindlab.h"
 
 static const char *TAG = "SNMP_BRAINDLAB";
@@ -366,6 +367,99 @@ static bool armar_trap_alarma(int alarma, bool activa, const snmp_braindlab_esta
     return true;
 }
 
+// Evento del registro (eventos.h) para la transicion de 'alarma': mismo
+// filtro de vueltas que los traps, asi el registro y el NOC ven lo mismo.
+// Corre en tarea_climatizacion.
+static void registrar_evento_alarma(int alarma, bool activa, const snmp_braindlab_estado_t *e)
+{
+    static bool s_falla_bypass_registrada = false;
+
+    switch (alarma) {
+    case ALARMA_ALTA_TEMP:
+        if (activa) {
+            eventos_registrar(EVENTO_CRITICO, EVENTO_ALARMA, "automatica", "Alta temperatura: maxima %.1f C",
+                              temperatura_maxima(e));
+        } else {
+            eventos_registrar(EVENTO_OK, EVENTO_ALARMA, "automatica", "Alta temperatura normalizada (maxima %.1f C)",
+                              temperatura_maxima(e));
+        }
+        break;
+    case ALARMA_BYPASS_ACTIVO:
+        if (activa) {
+            // Sin pedido del firmware = lo activo el contacto externo (BP_H).
+            const char *origen = !e->bypass_solicitado ? "contacto" : e->bypass_manual ? "manual" : "automatica";
+            eventos_registrar(EVENTO_AVISO, EVENTO_ALARMA, origen, "%s",
+                              !e->bypass_solicitado ? "Bypass fisico activo: activado por el contacto externo"
+                                                    : "Bypass fisico activo: el A/A queda conectado directo");
+        } else {
+            eventos_registrar(EVENTO_OK, EVENTO_ALARMA, "sistema", "Bypass fisico desactivado");
+        }
+        break;
+    case ALARMA_BYPASS_FALLA:
+        // Bypass activo sin pedido = contacto externo, ya registrado arriba.
+        // Solo es falla si se pidio y la placa no lo confirma.
+        if (activa && e->bypass_solicitado && !e->bypass_activo) {
+            eventos_registrar(EVENTO_CRITICO, EVENTO_ALARMA, "sistema",
+                              "Falla de bypass: se pidio y la placa no lo confirma (BPS_STATUS)");
+            s_falla_bypass_registrada = true;
+        } else if (!activa && s_falla_bypass_registrada) {
+            eventos_registrar(EVENTO_OK, EVENTO_ALARMA, "sistema", "Falla de bypass normalizada");
+            s_falla_bypass_registrada = false;
+        }
+        break;
+    case ALARMA_SENSORES_TEMP:
+    case ALARMA_SENSOR_GABINETE: {
+        config_sensores_t sens;
+        taskENTER_CRITICAL(&s_lock);
+        sens = s_sensores;
+        taskEXIT_CRITICAL(&s_lock);
+        if (alarma == ALARMA_SENSOR_GABINETE) {
+            eventos_registrar(activa ? EVENTO_AVISO : EVENTO_OK, EVENTO_ALARMA, "sistema",
+                              activa ? "Sin lectura del sensor %s (AM2301A)" : "Sensor %s normalizado", sens.nombre[4]);
+            break;
+        }
+        if (!activa) {
+            eventos_registrar(EVENTO_OK, EVENTO_ALARMA, "sistema", "Sensores de temperatura normalizados");
+            break;
+        }
+        char lista[96] = "";
+        for (int i = 0; i < 4; i++) {
+            if (sens.instalado[i] && !e->ntc_ok[i]) {
+                if (lista[0]) strlcat(lista, "; ", sizeof(lista));
+                strlcat(lista, sens.nombre[i], sizeof(lista));
+            }
+        }
+        eventos_registrar(EVENTO_AVISO, EVENTO_ALARMA, "sistema", "Sensor sin lectura: %s",
+                          lista[0] ? lista : "ADS1115 sin respuesta");
+        break;
+    }
+    case ALARMA_RTC:
+        eventos_registrar(activa ? EVENTO_AVISO : EVENTO_OK, EVENTO_ALARMA, "sistema", "%s",
+                          activa ? "Reloj (RTC) sin respuesta: la hora de los eventos es estimada"
+                                 : "Reloj (RTC) normalizado");
+        break;
+    case ALARMA_MODO_MANUAL:
+        // El inicio ya lo registra quien forzo (web, pantalla, SNMP).
+        if (!activa) {
+            eventos_registrar(EVENTO_INFO, EVENTO_MANUAL, "automatica",
+                              "Fin del modo manual: la automatica retomo el control");
+        }
+        break;
+    case ALARMA_BYPASS_AUTO_DESHAB:
+        if (activa) {
+            eventos_registrar(EVENTO_AVISO, EVENTO_ALARMA, "automatica",
+                              "Bypass automatico bloqueado: se supero el maximo de escalones a alta temperatura");
+        }
+        break;
+    case ALARMA_MEDIDOR_ENERGIA:
+        eventos_registrar(activa ? EVENTO_AVISO : EVENTO_OK, EVENTO_ALARMA, "sistema", "%s",
+                          activa ? "Medidor de energia sin respuesta (RS-485)" : "Medidor de energia normalizado");
+        break;
+    default:
+        break;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // API publica (tarea_climatizacion / app_main)
 // ---------------------------------------------------------------------------
@@ -416,6 +510,7 @@ void snmp_braindlab_publicar_estado(const snmp_braindlab_estado_t *estado)
         if ((cambiaron >> i) & 1) {
             bool activa = (alarmas >> i) & 1;
             ESP_LOGI(TAG, "Alarma %d %s", i + 1, activa ? "ACTIVADA" : "normalizada");
+            registrar_evento_alarma(i, activa, estado);
             msg_t msg;
             if (armar_trap_alarma(i, activa, estado, &msg)) {
                 encolar(&msg);
@@ -647,6 +742,7 @@ static snmp_err_t control_set_value(struct snmp_node_instance *inst, u16_t len, 
     LWIP_UNUSED_ARG(len);
     bool v = *(s32_t *)value != 0;
     s_cbs.on_control_aire((uint8_t)(FILA(inst) - 1), v);
+    eventos_manual_aire("snmp", (uint8_t)(FILA(inst) - 1), v);
     ESP_LOGI(TAG, "SET control AA%lu = %d", (unsigned long)FILA(inst), v);
     return SNMP_ERR_NOERROR;
 }
@@ -791,7 +887,12 @@ static snmp_err_t sensores_set_value(struct snmp_node_instance *inst, u16_t len,
     }
     // on_calibrar_sensor() (app_main.c) guarda, aplica y dispara el trap
     // calibracionModificada -- igual que si viniera de la web.
-    s_cbs.on_calibrar_sensor(sensor, (float)*(s32_t *)value / 10.0f);
+    s32_t v = *(s32_t *)value;
+    s_cbs.on_calibrar_sensor(sensor, (float)v / 10.0f);
+    // Sin %f: corre en el thread de lwIP (pila chica).
+    long abs_v = v < 0 ? -(long)v : (long)v;
+    eventos_registrar(EVENTO_INFO, EVENTO_CONFIG, "snmp", "Calibracion de %s: referencia %s%ld.%ld",
+                      sensor, v < 0 ? "-" : "", abs_v / 10, abs_v % 10);
     return SNMP_ERR_NOERROR;
 }
 
@@ -941,9 +1042,9 @@ static snmp_err_t mando_set_value(const struct snmp_scalar_array_node_def *def, 
     bool v = *(s32_t *)value != 0;
 
     switch (def->oid) {
-    case MANDO_MODO_MANUAL: s_cbs.on_control_automatico(); break;
-    case MANDO_BYPASS:      s_cbs.on_control_bypass(v); break;
-    case MANDO_ALARMA_AT:   s_cbs.on_control_at(v); break;
+    case MANDO_MODO_MANUAL: s_cbs.on_control_automatico(); eventos_manual_automatico("snmp"); break;
+    case MANDO_BYPASS:      s_cbs.on_control_bypass(v); eventos_manual_bypass("snmp", v); break;
+    case MANDO_ALARMA_AT:   s_cbs.on_control_at(v); eventos_manual_at("snmp", v); break;
     default: return SNMP_ERR_NOTWRITABLE;
     }
     ESP_LOGI(TAG, "SET mando.%lu = %d", (unsigned long)def->oid, v);

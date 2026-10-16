@@ -15,6 +15,7 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "REGISTRO_SD";
@@ -26,14 +27,17 @@ static const char *TAG = "REGISTRO_SD";
 #define SD_PUNTO_MONT  "/sd"
 #define SD_DIR_LOG     SD_PUNTO_MONT "/LOG"
 
-#define COLA_LARGO     8 // 8 minutos de margen si la SD se traba
+#define COLA_LARGO     16 // muestras (1 por minuto) + rafagas de eventos (arranque)
 
-// La cola lleva muestras y, por la misma via, el pedido de formateo: asi
-// todo lo que toca la SD lo hace un solo task, en orden.
-typedef enum { ITEM_MUESTRA, ITEM_FORMATEAR } tipo_item_t;
+// La cola lleva muestras, eventos y, por la misma via, el pedido de
+// formateo: asi todo lo que toca la SD lo hace un solo task, en orden.
+typedef enum { ITEM_MUESTRA, ITEM_EVENTO, ITEM_FORMATEAR } tipo_item_t;
 typedef struct {
     tipo_item_t tipo;
-    registro_sd_muestra_t muestra; // solo si tipo == ITEM_MUESTRA
+    union {
+        registro_sd_muestra_t muestra; // ITEM_MUESTRA
+        evento_t evento;               // ITEM_EVENTO
+    };
 } item_cola_t;
 
 static QueueHandle_t s_cola = NULL;
@@ -45,6 +49,10 @@ static volatile bool s_montada = false;
 static volatile registro_sd_estado_t s_estado = REGISTRO_SD_SIN_TARJETA;
 
 #define REINTENTO_MONTAJE_MS 60000 // sin tarjeta: probar de nuevo cada minuto
+// Ultimo intento de montar (esp_timer, us). Montar sin tarjeta tarda y ocupa
+// el bus SPI que comparte el W5500: con eventos seguidos no se reintenta en
+// cada uno, solo una vez por minuto.
+static int64_t s_ultimo_intento_montaje_us = 0;
 
 static const char *CSV_ENCABEZADO =
     "fecha_hora,t1,t2,t3,t4,temp_gestor,humedad_gestor,"
@@ -174,6 +182,37 @@ static esp_err_t escribir_muestra(const registro_sd_muestra_t *m)
     return ESP_OK;
 }
 
+// Agrega un evento a /sd/EVENTOS/AAAA-MM.CSV (encabezado si es el primero
+// del mes). Abre-escribe-cierra, igual que las muestras.
+static esp_err_t escribir_evento(const evento_t *e)
+{
+    struct tm t;
+    localtime_r(&e->cuando, &t);
+    if (!crear_dir(EVENTOS_DIR)) return ESP_FAIL;
+    char ruta[48];
+    snprintf(ruta, sizeof(ruta), EVENTOS_DIR "/%04d-%02d.CSV", t.tm_year + 1900, t.tm_mon + 1);
+
+    struct stat st;
+    bool nuevo = stat(ruta, &st) != 0;
+    FILE *f = fopen(ruta, "a");
+    if (!f) {
+        ESP_LOGE(TAG, "No se pudo abrir %s (errno %d)", ruta, errno);
+        return ESP_FAIL;
+    }
+    if (nuevo) {
+        fputs("fecha_hora,nivel,categoria,origen,detalle\n", f);
+    }
+    int n = fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d,%s,%s,%s,%s\n",
+                    t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
+                    eventos_texto_nivel(e->nivel), eventos_texto_categoria(e->categoria), e->origen, e->detalle);
+    bool ok = n > 0 && fclose(f) == 0;
+    if (!ok) {
+        ESP_LOGE(TAG, "Fallo escribiendo %s", ruta);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
 // Lo corre tarea_registro_sd cuando llega ITEM_FORMATEAR.
 static esp_err_t ejecutar_formateo(void)
 {
@@ -212,8 +251,7 @@ static esp_err_t ejecutar_formateo(void)
 
 static void tarea_registro_sd(void *arg)
 {
-    item_cola_t item;
-    registro_sd_muestra_t m;
+    static item_cola_t item; // static: no ocupa la pila de la tarea
     while (1) {
         // Timeout en vez de portMAX_DELAY: asi se reintenta montar cada
         // minuto aunque no lleguen muestras (por ejemplo, sin RTC) y el
@@ -225,24 +263,30 @@ static void tarea_registro_sd(void *arg)
             xSemaphoreGive(s_fin_formateo);
             continue;
         }
-        bool hay_muestra = hay_item;
-        if (hay_muestra) {
-            m = item.muestra;
-        }
-
         // Sin tarjeta (no estaba al arrancar, o se saco): se reintenta
         // montar, como mucho una vez por minuto.
-        if (!s_montada && montar(false) != ESP_OK) {
-            if (hay_muestra) {
+        bool montada = s_montada;
+        if (!montada) {
+            int64_t ahora = esp_timer_get_time();
+            if (ahora - s_ultimo_intento_montaje_us >= (int64_t)REINTENTO_MONTAJE_MS * 1000) {
+                s_ultimo_intento_montaje_us = ahora;
+                montada = montar(false) == ESP_OK;
+            }
+        }
+        if (!montada) {
+            if (hay_item && item.tipo == ITEM_MUESTRA) {
                 ESP_LOGW(TAG, "Sin SD (estado %d) -- muestra de las %02d:%02d descartada",
-                         (int)s_estado, m.fecha_hora.tm_hour, m.fecha_hora.tm_min);
+                         (int)s_estado, item.muestra.fecha_hora.tm_hour, item.muestra.fecha_hora.tm_min);
+            } else if (hay_item) {
+                ESP_LOGW(TAG, "Sin SD (estado %d) -- evento descartado", (int)s_estado);
             }
             continue;
         }
-        if (!hay_muestra) {
+        if (!hay_item) {
             continue;
         }
-        if (escribir_muestra(&m) == ESP_OK) {
+        esp_err_t err = item.tipo == ITEM_EVENTO ? escribir_evento(&item.evento) : escribir_muestra(&item.muestra);
+        if (err == ESP_OK) {
             s_estado = REGISTRO_SD_OK;
         } else {
             // Lo mas probable es que se haya sacado la tarjeta: desmontar
@@ -292,6 +336,17 @@ void registro_sd_encolar(const registro_sd_muestra_t *muestra)
     item_cola_t item = { .tipo = ITEM_MUESTRA, .muestra = *muestra };
     if (xQueueSend(s_cola, &item, 0) != pdTRUE) {
         ESP_LOGW(TAG, "Cola llena (SD trabada?) -- muestra descartada");
+    }
+}
+
+void registro_sd_encolar_evento(const evento_t *evento)
+{
+    if (!s_cola) {
+        return;
+    }
+    item_cola_t item = { .tipo = ITEM_EVENTO, .evento = *evento };
+    if (xQueueSend(s_cola, &item, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "Cola llena (SD trabada?) -- evento descartado");
     }
 }
 

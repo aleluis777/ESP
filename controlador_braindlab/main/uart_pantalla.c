@@ -12,6 +12,7 @@
 #include "esp_log.h"
 #include "protocolo_braindlab.h"
 #include "uart_pantalla.h"
+#include "eventos.h"
 
 static const char *TAG = "UART_PANTALLA";
 
@@ -161,6 +162,9 @@ static void procesar_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
         if (s_cb.on_control_aire) {
             s_cb.on_control_aire(payload[0], payload[1] != 0);
         }
+        if (payload[0] < 4) {
+            eventos_manual_aire("pantalla", payload[0], payload[1] != 0);
+        }
         break;
     case BRAINDLAB_CMD_CONTROL_BYPASS:
         if (len < 1) {
@@ -171,6 +175,7 @@ static void procesar_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
         if (s_cb.on_control_bypass) {
             s_cb.on_control_bypass(payload[0] != 0);
         }
+        eventos_manual_bypass("pantalla", payload[0] != 0);
         break;
     case BRAINDLAB_CMD_CONTROL_AT:
         if (len < 1) {
@@ -181,12 +186,14 @@ static void procesar_frame(uint8_t cmd, const uint8_t *payload, uint16_t len)
         if (s_cb.on_control_at) {
             s_cb.on_control_at(payload[0] != 0);
         }
+        eventos_manual_at("pantalla", payload[0] != 0);
         break;
     case BRAINDLAB_CMD_CONTROL_AUTOMATICO:
         ESP_LOGI(TAG, "<- CONTROL_AUTOMATICO");
         if (s_cb.on_control_automatico) {
             s_cb.on_control_automatico();
         }
+        eventos_manual_automatico("pantalla");
         break;
     default:
         ESP_LOGW(TAG, "Comando desconocido 0x%02X", (unsigned)cmd);

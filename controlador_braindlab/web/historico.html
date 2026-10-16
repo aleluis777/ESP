@@ -37,12 +37,16 @@
   .graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1rem; }
   @media (max-width: 560px) { .graficos { grid-template-columns: 1fr; } }
   .grafico h3 { margin: 0 0 0.4rem; font-size: 0.9rem; font-weight: 600; }
-  .grafico canvas { width: 100%; height: 220px; display: block; touch-action: pan-y; }
+  .grafico canvas { width: 100%; height: 220px; display: block; touch-action: pan-y; cursor: crosshair; }
   .grafico.carriles canvas { height: 170px; }
   .leyenda { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.75rem; color: var(--texto-tenue); margin-top: 0.4rem; }
   .leyenda span { display: inline-flex; align-items: center; gap: 0.35rem; }
   .leyenda i { width: 0.8rem; height: 0.18rem; border-radius: 1px; display: inline-block; }
   .resumen-dia { font-size: 0.8rem; color: var(--texto-tenue); margin: 0 0 0.75rem; }
+  /* Zoom: rango visible, compartido por todos los graficos */
+  .zoom-barra { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+  .zoom-barra strong { flex: 1; min-width: 12rem; font-size: 0.85rem; font-weight: 600; }
+  .zoom-ayuda { font-size: 0.75rem; color: var(--texto-tenue); margin: 0.4rem 0 0; }
 </style>
 <script src="/comun.js"></script>
 </head>
@@ -83,6 +87,15 @@
           <a class="btn" id="btn-descargar" href="#">Descargar CSV</a>
         </div>
         <p class="resumen-dia" id="dia-resumen"></p>
+        <div class="zoom-barra">
+          <strong id="zoom-rango">Dia completo</strong>
+          <button class="btn" id="zoom-izq" title="Mover hacia atras">&#9664;</button>
+          <button class="btn" id="zoom-der" title="Mover hacia adelante">&#9654;</button>
+          <button class="btn" id="zoom-reset">Ver dia completo</button>
+        </div>
+        <p class="zoom-ayuda">Zoom: arrastra sobre un grafico para ampliar ese tramo · Ctrl + rueda para acercar o
+          alejar · doble clic para volver al dia completo. En celular: pellizca con dos dedos y desliza con uno.
+          Todos los graficos muestran el mismo tramo.</p>
         <p class="mensaje" id="dia-mensaje"></p>
       </div>
       <div class="graficos" id="graficos"></div>
@@ -115,6 +128,11 @@
     let diasDelMes = [];           // [{dia, kb}] del mes que se esta viendo
     let diaActual = null;          // dia abierto en la vista de graficos
     let graficos = [];             // para redibujar al cambiar el tamaño
+
+    // Tramo visible (minutos del dia), el mismo para todos los graficos. El
+    // zoom solo redibuja con los datos ya bajados: no le pide nada al ESP32.
+    const DIA = 1440, TRAMO_MIN = 10;
+    let vista = { desde: 0, hasta: DIA };
 
     // ----------------------------------------------------------- calendario
 
@@ -218,6 +236,8 @@
       const resumen = document.getElementById("dia-resumen");
       document.getElementById("graficos").innerHTML = "";
       graficos = [];
+      vista = { desde: 0, hasta: DIA };
+      actualizarBarraZoom();
       resumen.textContent = "";
       mostrar(msg, "Leyendo el archivo de la SD...");
 
@@ -288,19 +308,176 @@
         art.className = "tarjeta grafico" + (def.carriles ? " carriles" : "");
         art.innerHTML = `<h3>${def.titulo}</h3><canvas></canvas><div class="leyenda"></div>`;
         cont.appendChild(art);
-        const g = { def, canvas: art.querySelector("canvas"), hover: null };
-        if (!def.carriles) pintarLeyenda(art.querySelector(".leyenda"), def);
-        g.canvas.addEventListener("mousemove", (e) => { g.hover = e.offsetX; dibujar(g); });
-        g.canvas.addEventListener("mouseleave", () => { g.hover = null; dibujar(g); });
+        const g = { def, canvas: art.querySelector("canvas"), hover: null, seleccion: null, area: null,
+                    leyenda: def.carriles ? null : art.querySelector(".leyenda") };
+        if (g.leyenda) pintarLeyenda(g.leyenda, def);
+        engancharZoom(g);
         graficos.push(g);
+      }
+      // Recien con todas las tarjetas puestas: la grilla (auto-fit) cambia el
+      // ancho de las primeras al agregar las siguientes, y un canvas dibujado
+      // antes queda estirado.
+      graficos.forEach(dibujar);
+    }
+
+    // ----------------------------------------------------------------- zoom
+
+    const tramo = () => vista.hasta - vista.desde;
+    const conZoom = () => tramo() < DIA;
+
+    // Fija el tramo visible (recortado al dia y a TRAMO_MIN como minimo) y
+    // redibuja todos los graficos y sus leyendas.
+    function fijarVista(desde, hasta) {
+      const largo = Math.max(TRAMO_MIN, Math.min(DIA, hasta - desde));
+      desde = Math.max(0, Math.min(DIA - largo, desde));
+      vista = { desde, hasta: desde + largo };
+      for (const g of graficos) {
         dibujar(g);
+        if (g.leyenda) pintarLeyenda(g.leyenda, g.def);
+      }
+      actualizarBarraZoom();
+    }
+
+    function textoHora(mn) {
+      const r = Math.round(mn);
+      return `${dos(Math.floor(r / 60))}:${dos(r % 60)}`;
+    }
+
+    function actualizarBarraZoom() {
+      const largo = Math.round(tramo());
+      const h = Math.floor(largo / 60), mi = largo % 60;
+      document.getElementById("zoom-rango").textContent = conZoom()
+        ? `Mostrando ${textoHora(vista.desde)} a ${textoHora(vista.hasta)} (${h ? h + " h " : ""}${mi ? mi + " min" : ""})`
+        : "Dia completo";
+      document.getElementById("zoom-izq").disabled = vista.desde <= 0;
+      document.getElementById("zoom-der").disabled = vista.hasta >= DIA;
+      document.getElementById("zoom-reset").disabled = !conZoom();
+    }
+
+    // px dentro del canvas -> minuto del dia (segun el area de dibujo de ese
+    // grafico, que guarda dibujar()).
+    function minutoEn(g, px) {
+      const a = g.area;
+      return vista.desde + ((px - a.izq) / a.ancho) * tramo();
+    }
+
+    function engancharZoom(g) {
+      const c = g.canvas;
+      c.addEventListener("mousemove", (e) => {
+        g.hover = e.offsetX;
+        if (g.seleccion) g.seleccion.x1 = e.offsetX;
+        dibujar(g);
+      });
+      c.addEventListener("mouseleave", () => { g.hover = null; dibujar(g); });
+
+      // Arrastrar: marca un tramo y al soltar se amplia ese tramo.
+      c.addEventListener("mousedown", (e) => {
+        if (e.button !== 0 || !g.area) return;
+        e.preventDefault(); // que no seleccione texto de la pagina
+        g.seleccion = { x0: e.offsetX, x1: e.offsetX };
+        const soltar = (ev) => {
+          window.removeEventListener("mouseup", soltar);
+          const sel = g.seleccion;
+          g.seleccion = null;
+          const x1 = ev.clientX - c.getBoundingClientRect().left;
+          if (sel && Math.abs(x1 - sel.x0) > 6) {
+            const a = minutoEn(g, sel.x0), b = minutoEn(g, x1);
+            fijarVista(Math.min(a, b), Math.max(a, b));
+          } else {
+            dibujar(g);
+          }
+        };
+        window.addEventListener("mouseup", soltar);
+      });
+
+      // Ctrl + rueda: acerca/aleja centrado donde esta el mouse. Sin Ctrl la
+      // rueda sigue bajando la pagina (no se intercepta).
+      c.addEventListener("wheel", (e) => {
+        if (!e.ctrlKey || !g.area) return;
+        e.preventDefault(); // si no, el navegador hace zoom de toda la pagina
+        const centro = minutoEn(g, e.offsetX);
+        const factor = e.deltaY < 0 ? 0.8 : 1.25;
+        const largo = tramo() * factor;
+        const fraccion = (centro - vista.desde) / tramo();
+        fijarVista(centro - fraccion * largo, centro - fraccion * largo + largo);
+      }, { passive: false });
+
+      c.addEventListener("dblclick", () => fijarVista(0, DIA));
+
+      // Celular: dos dedos = pellizcar (zoom), un dedo horizontal = mover el
+      // tramo (solo con zoom; el desplazamiento vertical sigue siendo de la
+      // pagina por touch-action: pan-y).
+      let toque = null;
+      const xLocal = (t) => t.clientX - c.getBoundingClientRect().left;
+      c.addEventListener("touchstart", (e) => {
+        if (!g.area) return;
+        if (e.touches.length === 2) {
+          const [a, b] = e.touches;
+          toque = { tipo: "pinza", d0: Math.max(30, Math.abs(a.clientX - b.clientX)),
+                    centro: minutoEn(g, (xLocal(a) + xLocal(b)) / 2), v0: { ...vista } };
+          e.preventDefault();
+        } else if (e.touches.length === 1 && conZoom()) {
+          toque = { tipo: "mover", x0: e.touches[0].clientX, y0: e.touches[0].clientY, v0: { ...vista } };
+        }
+      }, { passive: false });
+      c.addEventListener("touchmove", (e) => {
+        if (!toque) return;
+        const largo0 = toque.v0.hasta - toque.v0.desde;
+        if (toque.tipo === "pinza" && e.touches.length === 2) {
+          e.preventDefault();
+          const [a, b] = e.touches;
+          const d = Math.max(30, Math.abs(a.clientX - b.clientX));
+          const largo = largo0 * (toque.d0 / d);
+          const fraccion = (toque.centro - toque.v0.desde) / largo0;
+          fijarVista(toque.centro - fraccion * largo, toque.centro - fraccion * largo + largo);
+        } else if (toque.tipo === "mover" && e.touches.length === 1) {
+          const dx = e.touches[0].clientX - toque.x0, dy = e.touches[0].clientY - toque.y0;
+          if (Math.abs(dx) < Math.abs(dy)) return; // gesto vertical: es scroll de la pagina
+          const dm = -(dx / g.area.ancho) * largo0;
+          fijarVista(toque.v0.desde + dm, toque.v0.hasta + dm);
+        }
+      }, { passive: false });
+      c.addEventListener("touchend", (e) => { if (e.touches.length === 0) toque = null; });
+    }
+
+    // Marcas de hora del eje X segun el tramo visible: paso que deja ~8
+    // marcas como maximo. Llama a 'marca(minuto, texto)' por cada una.
+    function marcasHora(marca) {
+      const paso = [1, 2, 5, 10, 15, 30, 60, 120, 180].find((p) => tramo() / p <= 8) || 180;
+      for (let mn = Math.ceil(vista.desde / paso) * paso; mn <= vista.hasta + 0.001; mn += paso) {
+        const texto = paso >= 60 ? dos(Math.floor(mn / 60)) + "h" : textoHora(mn);
+        marca(mn, texto);
       }
     }
 
-    // Leyenda con min / promedio / max del dia (ignorando los huecos).
+    // Texto de una marca del eje X: centrado, salvo pegado a un borde del
+    // area (ahi se alinea hacia adentro para que no se corte).
+    function etiquetaX(ctx, texto, px, area, yTexto) {
+      const medio = ctx.measureText(texto).width / 2;
+      ctx.textAlign = px - medio < area.izq - 20 ? "left"
+                    : px + medio > area.izq + area.ancho + 8 ? "right" : "center";
+      ctx.fillText(texto, px, yTexto);
+    }
+
+    // Tramo que se esta marcando con el mouse (arrastrar).
+    function pintarSeleccion(g, ctx, arr, alto) {
+      if (!g.seleccion) return;
+      const a = g.area;
+      const x0 = Math.max(a.izq, Math.min(g.seleccion.x0, g.seleccion.x1));
+      const x1 = Math.min(a.izq + a.ancho, Math.max(g.seleccion.x0, g.seleccion.x1));
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = css("--acento");
+      ctx.fillRect(x0, arr, x1 - x0, alto);
+      ctx.restore();
+    }
+
+    // Leyenda con min / promedio / max del tramo visible (el dia completo
+    // sin zoom), ignorando los huecos.
     function pintarLeyenda(el, def) {
       el.innerHTML = def.series.map((s) => {
-        const v = s.datos.map((p) => p[1]).filter((x) => x !== null);
+        const v = s.datos.filter((p) => p[0] >= vista.desde && p[0] <= vista.hasta)
+                         .map((p) => p[1]).filter((x) => x !== null);
         if (!v.length) return `<span><i style="background:var(${s.color})"></i>${s.nombre}: sin datos</span>`;
         const prom = v.reduce((a, b) => a + b, 0) / v.length;
         const f = (x) => x.toFixed(1);
@@ -324,32 +501,35 @@
       const { ctx, w, h } = prepararCanvas(g.canvas);
       const m = { izq: 44, der: 10, arr: 8, aba: 22 };
       const ancho = w - m.izq - m.der, alto = h - m.arr - m.aba;
+      g.area = { izq: m.izq, ancho };
       const colorTenue = css("--texto-tenue"), colorGrilla = css("--grilla");
 
-      // Escala Y automatica con un poco de aire arriba y abajo.
-      const valores = g.def.series.flatMap((s) => s.datos.map((p) => p[1])).filter((x) => x !== null);
+      // Escala Y automatica sobre lo VISIBLE (con zoom se ajusta al tramo),
+      // con un poco de aire arriba y abajo.
+      const valores = g.def.series.flatMap((s) => s.datos
+        .filter((p) => p[0] >= vista.desde && p[0] <= vista.hasta).map((p) => p[1])).filter((x) => x !== null);
       ctx.font = "11px system-ui, sans-serif";
       if (!valores.length) {
         ctx.fillStyle = colorTenue;
-        ctx.fillText("Sin datos este dia", m.izq + 8, m.arr + alto / 2);
+        ctx.fillText(conZoom() ? "Sin datos en este tramo" : "Sin datos este dia", m.izq + 8, m.arr + alto / 2);
         return;
       }
       let min = Math.min(...valores), max = Math.max(...valores);
       if (max - min < 1) { min -= 0.5; max += 0.5; }
       const aire = (max - min) * 0.08;
       min -= aire; max += aire;
-      const x = (minuto) => m.izq + (minuto / 1440) * ancho;
+      const x = (minuto) => m.izq + ((minuto - vista.desde) / tramo()) * ancho;
       const y = (v) => m.arr + (1 - (v - min) / (max - min)) * alto;
 
-      // Grilla: cada 3 horas en X, 4 divisiones en Y.
+      // Grilla: marcas de hora segun el tramo en X, 4 divisiones en Y.
       ctx.strokeStyle = colorGrilla;
       ctx.fillStyle = colorTenue;
       ctx.lineWidth = 1;
       ctx.textAlign = "center";
-      for (let hr = 0; hr <= 24; hr += 3) {
-        ctx.beginPath(); ctx.moveTo(x(hr * 60), m.arr); ctx.lineTo(x(hr * 60), m.arr + alto); ctx.stroke();
-        ctx.fillText(dos(hr) + "h", x(hr * 60), h - 6);
-      }
+      marcasHora((mn, texto) => {
+        ctx.beginPath(); ctx.moveTo(x(mn), m.arr); ctx.lineTo(x(mn), m.arr + alto); ctx.stroke();
+        etiquetaX(ctx, texto, x(mn), g.area, h - 6);
+      });
       ctx.textAlign = "right";
       for (let i = 0; i <= 4; i++) {
         const v = min + (max - min) * (i / 4);
@@ -359,23 +539,28 @@
 
       // Lineas: se cortan en los huecos (null) y si faltan mas de 2 minutos
       // seguidos (corte de luz, SD sacada), para no unir con una recta.
+      // Recortadas al area del grafico (con zoom hay puntos fuera).
+      ctx.save();
+      ctx.beginPath(); ctx.rect(m.izq, m.arr, ancho, alto); ctx.clip();
       ctx.lineWidth = 1.5;
       for (const s of g.def.series) {
         ctx.strokeStyle = color(s);
         ctx.beginPath();
         let previo = null;
         for (const [mn, v] of s.datos) {
-          if (v === null) { previo = null; continue; }
+          if (v === null || mn < vista.desde - 3 || mn > vista.hasta + 3) { previo = null; continue; }
           if (previo === null || mn - previo > 2) ctx.moveTo(x(mn), y(v));
           else ctx.lineTo(x(mn), y(v));
           previo = mn;
         }
         ctx.stroke();
       }
+      ctx.restore();
+      pintarSeleccion(g, ctx, m.arr, alto);
 
       // Cursor: linea vertical + valores de ese minuto.
       if (g.hover !== null && g.hover >= m.izq && g.hover <= m.izq + ancho) {
-        const minuto = ((g.hover - m.izq) / ancho) * 1440;
+        const minuto = minutoEn(g, g.hover);
         const textos = [];
         for (const s of g.def.series) {
           const p = masCercano(s.datos, minuto);
@@ -389,8 +574,7 @@
         ctx.setLineDash([3, 3]);
         ctx.beginPath(); ctx.moveTo(g.hover, m.arr); ctx.lineTo(g.hover, m.arr + alto); ctx.stroke();
         ctx.setLineDash([]);
-        const hm = Math.round(minuto);
-        textos.unshift({ t: `${dos(Math.floor(hm / 60) % 24)}:${dos(hm % 60)}`, c: css("--texto") });
+        textos.unshift({ t: textoHora(minuto), c: css("--texto") });
         cajaTooltip(ctx, textos, g.hover, m.arr, w);
       }
     }
@@ -401,12 +585,13 @@
       const { ctx, w, h } = prepararCanvas(g.canvas);
       const m = { izq: 70, der: 10, arr: 4, aba: 22 };
       const ancho = w - m.izq - m.der, alto = h - m.arr - m.aba;
+      g.area = { izq: m.izq, ancho };
       const n = g.def.series.length, carril = alto / n;
-      const x = (minuto) => m.izq + (minuto / 1440) * ancho;
+      const x = (minuto) => m.izq + ((minuto - vista.desde) / tramo()) * ancho;
       ctx.font = "11px system-ui, sans-serif";
       ctx.fillStyle = css("--texto-tenue");
       ctx.textAlign = "center";
-      for (let hr = 0; hr <= 24; hr += 3) ctx.fillText(dos(hr) + "h", x(hr * 60), h - 6);
+      marcasHora((mn, texto) => etiquetaX(ctx, texto, x(mn), g.area, h - 6));
       g.def.series.forEach((s, i) => {
         const y0 = m.arr + i * carril;
         ctx.fillStyle = css("--superficie");
@@ -414,15 +599,27 @@
         ctx.fillStyle = css("--texto-tenue");
         ctx.textAlign = "right";
         ctx.fillText(s.nombre, m.izq - 8, y0 + carril / 2 + 4);
+        ctx.save();
+        ctx.beginPath(); ctx.rect(m.izq, m.arr, ancho, alto); ctx.clip();
         ctx.fillStyle = color(s);
+        let inicio = null, ultimo = null;
+        const cerrar = () => {
+          if (inicio !== null) ctx.fillRect(x(inicio), y0 + 3, Math.max(x(ultimo + 1) - x(inicio), 1), carril - 6);
+          inicio = null;
+        };
         for (const [mn, v] of s.datos) {
-          if (v === 1) ctx.fillRect(x(mn), y0 + 3, Math.max(ancho / 1440, 1), carril - 6);
+          if (v !== 1 || mn < vista.desde - 1 || mn > vista.hasta) { cerrar(); continue; }
+          if (inicio !== null && mn - ultimo > 1) cerrar();
+          if (inicio === null) inicio = mn;
+          ultimo = mn;
         }
+        cerrar();
+        ctx.restore();
       });
+      pintarSeleccion(g, ctx, m.arr, alto);
       if (g.hover !== null && g.hover >= m.izq && g.hover <= m.izq + ancho) {
-        const minuto = ((g.hover - m.izq) / ancho) * 1440;
-        const hm = Math.round(minuto);
-        const textos = [{ t: `${dos(Math.floor(hm / 60) % 24)}:${dos(hm % 60)}`, c: css("--texto") }];
+        const minuto = minutoEn(g, g.hover);
+        const textos = [{ t: textoHora(minuto), c: css("--texto") }];
         for (const s of g.def.series) {
           const p = masCercano(s.datos, minuto);
           if (p && p[1] !== null && Math.abs(p[0] - minuto) <= 3) {
@@ -473,6 +670,11 @@
     document.getElementById("btn-volver").addEventListener("click", volverCalendario);
     document.getElementById("dia-anterior").addEventListener("click", () => { const d = diaVecino(-1); if (d) abrirDia(d); });
     document.getElementById("dia-siguiente").addEventListener("click", () => { const d = diaVecino(1); if (d) abrirDia(d); });
+    // Mover el tramo media ventana hacia atras/adelante; volver al dia.
+    document.getElementById("zoom-izq").addEventListener("click", () => fijarVista(vista.desde - tramo() / 2, vista.hasta - tramo() / 2));
+    document.getElementById("zoom-der").addEventListener("click", () => fijarVista(vista.desde + tramo() / 2, vista.hasta + tramo() / 2));
+    document.getElementById("zoom-reset").addEventListener("click", () => fijarVista(0, DIA));
+    actualizarBarraZoom();
     let esperaResize = null;
     window.addEventListener("resize", () => {
       clearTimeout(esperaResize);

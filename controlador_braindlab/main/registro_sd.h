@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <time.h>
 #include "esp_err.h"
+#include "eventos.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,6 +58,10 @@ esp_err_t registro_sd_init(void);
 // Encola una muestra para escribir. No bloquea: si la cola esta llena
 // (SD colgada) la muestra se descarta con un warning.
 void registro_sd_encolar(const registro_sd_muestra_t *muestra);
+
+// Encola un evento (ya fechado) para /sd/EVENTOS/AAAA-MM.CSV -- lo usa
+// eventos.c, el resto registra con eventos_registrar(). No bloquea.
+void registro_sd_encolar_evento(const evento_t *evento);
 
 // true si la SD esta montada en este momento.
 bool registro_sd_montada(void);

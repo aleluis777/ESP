@@ -14,6 +14,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "registro_sd.h"
+#include "eventos.h"
 #include "snmp_braindlab.h"
 #include "servidor_web.h"
 #include "auth_web.h"
@@ -88,6 +89,12 @@ static void log_peticion(httpd_req_t *req)
     }
 
     ESP_LOGI(TAG, "%s %s  <- %s (fd=%d)", http_method_str(req->method), req->uri, ip, fd);
+}
+
+// Origen de un evento hecho desde la web: "web:admin" o "web:root".
+static const char *origen_web(httpd_req_t *req)
+{
+    return auth_web_nivel(req) == AUTH_NIVEL_ROOT ? "web:root" : "web:admin";
 }
 
 typedef struct {
@@ -165,6 +172,7 @@ static const archivo_estatico_t s_archivo_configurar_html = { "/www/configurar.h
 static const archivo_estatico_t s_archivo_logo         = { "/www/logo.png", "image/png", AUTH_NIVEL_NINGUNO };
 static const archivo_estatico_t s_archivo_files_html   = { "/www/files.html", "text/html", AUTH_NIVEL_ROOT };
 static const archivo_estatico_t s_archivo_historico_html = { "/www/historico.html", "text/html", AUTH_NIVEL_ADMIN };
+static const archivo_estatico_t s_archivo_eventos_html = { "/www/eventos.html", "text/html", AUTH_NIVEL_ADMIN };
 static const archivo_estatico_t s_archivo_login_html   = { "/www/login.html", "text/html", AUTH_NIVEL_NINGUNO };
 static const archivo_estatico_t s_archivo_comun_js     = { "/www/comun.js", "application/javascript", AUTH_NIVEL_NINGUNO };
 static const archivo_estatico_t s_archivo_root_html    = { "/www/root.html", "text/html", AUTH_NIVEL_ROOT };
@@ -202,6 +210,10 @@ static const httpd_uri_t s_uri_logo = {
 static const httpd_uri_t s_uri_historico_html = {
     .uri = "/historico.html", .method = HTTP_GET,
     .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_historico_html,
+};
+static const httpd_uri_t s_uri_eventos_html = {
+    .uri = "/eventos.html", .method = HTTP_GET,
+    .handler = archivo_estatico_handler, .user_ctx = (void *)&s_archivo_eventos_html,
 };
 static const httpd_uri_t s_uri_files_html = {
     .uri = "/files.html", .method = HTTP_GET,
@@ -549,6 +561,9 @@ static esp_err_t configurar_red_handler(httpd_req_t *req)
     if (s_callbacks.on_configurar_red) {
         s_callbacks.on_configurar_red(ip_item->valuestring, gw_item->valuestring, mask_item->valuestring);
     }
+    eventos_registrar(EVENTO_INFO, EVENTO_CONFIG, origen_web(req),
+                      "Red guardada: IP %.15s gateway %.15s mascara %.15s (se aplica al reiniciar)",
+                      ip_item->valuestring, gw_item->valuestring, mask_item->valuestring);
     cJSON_Delete(raiz);
 
     httpd_resp_set_type(req, "application/json");
@@ -608,6 +623,11 @@ static esp_err_t configurar_climatizacion_handler(httpd_req_t *req)
                                                  (uint8_t)fails_item->valuedouble, cJSON_IsTrue(rotar_item),
                                                  cJSON_IsNumber(alternar_item) ? (uint8_t)alternar_item->valuedouble : 0);
     }
+    eventos_registrar(EVENTO_INFO, EVENTO_CONFIG, origen_web(req),
+                      "Climatizacion guardada: %u aires; min %.1f max %.1f AT %.1f bypass %.1f C; rotacion %s "
+                      "(se aplica al reiniciar)",
+                      (unsigned)cantidad_item->valuedouble, tmin_item->valuedouble, tmax_item->valuedouble,
+                      tat_item->valuedouble, tbypass_item->valuedouble, cJSON_IsTrue(rotar_item) ? "si" : "no");
     cJSON_Delete(raiz);
 
     httpd_resp_set_type(req, "application/json");
@@ -747,6 +767,9 @@ static esp_err_t configurar_snmp_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no se pudo guardar config.json");
         return ESP_FAIL;
     }
+    eventos_registrar(EVENTO_INFO, EVENTO_CONFIG, origen_web(req), "Configuracion SNMP guardada (control por SET: %s)%s",
+                      cfg.escritura_habilitada ? "habilitado" : "solo lectura",
+                      reiniciar ? "; communities nuevas al reiniciar" : "");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, reiniciar ? "{\"ok\":true,\"reiniciar\":true}" : "{\"ok\":true,\"reiniciar\":false}");
     return ESP_OK;
@@ -851,6 +874,7 @@ static esp_err_t configurar_sitio_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no se pudo guardar config.json");
         return ESP_FAIL;
     }
+    eventos_registrar(EVENTO_INFO, EVENTO_CONFIG, origen_web(req), "Sitio guardado: nombres y sensores instalados");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true}");
     return ESP_OK;
@@ -916,6 +940,7 @@ static esp_err_t control_aire_handler(httpd_req_t *req)
     if (s_callbacks.on_control_aire) {
         s_callbacks.on_control_aire((uint8_t)indice_item->valuedouble, cJSON_IsTrue(encendido_item));
     }
+    eventos_manual_aire(origen_web(req), (uint8_t)indice_item->valuedouble, cJSON_IsTrue(encendido_item));
     cJSON_Delete(raiz);
 
     httpd_resp_set_type(req, "application/json");
@@ -956,6 +981,7 @@ static esp_err_t control_bypass_handler(httpd_req_t *req)
     if (s_callbacks.on_control_bypass) {
         s_callbacks.on_control_bypass(cJSON_IsTrue(solicitado_item));
     }
+    eventos_manual_bypass(origen_web(req), cJSON_IsTrue(solicitado_item));
     cJSON_Delete(raiz);
 
     httpd_resp_set_type(req, "application/json");
@@ -1011,6 +1037,8 @@ static esp_err_t configurar_rtc_handler(httpd_req_t *req)
         s_callbacks.on_configurar_rtc((uint16_t)anio, (uint8_t)mes, (uint8_t)dia,
                                        (uint8_t)hora, (uint8_t)minuto, (uint8_t)segundo);
     }
+    eventos_registrar(EVENTO_INFO, EVENTO_CONFIG, origen_web(req), "Hora del equipo ajustada a %04d-%02d-%02d %02d:%02d",
+                      anio, mes, dia, hora, minuto);
     cJSON_Delete(raiz);
 
     httpd_resp_set_type(req, "application/json");
@@ -1051,6 +1079,7 @@ static esp_err_t control_at_handler(httpd_req_t *req)
     if (s_callbacks.on_control_at) {
         s_callbacks.on_control_at(cJSON_IsTrue(activa_item));
     }
+    eventos_manual_at(origen_web(req), cJSON_IsTrue(activa_item));
     cJSON_Delete(raiz);
 
     httpd_resp_set_type(req, "application/json");
@@ -1074,6 +1103,7 @@ static esp_err_t control_automatico_handler(httpd_req_t *req)
     if (s_callbacks.on_control_automatico) {
         s_callbacks.on_control_automatico();
     }
+    eventos_manual_automatico(origen_web(req));
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true}");
@@ -1115,6 +1145,8 @@ static esp_err_t calibrar_sensor_handler(httpd_req_t *req)
     if (s_callbacks.on_calibrar_sensor) {
         s_callbacks.on_calibrar_sensor(sensor_item->valuestring, (float)referencia_item->valuedouble);
     }
+    eventos_registrar(EVENTO_INFO, EVENTO_CONFIG, origen_web(req), "Calibracion de %.15s: referencia %.2f",
+                      sensor_item->valuestring, referencia_item->valuedouble);
     cJSON_Delete(raiz);
 
     httpd_resp_set_type(req, "application/json");
@@ -1162,6 +1194,8 @@ static esp_err_t sd_formatear_handler(httpd_req_t *req)
     esp_err_t err = s_callbacks.on_formatear_sd();
     httpd_resp_set_type(req, "application/json");
     if (err == ESP_OK) {
+        eventos_registrar(EVENTO_AVISO, EVENTO_CONFIG, origen_web(req),
+                          "MicroSD formateada: se borro el historico y los eventos anteriores");
         httpd_resp_sendstr(req, "{\"ok\":true,\"mensaje\":\"SD formateada\"}");
         return ESP_OK;
     }
@@ -1290,6 +1324,90 @@ static const httpd_uri_t s_uri_historico_dia = {
     .uri = "/api/historico/dia", .method = HTTP_GET, .handler = historico_dia_handler,
 };
 
+// ---------- Registro de eventos (MicroSD, ver eventos.h) ----------
+
+// GET /api/eventos/meses -- meses con eventos, del mas nuevo al mas viejo:
+// {"sd_ok":true,"meses":[{"mes":"2026-10","kb":3},{"mes":"2026-09","kb":5}]}
+static esp_err_t eventos_meses_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
+    // Hasta 36 meses (3 anios) en la lista: alcanza de sobra para la vista.
+    static char meses[36][8]; // static: no carga la pila del task HTTP
+    static uint32_t kb[36];
+    int n = eventos_meses_con_datos(meses, kb, 36);
+
+    char resp[1300]; // 36 x ~30 bytes + cabecera
+    int pos = snprintf(resp, sizeof(resp), "{\"sd_ok\":%s,\"meses\":[", n >= 0 ? "true" : "false");
+    for (int i = 0; i < n; i++) {
+        pos += snprintf(resp + pos, sizeof(resp) - pos, "%s{\"mes\":\"%s\",\"kb\":%lu}",
+                        i ? "," : "", meses[i], (unsigned long)kb[i]);
+    }
+    snprintf(resp + pos, sizeof(resp) - pos, "]}");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, resp);
+    return ESP_OK;
+}
+
+static const httpd_uri_t s_uri_eventos_meses = {
+    .uri = "/api/eventos/meses", .method = HTTP_GET, .handler = eventos_meses_handler,
+};
+
+// GET /api/eventos?mes=2026-10 -- el CSV del mes tal cual esta en la SD, en
+// pedazos (fecha_hora,nivel,categoria,origen,detalle). Con &descargar=1 el
+// navegador lo guarda como archivo.
+static esp_err_t eventos_mes_handler(httpd_req_t *req)
+{
+    log_peticion(req);
+    if (!auth_web_requerir(req)) {
+        return ESP_OK;
+    }
+    char mes_txt[12];
+    int anio = 0, mes = 0;
+    if (!leer_query(req, "mes", mes_txt, sizeof(mes_txt)) || sscanf(mes_txt, "%d-%d", &anio, &mes) != 2) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "falta ?mes=AAAA-MM");
+        return ESP_FAIL;
+    }
+    char ruta[48];
+    if (!eventos_ruta_mes(anio, mes, ruta, sizeof(ruta))) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "SD no disponible o mes invalido");
+        return ESP_FAIL;
+    }
+    FILE *f = fopen(ruta, "r");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no hay eventos de ese mes");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    char descargar[4];
+    if (leer_query(req, "descargar", descargar, sizeof(descargar)) && descargar[0] == '1') {
+        char disp[64];
+        snprintf(disp, sizeof(disp), "attachment; filename=\"eventos_%04d-%02d.csv\"", anio, mes);
+        httpd_resp_set_hdr(req, "Content-Disposition", disp);
+    }
+
+    char buf[1024];
+    size_t leidos;
+    esp_err_t res = ESP_OK;
+    while ((leidos = fread(buf, 1, sizeof(buf), f)) > 0) {
+        if (httpd_resp_send_chunk(req, buf, leidos) != ESP_OK) {
+            res = ESP_FAIL;
+            break;
+        }
+    }
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return res;
+}
+
+static const httpd_uri_t s_uri_eventos_mes = {
+    .uri = "/api/eventos", .method = HTTP_GET, .handler = eventos_mes_handler,
+};
+
 // POST /reiniciar -- sin body. Reinicia el equipo ya (esp_restart()), para
 // que tome efecto cualquier config que solo se aplica al arrancar (red,
 // climatizacion, etc -- ver /configurar_red, /configurar_climatizacion). No
@@ -1304,6 +1422,8 @@ static esp_err_t reiniciar_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true,\"mensaje\":\"reiniciando\"}");
+    eventos_motivo_reinicio(auth_web_nivel(req) == AUTH_NIVEL_ROOT ? "pedido desde la web (root)"
+                                                                   : "pedido desde la web (admin)");
 
     vTaskDelay(pdMS_TO_TICKS(500)); // le da tiempo a la respuesta de salir antes de reiniciar, mismo criterio que /ota
     esp_restart();
@@ -1397,6 +1517,7 @@ static esp_err_t ota_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true,\"mensaje\":\"firmware aplicado, reiniciando\"}");
+    eventos_motivo_reinicio("actualizacion de firmware (OTA) desde la web");
 
     vTaskDelay(pdMS_TO_TICKS(500)); // le da tiempo a la respuesta de salir antes de reiniciar
     esp_restart();
@@ -1465,7 +1586,9 @@ esp_err_t servidor_web_init(void)
     // servidor_web_enviar_ws() corre en tarea_climatizacion: un cliente
     // que no recibe no debe trabarla los 5 s del default por cada envio.
     config.send_wait_timeout = 2;
-    config.max_uri_handlers = 40; // 37 rutas registradas (30 + login/root.html + comun.js + 4 de auth_web.c), con margen
+    config.max_uri_handlers = 44; // 40 rutas registradas (33 + eventos.html y sus 2 API + 4 de auth_web.c), con margen
+    // 6144: los handlers arman respuestas/eventos con snprintf en la pila.
+    config.stack_size = 6144;
 
     esp_err_t err = httpd_start(&s_servidor, &config);
     if (err != ESP_OK) {
@@ -1501,6 +1624,9 @@ esp_err_t servidor_web_init(void)
     httpd_register_uri_handler(s_servidor, &s_uri_historico_html);
     httpd_register_uri_handler(s_servidor, &s_uri_historico_dias);
     httpd_register_uri_handler(s_servidor, &s_uri_historico_dia);
+    httpd_register_uri_handler(s_servidor, &s_uri_eventos_html);
+    httpd_register_uri_handler(s_servidor, &s_uri_eventos_meses);
+    httpd_register_uri_handler(s_servidor, &s_uri_eventos_mes);
     httpd_register_uri_handler(s_servidor, &s_uri_ota);
     httpd_register_uri_handler(s_servidor, &s_uri_ws);
     httpd_register_uri_handler(s_servidor, &s_uri_login_html);

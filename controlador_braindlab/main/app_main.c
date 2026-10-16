@@ -48,6 +48,7 @@
 #include "registro_sd.h"
 #include "modbus_braindlab.h"
 #include "auth_web.h"
+#include "eventos.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -278,6 +279,9 @@ static void revisar_rotacion_semanal(config_climatizacion_t *cfg, const struct t
     }
     ESP_LOGW(TAG, "Rotacion semanal (semana %s): descansaba AA%u, ahora descansa AA%u -- reiniciando",
              semana, anterior, cfg->aire_alternar);
+    char motivo[64];
+    snprintf(motivo, sizeof(motivo), "rotacion semanal (ahora descansa AA%u)", cfg->aire_alternar);
+    eventos_motivo_reinicio(motivo);
     vTaskDelay(pdMS_TO_TICKS(1000)); // que el log y el archivo terminen de salir
     esp_restart();
 }
@@ -301,6 +305,11 @@ static void tarea_climatizacion(void *arg)
     bool rotacion_pendiente_fallo = false; // si no se pudo guardar, no reintentar cada 2 s
     clima_ciclo_t ciclo_previo = estado.ciclo;
     int ultimo_minuto_registrado = -1; // registro_sd: una fila por minuto
+    // Cable de red para el registro de eventos: se empieza a seguir a los
+    // 30 s del arranque (el link tarda en levantar, no es un evento) y un
+    // cambio cuenta si se sostiene 2 vueltas seguidas.
+    int red_registrada = -1; // -1 = todavia no se sigue, 0/1 = ultimo estado registrado
+    int red_vueltas_distinto = 0;
     unsigned vueltas_nombres = 0;      // ver NOMBRES_PANTALLA_CADA
 
     // Crudas: por debajo de cualquier temp_min razonable -- si
@@ -366,6 +375,9 @@ static void tarea_climatizacion(void *arg)
         struct tm ahora = { 0 };
         char fecha_hora[24] = "----";
         bool rtc_ok = rtc_braindlab_leer(&ahora) == ESP_OK;
+        if (rtc_ok && !rtc_braindlab_detenido() && ahora.tm_year + 1900 >= 2024) {
+            eventos_actualizar_hora(&ahora); // fecha de los eventos (y de los que esperaban hora)
+        }
         if (rtc_ok) {
             strftime(fecha_hora, sizeof(fecha_hora), "%Y-%m-%d %H:%M:%S", &ahora);
         } else {
@@ -379,6 +391,19 @@ static void tarea_climatizacion(void *arg)
         // Se cruzo un setpoint (cambio de ciclo) -- la automatica retoma el
         // control de todo, se cancela cualquier override manual vigente.
         if (estado.ciclo != ciclo_previo) {
+            static const char *const nombres_ciclo[] = { "Reposo", "Normal", "Alta temperatura", "Bypass" };
+            float maxima = 0.0f;
+            bool hay_maxima = false;
+            for (int i = 0; i < 4; i++) {
+                if (validas[i] && (!hay_maxima || temperaturas[i] > maxima)) {
+                    maxima = temperaturas[i];
+                    hay_maxima = true;
+                }
+            }
+            eventos_registrar(estado.ciclo >= CLIMA_ALTA_TEMP ? EVENTO_AVISO : EVENTO_INFO, EVENTO_CONTROL,
+                              "automatica", "Ciclo: %s -> %s (maxima %.1f C)",
+                              nombres_ciclo[ciclo_previo & 3], nombres_ciclo[estado.ciclo & 3],
+                              hay_maxima ? maxima : 0.0f);
             for (int i = 0; i < SALIDAS_NUM_AIRES; i++) {
                 s_aire_manual_activo[i] = false;
             }
@@ -519,10 +544,28 @@ static void tarea_climatizacion(void *arg)
             registro_sd_encolar(&muestra);
         }
 
-        if (red_eth_esta_conectado()) {
+        bool red_ok = red_eth_esta_conectado();
+        if (red_ok) {
             ESP_LOGI(TAG, "Ethernet: conectado");
         } else {
             ESP_LOGW(TAG, "Ethernet: cable desconectado (sin link)");
+        }
+        if (red_registrada < 0) {
+            if (esp_timer_get_time() >= 30LL * 1000000LL) {
+                red_registrada = red_ok;
+                if (!red_ok) {
+                    eventos_registrar(EVENTO_AVISO, EVENTO_CONTROL, "sistema", "Sin cable de red al arrancar");
+                }
+            }
+        } else if (red_ok != red_registrada) {
+            if (++red_vueltas_distinto >= 2) {
+                red_registrada = red_ok;
+                red_vueltas_distinto = 0;
+                eventos_registrar(red_ok ? EVENTO_OK : EVENTO_AVISO, EVENTO_CONTROL, "sistema",
+                                  red_ok ? "Cable de red conectado" : "Cable de red desconectado");
+            }
+        } else {
+            red_vueltas_distinto = 0;
         }
 
         // Rotacion semanal del aire que descansa (lunes -> martes 00:00).
@@ -748,6 +791,9 @@ static esp_err_t on_formatear_sd(void)
 void app_main(void)
 {
     ESP_LOGI(TAG, "controlador_braindlab -- esqueleto: config + salidas + climatizacion");
+    // Queda en memoria hasta que tarea_climatizacion lea el RTC (ahi se
+    // fecha y se escribe en la SD).
+    eventos_registrar_arranque(esp_app_get_description()->version);
 
     ESP_ERROR_CHECK(config_braindlab_init());
     ESP_ERROR_CHECK(salidas_init());
@@ -795,8 +841,9 @@ void app_main(void)
     config_braindlab_cargar_snmp(&snmp_inicial);
     strlcpy(s_nombre_equipo, snmp_inicial.nombre, sizeof(s_nombre_equipo));
 
-    // 6144: el JSON del WS (960 B) + snprintf con floats + la foto SNMP van en stack.
-    xTaskCreate(tarea_climatizacion, "tarea_climatizacion", 6144, NULL, 5, NULL);
+    // 8192: el JSON del WS (960 B) + snprintf con floats + la foto SNMP + los
+    // eventos (eventos_registrar() formatea en la pila de quien lo llama).
+    xTaskCreate(tarea_climatizacion, "tarea_climatizacion", 8192, NULL, 5, NULL);
 
     // Registrar los callbacks ANTES de levantar el servidor web, mismo
     // criterio que controlador_labgeo.
@@ -836,6 +883,9 @@ void app_main(void)
     // Login de la web: contrasena en NVS (ver auth_web.h). Sin NVS la web
     // queda cerrada (rechaza todo) en vez de abierta sin contrasena.
     esp_err_t err_auth = auth_web_init();
+    // auth_web_init() deja la NVS lista: ahi se guarda la version para
+    // detectar una actualizacion de firmware.
+    eventos_revisar_version(esp_app_get_description()->version);
     if (err_auth != ESP_OK) {
         ESP_LOGE(TAG, "auth_web_init() fallo (%s) -- la web va a rechazar todos los logins",
                  esp_err_to_name(err_auth));

@@ -19,6 +19,9 @@
 #include "esp_timer.h"
 #include "psa/crypto.h"
 #include "cJSON.h"
+#include "lwip/sockets.h"
+#include "lwip/inet.h"
+#include "eventos.h"
 
 static const char *TAG = "AUTH_WEB";
 
@@ -338,6 +341,23 @@ static bool leer_body(httpd_req_t *req, char *buf, size_t tam)
     return true;
 }
 
+// IP del cliente (para el registro de eventos de seguridad).
+static void ip_cliente(httpd_req_t *req, char *ip, size_t largo)
+{
+    struct sockaddr_in6 origen;
+    socklen_t origen_len = sizeof(origen);
+    strlcpy(ip, "?", largo);
+    if (getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&origen, &origen_len) != 0) {
+        return;
+    }
+    if (IN6_IS_ADDR_V4MAPPED(&origen.sin6_addr)) {
+        struct in_addr v4 = { .s_addr = origen.sin6_addr.un.u32_addr[3] };
+        inet_ntop(AF_INET, &v4, ip, largo);
+    } else {
+        inet_ntop(AF_INET6, &origen.sin6_addr, ip, largo);
+    }
+}
+
 // POST /login -- body {"usuario":"admin"|"root","password":"..."}.
 static esp_err_t login_handler(httpd_req_t *req)
 {
@@ -371,15 +391,31 @@ static esp_err_t login_handler(httpd_req_t *req)
         }
     }
     bool ok = s_listo && c && cJSON_IsString(password) && verificar_password(c, password->valuestring);
+    // Usuario tal como lo escribieron (solo para el registro): recortado y
+    // sin caracteres raros.
+    char usuario_txt[17] = "?";
+    if (cJSON_IsString(usuario)) {
+        strlcpy(usuario_txt, usuario->valuestring, sizeof(usuario_txt));
+        for (char *p = usuario_txt; *p; p++) {
+            if (*p < ' ' || *p > '~') *p = '?';
+        }
+    }
     cJSON_Delete(raiz);
+    char ip[46];
+    ip_cliente(req, ip, sizeof(ip));
 
     if (!ok) {
         if (++s_fallos >= FALLOS_MAX) {
             s_fallos = 0;
             s_bloqueado_hasta_us = ahora + (int64_t)BLOQUEO_S * 1000000LL;
             ESP_LOGW(TAG, "Login: %d intentos fallidos -- bloqueado %d s", FALLOS_MAX, BLOQUEO_S);
+            eventos_registrar(EVENTO_AVISO, EVENTO_SEGURIDAD, "web",
+                              "Login bloqueado %d s tras %d intentos fallidos (ultimo: usuario %s desde %s)",
+                              BLOQUEO_S, FALLOS_MAX, usuario_txt, ip);
         } else {
             ESP_LOGW(TAG, "Login fallido (%d/%d)", s_fallos, FALLOS_MAX);
+            eventos_registrar(EVENTO_AVISO, EVENTO_SEGURIDAD, "web", "Inicio de sesion fallido: usuario %s desde %s",
+                              usuario_txt, ip);
         }
         responder_json(req, "401 Unauthorized", "{\"ok\":false,\"error\":\"usuario o contrasena incorrectos\"}");
         return ESP_OK;
@@ -393,6 +429,7 @@ static esp_err_t login_handler(httpd_req_t *req)
     snprintf(cookie, sizeof(cookie), "sesion=%s; Path=/; HttpOnly; SameSite=Strict", s->token);
     httpd_resp_set_hdr(req, "Set-Cookie", cookie);
     ESP_LOGI(TAG, "Login correcto de \"%s\"", c->usuario);
+    eventos_registrar(EVENTO_INFO, EVENTO_SEGURIDAD, "web", "Inicio de sesion: %s desde %s", c->usuario, ip);
 
     char json[96];
     snprintf(json, sizeof(json), "{\"ok\":true,\"nivel\":\"%s\",\"admin_por_defecto\":%s}",
@@ -469,6 +506,7 @@ static esp_err_t cambiar_password_handler(httpd_req_t *req)
 
     cerrar_sesiones(c == &s_root ? AUTH_NIVEL_ROOT : AUTH_NIVEL_ADMIN, buscar_sesion(req));
     ESP_LOGW(TAG, "Contrasena de \"%s\" cambiada (por root)", c->usuario);
+    eventos_registrar(EVENTO_AVISO, EVENTO_SEGURIDAD, "web:root", "Contrasena de %s cambiada", c->usuario);
     responder_json(req, NULL, "{\"ok\":true}");
     return ESP_OK;
 }
